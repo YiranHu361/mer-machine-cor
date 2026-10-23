@@ -166,6 +166,15 @@ export interface Job {
   creationRequestId?: string;
   creationSpecHash?: string;
   calibrationDeviceContext?: string;
+  mediaEstimateBaseline?: string;
+  mediaEstimateObserved?: {
+    machineId: string;
+    attemptId: string;
+    remaining: number;
+    observedAt: string;
+    applied: boolean;
+  };
+
   calibrationInspection?: {
     outcome: "rejected";
     reason: string;

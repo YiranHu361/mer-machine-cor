@@ -1,3 +1,7 @@
+import {
+  mediaEstimateSnapshot,
+  observeMediaEstimate,
+} from "./media-estimate.ts";
 import express, {
   type Request,
   type Response,
@@ -1327,6 +1331,7 @@ export function createApp(
       "CALIBRATION_CONTEXT_CHANGED",
       "This calibration belongs to an earlier device setup. Authorize a new supervised calibration for the current setup.",
     );
+    const mediaSnapshot = mediaEstimateSnapshot(m);
     const observed = calibrationOperationContext(s, m.id, target?.id);
     // Remove availability before contacting the node so a quote cannot reserve
     // the machine while its calibration confirmation is still in flight.
@@ -1387,6 +1392,13 @@ export function createApp(
         const m = s.machines[String(req.params.id)];
         if (calibrationOperationContext(s, m.id, target?.id) !== pending)
           return false;
+        if (target)
+          observeMediaEstimate(
+            s,
+            s.calibrations![target.id],
+            mediaSnapshot,
+            result,
+          );
         m.calibrated = false;
         m.ready = false;
         m.paused = true;
@@ -1410,6 +1422,18 @@ export function createApp(
         "MACHINE_BUSY",
         "The machine moved to another attempt during calibration. Refresh before confirming it.",
       );
+      if (target)
+        observeMediaEstimate(
+          s,
+          s.calibrations![target.id],
+          mediaSnapshot,
+          result,
+        );
+      if (
+        target &&
+        s.calibrations![target.id].mediaEstimateObserved?.applied === false
+      )
+        return null;
       m.calibrated = true;
       m.calibrationAt = now();
       m.activeJobId = null;
@@ -1427,6 +1451,11 @@ export function createApp(
         );
       return m;
     });
+    requireThat(
+      machine,
+      "CALIBRATION_NOT_CURRENT",
+      "The saved stock or policy changed during inspection. This calibration remains active here. Refresh its saved status and explicitly retry the inspection.",
+    );
     res.json({ machine, calibration: result });
   });
   for (const [route, fn] of Object.entries({

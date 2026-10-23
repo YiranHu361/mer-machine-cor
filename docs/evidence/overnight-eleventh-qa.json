@@ -1,0 +1,160 @@
+{
+  "recordedAt": "2026-10-23T13:29:50.905Z",
+  "sourceStateSha256": "156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "software": {
+    "backend": 223,
+    "node": 119,
+    "paymentClaude": 25,
+    "fetch": 5,
+    "webUnits": 29,
+    "browserScenarios": 200,
+    "uniqueCases": 601,
+    "canonicalCompositeExecutions": 1001
+  },
+  "provenance": {
+    "completeSharedCheck": ".data/overnight-eleventh-software-final.log",
+    "currentSharedSourceSha256": "156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4",
+    "currentAffectedBrowser": [
+      {
+        "engine": "chromium",
+        "report": "web/evidence/overnight-eleventh-chromium-affected.json",
+        "reportSha256": "d9af9ebbe970714776cfad0e7eba3e3ff325a3d4f5481f4be5c2619354d60c1a",
+        "passed": 5,
+        "durationMs": 11157.301
+      },
+      {
+        "engine": "firefox",
+        "report": "web/evidence/overnight-eleventh-firefox-affected.json",
+        "reportSha256": "ad39ebf1b7e21d535a2292dc29ec18e4259f018061bee760c353704592e09025",
+        "passed": 5,
+        "durationMs": 14712.48
+      },
+      {
+        "engine": "webkit",
+        "report": "web/evidence/overnight-eleventh-webkit-affected.json",
+        "reportSha256": "db92669b7c5e4e491aaaa9cc0f2700c3e85fa294ac718078b07b9744cf4da1f8",
+        "passed": 5,
+        "durationMs": 11965.726
+      }
+    ],
+    "retainedFullBrowser": "docs/evidence/overnight-tenth-qa.json",
+    "retainedBrowserCasesPerEngine": 198,
+    "newBrowserCasesPerEngine": 2,
+    "retainedAccessibilityScans": 48,
+    "appAndStylesUnchangedFromTenth": true,
+    "productionBundleByteIdenticalToTenth": true,
+    "note": "Full shared checks ran on current eleventh source. The unchanged application UI/bundle retains tenth full198-case suites and48 scans; current built-origin5-case per-engine checks add2 stock/draft regressions and rerun3 actual workflow cases. Counts are composite provenance, not a claim of a new full200-case run."
+  },
+  "actualLocalChecks": {
+    "runtime": {
+      "checkedAt": "2026-10-23T13:29:20.887Z",
+      "sourceStateSha256": "156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "sse": {
+      "at": "2026-10-23T13:27:04.706Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 4053,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "calibration": {
+      "estimatedMedia": {
+        "backendBefore": 38,
+        "nodeBefore": 38,
+        "afterFirst": 37,
+        "afterSecond": 36,
+        "nodeMatchesBackend": true,
+        "physicalMeasurement": false
+      },
+      "at": "2026-10-23T13:27:30.938Z",
+      "status": "PASS",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "machineId": "phomemo_01",
+      "rejectedCalibrationId": "calibration_5eff8301-2a73-47b7-ade9-1320b2065e3a",
+      "freshCalibrationId": "calibration_c2a8cf05-5c22-48d2-8f84-c0a279866cde",
+      "attemptIds": [
+        "calibration_attempt_52565adf-cbef-4104-863b-3e8b4479e8fa",
+        "calibration_attempt_76b0e533-731e-46a6-9fa9-c3fe684d3c2f"
+      ],
+      "checks": [
+        "Completed execution remains completed with identical timestamps/credibility after separate unusable-output rejection",
+        "Exact version/device context/attempt inspection releases only matching backend calibration slot",
+        "Rejected output cannot later be used as calibration proof (explicit409)",
+        "Fresh supervised request uses new key/id/attempt and matching pixels; inspection remains paused until explicit resume"
+      ],
+      "explicitSimulationCalibrations": 2,
+      "physicalJobs": 0,
+      "paymentOperations": 0,
+      "physicalCalibration": "NOT_RUN"
+    }
+  },
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 300,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "fixes": [
+    "Terminal execution and planned media estimate commit atomically once in Node journal; no legacy backfill or inferred physical consumption",
+    "Exact bound completed/failed estimates update active backend once; pickup never counts the same attempt twice; explicit newer owner counts survive stale responses",
+    "Uncertain execution waits for settled outcome; skipped observations refresh through existing status/reconciliation",
+    "Calibration rejection/failure/final inspection and customer handling/clearance cannot retire an exact active slot while its skipped estimate needs refresh; deliberate retry follows reconciliation"
+  ],
+  "remainingActionable": [
+    "Expired pickup owner renewal UI/API, causal proofs and private contract ready",
+    "Actual blocking Phomemo/Instax transport thread can outlive timeout; isolated fake transport proof ready"
+  ],
+  "notes": "No retained data fault injection or physical measurements. Actual retained runtime is simulation/mock/SpacetimeDB. Required physical/live acceptance remains blocked."
+}

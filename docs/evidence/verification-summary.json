@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T13:05:19.699Z",
-  "sourceStateSha256": "98594282729c9c222f7c461c5ac91fdcb7b91be8246965919002096fd9c0192a",
+  "recordedAt": "2026-10-23T13:29:50.905Z",
+  "sourceStateSha256": "156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 201,
-    "node": 107,
+    "backendApplicationAndProcessRecovery": 223,
+    "node": 119,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 198,
+    "browserScenarios": 200,
     "browserEngines": 3,
-    "uniqueTestCases": 565,
-    "testExecutionsIncludingThreeEngines": 961,
+    "uniqueTestCases": 601,
+    "testExecutionsIncludingThreeEngines": 1001,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -91,7 +91,7 @@
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
     ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "October 23 tenth overnight checkpoint; see overnight-tenth-qa.json for current evidence. First through ninth checkpoint JSON files are historical. Audits continue until 9 a.m. Pacific.",
+  "notes": "Eleventh composite checkpoint; exact current/retained provenance in overnight-eleventh-qa.json. Overnight work continues through9amPacific.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",

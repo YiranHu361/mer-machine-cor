@@ -362,10 +362,7 @@ class NodeService:
             status, credible, reason = await asyncio.wait_for(self.adapters[machine_id].run(path, parameters, attempt_id), timeout)
             if row["outcome"] == "lost_ack":
                 status, credible, reason = "uncertain", False, "Simulation: physical outcome intentionally uncertain after lost acknowledgment; do not reprint"
-            self.journal.update(attempt_id, status, reason=reason, credible=credible)
-            state = self.journal.machine(machine_id)
-            state["mediaRemaining"] = max(0, state["mediaRemaining"] - parameters["quantity"])
-            self.journal.save_machine(machine_id, state)
+            self.journal.update(attempt_id, status, reason=reason, credible=credible, account_consumption=True)
         except asyncio.CancelledError:
             # Process shutdown retains running; the next startup marks uncertain.
             raise
@@ -508,44 +505,54 @@ class NodeService:
         return self.get_capabilities(machine_id)
 
     def calibrate(self, machine_id: str, inspected: bool, attempt_id: str | None = None, reason: str | None = None) -> dict:
+        if attempt_id is not None and (not isinstance(attempt_id, str) or not 1 <= len(attempt_id) <= 128):
+            raise NodeError("calibration_context", "Calibration attempt ID must be a nonempty string of at most 128 characters", 422)
         config = self.machine(machine_id)
         self.require_stop_settled(machine_id)
         state, adapter = self.journal.machine(machine_id), self.adapters[machine_id]
         blockers = adapter.blockers()
+        def response(result: dict) -> dict:
+            # This count is an owner-editable estimate, never a physical media
+            # measurement. Bind any execution fields to a real terminal row.
+            result.update(machine_id=machine_id, media_remaining=self.journal.machine(machine_id)["mediaRemaining"])
+            attempt = self.journal.get(attempt_id) if isinstance(attempt_id, str) else None
+            if attempt and attempt["machine_id"] == machine_id and attempt["status"] in {"completed", "failed"}:
+                result.update(job_id=attempt["job_id"], attempt_id=attempt["attempt_id"], execution_status=attempt["status"])
+            return result
         if not inspected or blockers:
             state.update(calibrated=False, paused=True, ready=False, reason="; ".join(blockers) if blockers else "Calibration requires owner inspection")
             self.journal.save_machine(machine_id, state)
-            return {"status": "blocked" if blockers else "failed", "calibrated": False, "mode": config["mode"], "reason": state["reason"]}
+            return response({"status": "blocked" if blockers else "failed", "calibrated": False, "mode": config["mode"], "reason": state["reason"]})
         if self.journal.active(machine_id):
             raise NodeError("machine_busy", "Resolve the active or uncertain attempt before calibration", 409)
         source = "simulation"
         frame_id = None
         if config["mode"] == "hardware":
-            attempt = self.journal.get(attempt_id or "")
+            attempt = self.journal.get(attempt_id) if isinstance(attempt_id, str) else None
             if not attempt or attempt["machine_id"] != machine_id or attempt["status"] != "completed" or attempt["scope"] != "calibration":
-                return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "A completed attempt authorized specifically for calibration and physical inspection are required. Installing an adapter is not calibration."}
+                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "A completed attempt authorized specifically for calibration and physical inspection are required. Installing an adapter is not calibration."})
             if attempt["configuration_binding"] != state["configurationBinding"]:
-                return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration attempt belongs to another device or capture configuration; run a new physical calibration for this setup"}
+                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration attempt belongs to another device or capture configuration; run a new physical calibration for this setup"})
             if not attempt["completion_credible"]:
                 if not (attempt["reason"] or "").startswith("Operator inspected:") or not isinstance(reason,str) or len(reason.strip()) < 10:
-                    return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Transport-only calibration requires a resolved completed attempt and an explicit physical inspection reason (at least 10 characters)"}
+                    return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Transport-only calibration requires a resolved completed attempt and an explicit physical inspection reason (at least 10 characters)"})
                 source = "owner-inspection"
             else:
                 source = "device-and-owner-inspection"
             evidence = self.journal.db.execute("SELECT * FROM frames WHERE machine_id=? AND job_id=? AND attempt_id=? AND phase='result' AND source='camera' ORDER BY captured_at DESC LIMIT 1",
                 (machine_id,attempt["job_id"],attempt_id)).fetchone()
             if not evidence:
-                return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration requires a fresh associated result camera frame"}
+                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration requires a fresh associated result camera frame"})
             captured = datetime.fromisoformat(evidence["captured_at"].replace("Z","+00:00"))
             age = (datetime.now(timezone.utc) - captured).total_seconds()
             if not 0 <= age <= 600 or evidence["captured_at"] < (attempt["started_at"] or attempt["accepted_at"]):
-                return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration frame is stale or predates this physical attempt; capture a fresh result"}
+                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration frame is stale or predates this physical attempt; capture a fresh result"})
             frame_id = evidence["frame_id"]
         calibration_reason = "Simulation calibration fixture inspected" if config["mode"] == "simulation" else "Owner inspected calibration output: " + (reason.strip() if isinstance(reason,str) and reason.strip() else "Successful device completion and fresh result image inspected")
         state.update(calibrated=True, paused=True, ready=False, configured=True, reason=calibration_reason + "; explicitly inspect/clear and resume before production")
         self.journal.save_machine(machine_id, state)
         self.journal.audit(machine_id, attempt_id, "calibrated", canonical({"source":source,"frame_id":frame_id,"reason":calibration_reason}))
-        return {"status": "passed", "calibrated": True, "mode": config["mode"], "source": source, "frame_id":frame_id, "reason": state["reason"]}
+        return response({"status": "passed", "calibrated": True, "mode": config["mode"], "source": source, "frame_id":frame_id, "reason": state["reason"]})
 
     def reconcile(self, *, machine_id: str, job_id: str, attempt_id: str, inspected: bool, result: str, reason: str) -> dict:
         self.machine(machine_id)

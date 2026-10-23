@@ -52,6 +52,8 @@ class Journal:
             self.db.execute("ALTER TABLE attempts ADD COLUMN scope TEXT NOT NULL DEFAULT 'dispatch'")
         if "configuration_binding" not in columns:
             self.db.execute("ALTER TABLE attempts ADD COLUMN configuration_binding TEXT")
+        if "estimated_consumption_recorded" not in columns:
+            self.db.execute("ALTER TABLE attempts ADD COLUMN estimated_consumption_recorded INTEGER NOT NULL DEFAULT 0")
         with self.transaction():
             rows = self.db.execute("SELECT * FROM attempts WHERE status IN ('accepted','running')").fetchall()
             for row in rows:
@@ -158,11 +160,22 @@ class Journal:
             self.audit(request["machine_id"], request["attempt_id"], "accepted", "Authorization, policy and artifact hash checked")
         return self.get(request["attempt_id"]), True
 
-    def update(self, attempt_id: str, status: str, *, reason: str | None = None, credible: bool = False, artifact_path: str | None = None) -> None:
+    def update(self, attempt_id: str, status: str, *, reason: str | None = None, credible: bool = False, artifact_path: str | None = None, account_consumption: bool = False) -> None:
         with self.transaction():
             row = self.get(attempt_id)
             if not row:
                 raise NodeError("unknown_attempt", "Unknown attempt", 404)
+            # The worker's planned-quantity estimate and terminal fact share a
+            # durable commit. An exact retry can never deduct twice, and owner
+            # stock changes made during execution remain the current baseline.
+            if account_consumption and row["started_at"] and not row["estimated_consumption_recorded"]:
+                quantity = json.loads(row["binding"])["parameters"]["quantity"]
+                if type(quantity) is not int or quantity < 1:
+                    raise NodeError("attempt_binding", "Saved attempt has no valid planned media quantity", 409)
+                state = self.machine(row["machine_id"])
+                state["mediaRemaining"] = max(0, state["mediaRemaining"] - quantity)
+                self.save_machine(row["machine_id"], state)
+                self.db.execute("UPDATE attempts SET estimated_consumption_recorded=1 WHERE attempt_id=?", (attempt_id,))
             # A late worker completion cannot overturn an operator stop or uncertainty.
             if row["status"] in {"failed", "uncertain", "completed"} and status != row["status"]:
                 return

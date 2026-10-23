@@ -1,5 +1,13 @@
 # Verification report
 
+Current eleventh checkpoint recorded 06:29 Pacific. Overnight work continues until 9 a.m. Pacific. Source `156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4`. **Partial completion: required physical/live acceptance remains blocked.**
+
+Media estimates now commit atomically with actual returned execution, synchronize calibration and failed output, preserve newer owner counts and avoid pickup double debit. A skipped estimate must be reconciled before the matching active slot is retired. The full shared check passes 223 backend, 119 Node, 25 payment/Claude, 5 Fetch and 29 web units. Current affected browser checks pass 5 per engine. The unchanged UI and bundle retain the tenth checkpoint’s 198 full browser cases per engine and 48 accessibility scans; 2 new stock cases per engine bring composite coverage to 601 unique cases. Actual retained restart/native SSE and 2 finite simulation calibration estimate checks pass. [Current evidence](evidence/overnight-eleventh-qa.json), [ongoing log](overnight-qa.md).
+
+The detailed tenth checkpoint below is historical; its full-browser provenance remains retained because this checkpoint did not change the application UI or bundle.
+
+## Historical tenth checkpoint
+
 Recorded 2026-10-23 06:04 Pacific (America/Los_Angeles). Overnight work continues until 9:00 a.m. Pacific. Machine-readable timestamps are UTC.
 
 **Partial completion.** Runnable local software passes the measured checks. Required physical and live-service acceptance remains blocked; the whole PRD is not complete. No physical output, funded transaction, live Claude call, remote discovery, interview, sponsor eligibility or shipping event is claimed. A newly proven media-estimate/crash gap is the next actionable repair.

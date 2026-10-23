@@ -506,3 +506,78 @@ test("accepted pause, resume and calibration consume clearance even when the rep
   expect(f.state.posts).toHaveLength(3);
   expect(f.state.posts.every((post) => post.match === undefined)).toBe(true);
 });
+
+test("a lower automatic media estimate preserves the exact price draft until explicit saved-settings adoption (offline fixture)", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await f.clearance.check();
+  await f.form.getByLabel("Consumables", { exact: true }).fill("37");
+  f.changeConfig({ mediaRemaining: 41 });
+  await f.refresh();
+  await expect(f.form.getByRole("alert")).toContainText("Your draft is kept");
+  await expect(f.form.getByRole("alert")).toContainText(
+    "This discards your unsaved machine edits",
+  );
+  await expect(f.form.getByLabel("Consumables", { exact: true })).toHaveValue(
+    "37",
+  );
+  await expect(
+    f.form.getByLabel("Media remaining (estimated)", { exact: true }),
+  ).toHaveValue("42");
+  await expect(f.save).toBeDisabled();
+  await expect(f.clearance).toBeChecked();
+  expect(f.state.posts).toEqual([]);
+  await f.form
+    .getByRole("button", { name: "Load newer saved settings", exact: true })
+    .click();
+  await expect(
+    f.form.getByLabel("Media remaining (estimated)", { exact: true }),
+  ).toHaveValue("41");
+  await expect(f.form.getByLabel("Consumables", { exact: true })).toHaveValue(
+    "20",
+  );
+  await expect(f.form.getByRole("alert")).toHaveCount(0);
+  await expect(f.clearance).toBeChecked();
+  await f.form.getByLabel("Consumables", { exact: true }).fill("37");
+  const expected = f.fingerprint();
+  await f.save.click();
+  await expect.poll(() => f.state.posts.length).toBe(1);
+  expect(f.state.posts[0].match).toBe(`"${expected}"`);
+  expect(f.state.posts[0].body.mediaRemaining).toBe(41);
+  expect(f.state.posts[0].body.priceCard.consumables).toBe(37);
+  await expect(f.clearance).toBeChecked();
+});
+
+test("an identical stock acknowledgement preserves pristine settings, dirty prices and the existing physical inspection (offline fixture)", async ({
+  page,
+}) => {
+  const f = await fixture(page);
+  await f.clearance.check();
+  f.state.machine.policyObservationId = "same-stock-acknowledgement-one";
+  await f.refresh();
+  await expect(
+    f.form.getByLabel("Media remaining (estimated)", { exact: true }),
+  ).toHaveValue("42");
+  await expect(f.form.getByLabel("Consumables", { exact: true })).toHaveValue(
+    "20",
+  );
+  await expect(f.form.getByRole("alert")).toHaveCount(0);
+  await expect(
+    f.form.getByRole("button", { name: "Discard machine edits", exact: true }),
+  ).toHaveCount(0);
+  await expect(f.clearance).toBeChecked();
+  await f.form.getByLabel("Consumables", { exact: true }).fill("37");
+  f.state.machine.policyObservationId = "same-stock-acknowledgement-two";
+  await f.refresh();
+  await expect(
+    f.form.getByLabel("Media remaining (estimated)", { exact: true }),
+  ).toHaveValue("42");
+  await expect(f.form.getByLabel("Consumables", { exact: true })).toHaveValue(
+    "37",
+  );
+  await expect(f.form.getByRole("alert")).toHaveCount(0);
+  await expect(f.save).toBeEnabled();
+  await expect(f.clearance).toBeChecked();
+  expect(f.state.posts).toEqual([]);
+});

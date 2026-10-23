@@ -1,0 +1,32 @@
+{
+  "estimatedMedia": {
+    "backendBefore": 38,
+    "nodeBefore": 38,
+    "afterFirst": 37,
+    "afterSecond": 36,
+    "nodeMatchesBackend": true,
+    "physicalMeasurement": false
+  },
+  "at": "2026-10-23T13:27:30.938Z",
+  "status": "PASS",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "machineId": "phomemo_01",
+  "rejectedCalibrationId": "calibration_5eff8301-2a73-47b7-ade9-1320b2065e3a",
+  "freshCalibrationId": "calibration_c2a8cf05-5c22-48d2-8f84-c0a279866cde",
+  "attemptIds": [
+    "calibration_attempt_52565adf-cbef-4104-863b-3e8b4479e8fa",
+    "calibration_attempt_76b0e533-731e-46a6-9fa9-c3fe684d3c2f"
+  ],
+  "checks": [
+    "Completed execution remains completed with identical timestamps/credibility after separate unusable-output rejection",
+    "Exact version/device context/attempt inspection releases only matching backend calibration slot",
+    "Rejected output cannot later be used as calibration proof (explicit409)",
+    "Fresh supervised request uses new key/id/attempt and matching pixels; inspection remains paused until explicit resume"
+  ],
+  "explicitSimulationCalibrations": 2,
+  "physicalJobs": 0,
+  "paymentOperations": 0,
+  "physicalCalibration": "NOT_RUN"
+}

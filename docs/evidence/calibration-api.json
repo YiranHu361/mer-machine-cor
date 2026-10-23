@@ -1,15 +1,23 @@
 {
-  "at": "2026-10-23T12:53:38.578Z",
+  "estimatedMedia": {
+    "backendBefore": 38,
+    "nodeBefore": 38,
+    "afterFirst": 37,
+    "afterSecond": 36,
+    "nodeMatchesBackend": true,
+    "physicalMeasurement": false
+  },
+  "at": "2026-10-23T13:27:30.938Z",
   "status": "PASS",
   "mode": "simulation",
   "paymentMode": "mock",
   "store": "spacetimedb",
   "machineId": "phomemo_01",
-  "rejectedCalibrationId": "calibration_5fa650f3-91d8-40ed-bc2e-399d9c912343",
-  "freshCalibrationId": "calibration_ba07a4e6-e600-4bfe-8624-8742ff494f4d",
+  "rejectedCalibrationId": "calibration_5eff8301-2a73-47b7-ade9-1320b2065e3a",
+  "freshCalibrationId": "calibration_c2a8cf05-5c22-48d2-8f84-c0a279866cde",
   "attemptIds": [
-    "calibration_attempt_ba895062-f472-46a8-a4b0-076627127677",
-    "calibration_attempt_5e062f7d-3558-4fd8-b995-8eacb6483380"
+    "calibration_attempt_52565adf-cbef-4104-863b-3e8b4479e8fa",
+    "calibration_attempt_76b0e533-731e-46a6-9fa9-c3fe684d3c2f"
   ],
   "checks": [
     "Completed execution remains completed with identical timestamps/credibility after separate unusable-output rejection",

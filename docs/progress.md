@@ -1,8 +1,10 @@
 # Fabrary implementation checkpoint
 
+Eleventh overnight checkpoint (06:29 Pacific): atomic planned-media estimate accounting and active retirement recovery are verified. Current shared checks: 223 backend /119 node; affected browser: 5 per engine; full UI evidence retained from tenth because App/styles/bundle are unchanged. Source `156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4`. Work continues through 9 a.m. Pacific on expired pickup renewal and actual blocking-transport lifetime. [Evidence](evidence/overnight-eleventh-qa.json).
+
 Working directory: `fabrary/` beside read-only project references. Contract is [working-prd.md](working-prd.md). Status vocabulary: implemented/tested in simulation, live verified, partial, blocked, planned. Required physical work remains required even while blocked.
 
-October 23 overnight checkpoint: **565 unique software cases pass**, including 198 full browser scenarios in Chromium/Firefox/WebKit and 48 accessibility scans. Current backend/node counts are 201/107. Durable cancellation now fences late acceptance before refund; calibration quality rejection preserves execution and local recovery focus. [Current evidence](evidence/overnight-tenth-qa.json), [ongoing QA](overnight-qa.md). Work continues through 9:00 a.m. Pacific; media-estimate/restart accounting is the next proven repair. Physical/live prerequisites remain unchanged.
+Historical tenth overnight checkpoint: **565 unique software cases pass**, including 198 full browser scenarios in Chromium/Firefox/WebKit and 48 accessibility scans. Current backend/node counts are 201/107. Durable cancellation now fences late acceptance before refund; calibration quality rejection preserves execution and local recovery focus. [Current evidence](evidence/overnight-tenth-qa.json), [ongoing QA](overnight-qa.md). Work continues through 9:00 a.m. Pacific; media-estimate/restart accounting is the next proven repair. Physical/live prerequisites remain unchanged.
 
 ## Decisions
 

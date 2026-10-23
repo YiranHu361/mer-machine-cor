@@ -1,3 +1,8 @@
+import {
+  mediaEstimateSnapshot,
+  observeMediaEstimate,
+  accountPreparedEstimate,
+} from "./media-estimate.ts";
 import { createHmac, randomBytes } from "node:crypto";
 import { mutate, type Store } from "./store.ts";
 import { latestCalibration } from "./evidence.ts";
@@ -165,6 +170,7 @@ export class Service {
         requesterId: ownerId,
         machineId,
         calibrationDeviceContext: calibrationDeviceContext(m),
+        mediaEstimateBaseline: mediaEstimateSnapshot(m).fingerprint,
         specVersion: 1,
         spec,
         artifact,
@@ -418,6 +424,12 @@ export class Service {
           JSON.stringify(current.evidence) !== JSON.stringify(c.evidence)
         )
           return false;
+        observeMediaEstimate(
+          currentState,
+          current,
+          mediaEstimateSnapshot(s.machines[machineId]),
+          status,
+        );
         const freshEvidence =
           evidence &&
           (!current.evidence ||
@@ -574,7 +586,7 @@ export class Service {
       "The node did not confirm that this exact completed execution has settled. Keep the calibration blocked and refresh its status.",
       502,
     );
-    await mutate(this.store, (s) => {
+    const retired = await mutate(this.store, (s) => {
       requireThat(
         calibrationOperationContext(s, machineId, calibration.id) === pending,
         "CALIBRATION_NOT_CURRENT",
@@ -582,6 +594,8 @@ export class Service {
       );
       const current = s.calibrations![calibration.id],
         m = s.machines[machineId];
+      observeMediaEstimate(s, current, mediaEstimateSnapshot(machine), result);
+      if (current.mediaEstimateObserved?.applied === false) return false;
       current.calibrationInspection = {
         outcome: "rejected",
         reason,
@@ -596,7 +610,13 @@ export class Service {
       m.paused = true;
       m.reason =
         "Completed calibration output was inspected and rejected as unusable. Fix the cause before explicitly authorizing a new supervised calibration.";
+      return true;
     });
+    requireThat(
+      retired,
+      "CALIBRATION_NOT_CURRENT",
+      "The saved stock or policy changed during inspection. This calibration remains active here. Refresh its saved status and explicitly retry the inspection.",
+    );
     return this.calibrationStatus(machineId, calibration.checkoutKey);
   }
   async cancelCalibrationBeforeAcceptance(machineId: string, body: any) {
@@ -679,7 +699,7 @@ export class Service {
       );
       return calibrationOperationContext(state, machineId, c.id);
     });
-    await this.node.call(
+    const result = await this.node.call(
       "/reconcile",
       {
         machine_id: machineId,
@@ -691,13 +711,19 @@ export class Service {
       },
       m,
     );
-    await mutate(this.store, (s) => {
+    const resolved = await mutate(this.store, (s) => {
       const current = s.calibrations![c.id];
       requireThat(
         calibrationOperationContext(s, machineId, c.id) === pending,
         "CALIBRATION_NOT_CURRENT",
         "The machine moved to another attempt while this calibration was being resolved.",
       );
+      observeMediaEstimate(s, current, mediaEstimateSnapshot(m), result);
+      if (
+        body.result === "failed" &&
+        current.mediaEstimateObserved?.applied === false
+      )
+        return false;
       current.productionState =
         body.result === "completed" ? "produced" : "failed";
       record(current, "calibration_operator_resolution", body.reason);
@@ -707,7 +733,13 @@ export class Service {
         s.machines[machineId].reason =
           "Calibration failed; inspect and fix before repeating a newly authorized calibration.";
       }
+      return true;
     });
+    requireThat(
+      resolved,
+      "CALIBRATION_NOT_CURRENT",
+      "The saved stock or policy changed during inspection. This calibration remains active here. Refresh its saved status and explicitly retry the inspection.",
+    );
     return this.calibrationStatus(machineId);
   }
   async create(
@@ -1515,6 +1547,7 @@ export class Service {
       m.ready = false;
       delete m.reservation;
       j.attemptId = id("attempt");
+      j.mediaEstimateBaseline = mediaEstimateSnapshot(m).fingerprint;
       j.productionState = "dispatched";
       record(
         j,
@@ -1563,7 +1596,7 @@ export class Service {
       );
       if (response.status === "rejected")
         throw new Error(response.reason ?? "Node rejected execution.");
-      await this.applyNodeStatus(jobId, response);
+      await this.applyNodeStatus(jobId, response, mediaEstimateSnapshot(m));
     } catch (e) {
       await this.reviewUncertain(
         jobId,
@@ -1587,11 +1620,16 @@ export class Service {
       record(j, "execution_uncertain", reason);
     });
   }
-  async applyNodeStatus(jobId: string, response: any) {
+  async applyNodeStatus(
+    jobId: string,
+    response: any,
+    mediaSnapshot?: ReturnType<typeof mediaEstimateSnapshot>,
+  ) {
     const execution =
       response.execution_status ?? response.executionStatus ?? response.state;
     await mutate(this.store, (s) => {
       const j = s.jobs[jobId];
+      if (mediaSnapshot) observeMediaEstimate(s, j, mediaSnapshot, response);
       if (["produced", "failed"].includes(j.productionState)) return;
       if (execution === "completed") {
         if (response.completion_credible !== true) {
@@ -1678,14 +1716,18 @@ export class Service {
       )
     )
       await this.transfer(jobId, "refund");
-    if (j.attemptId && !["produced", "failed"].includes(j.productionState)) {
+    if (
+      j.attemptId &&
+      (!["produced", "failed"].includes(j.productionState) ||
+        (j.mediaEstimateObserved?.applied === false && m.activeJobId === j.id))
+    ) {
       try {
         const status = await this.node.call(
           "get_status",
           { machine_id: m.id, job_id: j.id, attempt_id: j.attemptId },
           m,
         );
-        await this.applyNodeStatus(jobId, status);
+        await this.applyNodeStatus(jobId, status, mediaEstimateSnapshot(m));
       } catch (e) {
         await this.reviewUncertain(
           jobId,
@@ -1811,7 +1853,12 @@ export class Service {
     await this.resolveEvidence(jobId, evidence);
     return this.job(jobId);
   }
-  async resolveEvidence(jobId: string, evidence: any, operatorReason?: string) {
+  async resolveEvidence(
+    jobId: string,
+    evidence: any,
+    operatorReason?: string,
+    media?: { snapshot: ReturnType<typeof mediaEstimateSnapshot>; status: any },
+  ) {
     const accepted = await mutate(this.store, (s) => {
       const j = s.jobs[jobId],
         m = s.machines[j.machineId!];
@@ -1820,6 +1867,7 @@ export class Service {
       // transfer; a delayed result must never undo handling or pause a new job.
       const expectedState = operatorReason ? "needs_review" : "verifying";
       if (j.productionState !== expectedState) return false;
+      if (media) observeMediaEstimate(s, j, media.snapshot, media.status);
       j.evidence = evidence;
       j.productionState =
         evidence.result === "pass"
@@ -1918,8 +1966,9 @@ export class Service {
           else throw e;
         }
       }
+      let resolvedStatus: any;
       if (!absent)
-        await this.node.call(
+        resolvedStatus = await this.node.call(
           "/reconcile",
           {
             machine_id: m.id,
@@ -2021,7 +2070,10 @@ export class Service {
           operatorOverride: true,
         };
       }
-      await this.resolveEvidence(jobId, evidence, reason);
+      await this.resolveEvidence(jobId, evidence, reason, {
+        snapshot: mediaEstimateSnapshot(m),
+        status: resolvedStatus,
+      });
       return this.job(jobId);
     }
     await this.resolveEvidence(
@@ -2054,14 +2106,19 @@ export class Service {
       );
       if (["ready_for_pickup", "collected"].includes(j.fulfillmentState))
         return j;
+      const m = s.machines[j.machineId!];
+      requireThat(
+        m.activeJobId !== j.id || j.mediaEstimateObserved?.applied !== false,
+        "MEDIA_ESTIMATE_NOT_CURRENT",
+        "The remaining-media estimate changed during this attempt. Use Recovery & order history → Reconcile saved outcome, then confirm handling again. The machine remains assigned to this order.",
+      );
       j.fulfillmentState = "ready_for_pickup";
       j.pickup = {
         code: randomBytes(6).toString("hex").toUpperCase(),
         expiresAt: new Date(Date.now() + this.config.pickupMs).toISOString(),
       };
-      const m = s.machines[j.machineId!];
       m.activeJobId = null;
-      m.mediaRemaining = Math.max(0, m.mediaRemaining - j.spec.quantity);
+      accountPreparedEstimate(m, j);
       m.paused = true;
       m.ready = false;
       m.reason =
@@ -2140,6 +2197,11 @@ export class Service {
       );
       const m = s.machines[j.machineId!];
       if (m.activeJobId !== j.id) return j;
+      requireThat(
+        j.mediaEstimateObserved?.applied !== false,
+        "MEDIA_ESTIMATE_NOT_CURRENT",
+        "The remaining-media estimate changed during this attempt. Use Recovery & order history → Reconcile saved outcome, then confirm clearing again. The machine remains assigned to this order.",
+      );
       m.activeJobId = null;
       m.paused = true;
       m.ready = false;

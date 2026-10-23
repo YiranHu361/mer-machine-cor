@@ -251,8 +251,8 @@ test(
         attemptId: j.attemptId,
         state: recovered.productionState,
       });
-      // A recorded dispatch cannot reach a stopped node. On reconnection, authenticated
-      // absence can be inspected/refunded, but never triggers an automatic print.
+      // A recorded dispatch cannot reach a stopped node. A later404 is only a
+      // lookup result: refund requires a durable cancellation barrier for the exact authorization.
       j = await paid();
       await stop(node);
       j = (await api(requester, `/jobs/${j.id}/dispatch`, {})).job;
@@ -263,16 +263,25 @@ test(
       await api(owner, `/owner/jobs/${j.id}/review`, {
         result: "fail",
         reason:
-          "Live reconnected node confirms no durable acceptance after failed connection",
+          "Owner inspected the empty output area and requested durable cancellation before acceptance",
       });
       const refunded = (await api(requester, `/jobs/${j.id}`)).job;
       assert.equal(refunded.paymentState, "refunded");
+      assert.equal(
+        refunded.executionCancellation?.status,
+        "cancelled_before_acceptance",
+      );
+      assert.equal(refunded.executionCancellation?.attempt_id, j.attemptId);
+      assert.equal(refunded.executionCancellation?.job_id, j.id);
+      assert.equal(refunded.executionCancellation?.machine_id, j.machineId);
+      assert.equal(refunded.executionCancellation?.target_scope, "dispatch");
       results.push({
         case: "node unavailable before durable acceptance",
         jobId: j.id,
         attemptId: j.attemptId,
         state: refunded.productionState,
         payment: refunded.paymentState,
+        cancellationProof: refunded.executionCancellation.status,
       });
       const journal = new DatabaseSync(join(dir, "node/journal.sqlite"), {
         readOnly: true,
