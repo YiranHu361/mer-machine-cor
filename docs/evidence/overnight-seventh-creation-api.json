@@ -1,0 +1,76 @@
+{
+  "at": "2026-10-23T11:45:56.408Z",
+  "status": "PASS",
+  "scope": "Actual local HTTP + retained SpacetimeDB; simulation/mock only; no quote/payment/dispatch/node/calibration calls",
+  "runtime": {
+    "mode": "simulation",
+    "paymentMode": "mock",
+    "store": "spacetimedb",
+    "machines": [
+      {
+        "id": "phomemo_01",
+        "mode": "simulation",
+        "activeJobId": null
+      },
+      {
+        "id": "instax_01",
+        "mode": "simulation",
+        "activeJobId": null
+      },
+      {
+        "id": "bambu_01",
+        "mode": "simulation",
+        "activeJobId": null
+      }
+    ]
+  },
+  "finalRuntime": {
+    "mode": "simulation",
+    "paymentMode": "mock",
+    "store": "spacetimedb",
+    "machines": [
+      {
+        "id": "phomemo_01",
+        "mode": "simulation",
+        "activeJobId": null
+      },
+      {
+        "id": "instax_01",
+        "mode": "simulation",
+        "activeJobId": null
+      },
+      {
+        "id": "bambu_01",
+        "mode": "simulation",
+        "activeJobId": null
+      }
+    ]
+  },
+  "jobId": "job_984803dd-cf22-4c18-b7f5-8bc4fba9233c",
+  "creationRequestId": "a4c077dc-b1bd-42c3-addb-266021fb3610",
+  "statuses": {
+    "create": 201,
+    "originalReplay": 200,
+    "changedOriginalConflict": 409,
+    "edit": 200,
+    "replayAfterEdit": 200,
+    "cancel": 200,
+    "replayAfterCancel": 200
+  },
+  "scopedOrderCount": 1,
+  "finalState": {
+    "productionState": "cancelled",
+    "paymentState": "unpaid",
+    "version": 4,
+    "specVersion": 2,
+    "attemptId": null
+  },
+  "checks": [
+    "One explicit UUID-bound order created with no payment or attempt",
+    "Original replay returns 200 and exact same identity/version/history/artifact",
+    "Different original body with same key rejects without changing saved order",
+    "Original replay after edit returns current same order and preserves edited specification",
+    "Original replay after cancellation returns exact current cancelled order",
+    "Fresh requester list contains one scoped identity, with internal original hash hidden"
+  ]
+}

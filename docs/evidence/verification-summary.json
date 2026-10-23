@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T11:30:24.496Z",
-  "sourceStateSha256": "3229ea03eaec73a7bbe65c21c9a84c1f6a890e485ead27724f81d644474b5ce0",
+  "recordedAt": "2026-10-23T11:58:04.245Z",
+  "sourceStateSha256": "0ddc4be4e47bb516e7100c77e83f9f5635e69cc7eec7fe5ef2a9337fc3274a4c",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 106,
+    "backendApplicationAndProcessRecovery": 130,
     "node": 67,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 146,
+    "browserScenarios": 163,
     "browserEngines": 3,
-    "uniqueTestCases": 378,
-    "testExecutionsIncludingThreeEngines": 670,
+    "uniqueTestCases": 419,
+    "testExecutionsIncludingThreeEngines": 745,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -23,7 +23,8 @@
     "pass/fail/review/lost-ack fixtures",
     "actual signed calibration API with simulator",
     "actual local FastMCP authorized app transaction",
-    "Native EventSource reconnect after actual local backend/node restart, with polling disabled"
+    "Native EventSource reconnect after actual local backend/node restart, with polling disabled",
+    "Actual Spacetime-backed creation correlation/replay/current-record API"
   ],
   "physicalJobs": 0,
   "onchainTransactions": 0,
@@ -66,13 +67,22 @@
     ".data/overnight-sixth-calibration-acceptance-final.log": "17c10fb19033c4e6cd393d04dce6a2c1350180faef96ac047866b500e348320b",
     ".data/overnight-sixth-chromium-browser.log": "cb39f28a5ecb2b7b1a21665d86e2ae9b66329a1837f6ee2d81aa646c66c3e817",
     ".data/overnight-sixth-firefox-browser.log": "4bf56239b8dc5ddafa11e3ae96b9ca19b896b5b66194f3fd4475b19871a6e5c8",
-    ".data/overnight-sixth-webkit-browser.log": "5e5909ba25bba3def21cd66ec4988da73482e94e029249de5e4bb802574cbe17"
+    ".data/overnight-sixth-webkit-browser.log": "5e5909ba25bba3def21cd66ec4988da73482e94e029249de5e4bb802574cbe17",
+    ".data/overnight-seventh-software-final.log": "41f08c905ecd2e7347eb7598c2b0b3d11a6c74f4b785c95037f2df5a78c10933",
+    ".data/overnight-seventh-software-before-startup-fix.log": "3d037a921b30b579093ed8a22483a0b2e87511d2c03ba5864e524d4edce72562",
+    ".data/overnight-seventh-web-final.log": "bf7c5abf978d676ae264c4fa63d0ff3db8b59bec21371697a92d1d857aea44bd",
+    ".data/overnight-seventh-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-seventh-calibration-acceptance-final.log": "3d2edd23305a58e70c132d12b43a849259c0890ea2bc86435c9462b86a8389d9",
+    ".data/overnight-seventh-creation-acceptance-final.log": "d26b1992f195642a906e52ffdafef8f03d5876d645c053a843f69cac6a161d2f",
+    ".data/overnight-seventh-chromium-browser.log": "bbc055d6cc5ef332ceceb334066a5becd3cf00f7aeca112797b519f8d56cb015",
+    ".data/overnight-seventh-firefox-browser.log": "4bca7cb2ef4a34cb9cbf5643e72a01e5550a83bd8e955509ebcb63225c6fcfd9",
+    ".data/overnight-seventh-webkit-browser.log": "32b8c9b492afd14b962618ae6707a904fa141473845b7ded103b48c7eb55c275"
   },
-  "notes": "October 23 sixth overnight checkpoint; see overnight-sixth-qa.json for current evidence. First through fifth checkpoint JSON files are historical. Further scheduled audits continue until 9 a.m. Pacific.",
+  "notes": "October 23 seventh overnight checkpoint; see overnight-seventh-qa.json for current evidence. First through sixth checkpoint JSON files are historical. Audits continue until 9 a.m. Pacific.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 231,
+    "candidateFiles": 248,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [

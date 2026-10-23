@@ -622,6 +622,67 @@ main {
 .machines-section {
   margin-top: 48px;
 }
+.requester-drafts {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8faff;
+  padding: 20px;
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+}
+.requester-drafts h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  scroll-margin-block: 24px;
+}
+.requester-drafts h2:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 5px;
+}
+.draft-shortcut {
+  margin-bottom: 16px;
+}
+.requester-drafts > p,
+.requester-drafts small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.requester-drafts ul {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+.requester-drafts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  border-top: 1px solid var(--line);
+  padding: 14px 0 0;
+  margin-top: 14px;
+}
+.requester-drafts li > div:first-child {
+  flex: 1 1 250px;
+  min-width: 0;
+}
+.requester-drafts h3 {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.requester-drafts li p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font-size: 13px;
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+}
+.requester-drafts .button-row {
+  margin: 0;
+}
 .section-heading {
   display: flex;
   justify-content: space-between;

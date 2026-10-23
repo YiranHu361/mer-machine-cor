@@ -108,6 +108,7 @@ type Quote = {
 };
 type Job = {
   id: string;
+  creationRequestId?: string;
   checkoutKey?: string;
   machineId?: string;
   specVersion: number;
@@ -587,15 +588,16 @@ function RequesterApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [unresolvedCreation, setUnresolvedCreation] = useState(false);
   const [editingBaseline, setEditingBaseline] = useState<{
     id: string;
     version: number;
+    signature: string;
   } | null>(null);
   const [editConflict, setEditConflict] = useState(false);
   const recoveryContext = useRef(0);
   const recoveryInteraction = useRef(0);
   const ordersSection = useRef<HTMLElement>(null);
+  const draftsHeading = useRef<HTMLHeadingElement>(null);
   // Keep empty and incomplete native number input text until submission.
   // Converting every keystroke turns a cleared field (or "5e") into zero.
   type SpecDraft = Omit<Spec, "widthMm" | "heightMm" | "quantity"> & {
@@ -603,6 +605,31 @@ function RequesterApp({
     heightMm: number | string;
     quantity: number | string;
   };
+  type RequesterDraft = {
+    spec: SpecDraft;
+    assets: Asset[];
+    budgetEnabled: boolean;
+    budget: string;
+    intakeDraft: IntakeDraft | null;
+    intakeError: string;
+    baseline: typeof editingBaseline;
+    conflict: boolean;
+    job: Job | null;
+  };
+  const cachedDrafts = useRef(new Map<string, RequesterDraft>());
+  const [, setDraftRevision] = useState(0);
+  const [pendingCreation, setPendingCreation] = useState<{
+    id: string;
+    submittedSpec: Spec;
+    signature: string;
+  } | null>(null);
+  const unresolvedCreation = pendingCreation !== null;
+  const [recoveryReadyFor, setRecoveryReadyFor] = useState<string | null>(null);
+  useEffect(() => {
+    // Announce the completed error before exposing its recovery action. An
+    // immediately activated control must not lose focus to a later Notice effect.
+    setRecoveryReadyFor(unresolvedCreation && !busy ? error : null);
+  }, [unresolvedCreation, busy, error]);
   const [spec, setSpec] = useState<SpecDraft>({
     assetIds: [],
     intent: "",
@@ -643,16 +670,43 @@ function RequesterApp({
     ]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [editing, setEditing] = useState(false);
+  const [intakeDraft, setIntakeDraft] = useState<IntakeDraft | null>(null);
+  const [intakeError, setIntakeError] = useState("");
+  const formSignature = (
+    value: SpecDraft,
+    enabled: boolean,
+    cap: string,
+    originals: Asset[] = [],
+    intake: IntakeDraft | null = null,
+  ) =>
+    JSON.stringify([
+      draftSignature(value),
+      enabled,
+      cap === "" ? "" : Number(cap),
+      originals,
+      intake,
+    ]);
+  const activeDraftKey = !current ? "new" : editing ? current.id : null;
+  const activeSignature = formSignature(
+    spec,
+    budgetEnabled,
+    budget,
+    assets,
+    intakeDraft,
+  );
   const unsavedDraft =
-    (!current || editing) &&
-    draftSignature({
-      ...spec,
-      budgetMandate: budgetEnabled
-        ? { enabled: true, capCents: Math.round(Number(budget) * 100) }
-        : undefined,
-    }) !==
-      draftSignature(editing && current ? current.spec : pristineDraft.current);
-  const confirmLeaving = Boolean(busy) || unsavedDraft;
+    activeDraftKey !== null &&
+    activeSignature !==
+      (editingBaseline?.signature ||
+        formSignature(pristineDraft.current, false, "3.00"));
+  const hiddenDrafts = [...cachedDrafts.current.entries()].filter(
+    ([key]) => key !== activeDraftKey,
+  );
+  const confirmLeaving =
+    Boolean(busy) ||
+    unsavedDraft ||
+    hiddenDrafts.length > 0 ||
+    unresolvedCreation;
   useEffect(() => {
     if (!confirmLeaving || session?.role !== "requester") return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -662,8 +716,6 @@ function RequesterApp({
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [confirmLeaving, session?.role]);
-  const [intakeDraft, setIntakeDraft] = useState<IntakeDraft | null>(null);
-  const [intakeError, setIntakeError] = useState("");
   const [loadedPreview, setLoadedPreview] = useState<string | null>(null);
   const [previewVisit, setPreviewVisit] = useState(0);
   const previewContext = current?.artifact
@@ -706,6 +758,24 @@ function RequesterApp({
       )
         return;
       productionHeading.current?.focus();
+    });
+  };
+  const focusDrafts = () => {
+    const initiatingElement = document.activeElement;
+    const interaction = recoveryInteraction.current;
+    requestAnimationFrame(() => {
+      if (
+        !mounted.current ||
+        interaction !== recoveryInteraction.current ||
+        (document.activeElement !== initiatingElement &&
+          document.activeElement !== document.body)
+      )
+        return;
+      draftsHeading.current?.focus({ preventScroll: true });
+      draftsHeading.current?.scrollIntoView({
+        block: "start",
+        behavior: "instant",
+      });
     });
   };
   const refresh = useCallback(async () => {
@@ -781,8 +851,59 @@ function RequesterApp({
       .then((x) => setCatalog(x.models || x.items || []))
       .catch(() => {});
   }, []);
-  const select = (job: Job) => {
+  const cacheChanged = () => setDraftRevision((revision) => revision + 1);
+  const stashActiveDraft = () => {
+    if (activeDraftKey === null) return;
+    if (unsavedDraft || (activeDraftKey === "new" && unresolvedCreation)) {
+      cachedDrafts.current.set(activeDraftKey, {
+        spec,
+        assets,
+        budgetEnabled,
+        budget,
+        intakeDraft,
+        intakeError,
+        baseline: editingBaseline,
+        conflict: editConflict,
+        job: editing ? current : null,
+      });
+      cacheChanged();
+    } else if (cachedDrafts.current.delete(activeDraftKey)) cacheChanged();
+  };
+  const forgetDraft = (key: string) => {
+    if (cachedDrafts.current.delete(key)) cacheChanged();
+  };
+  const restoreDraft = (draft: RequesterDraft) => {
+    setSpec(draft.spec);
+    setAssets(draft.assets);
+    setBudgetEnabled(draft.budgetEnabled);
+    setBudget(draft.budget);
+    setIntakeDraft(draft.intakeDraft);
+    setIntakeError(draft.intakeError);
+    setEditingBaseline(draft.baseline);
+    setEditConflict(draft.conflict);
+    setEditing(draft.job !== null);
+    setError("");
+  };
+  const select = (job: Job, preserveDraft = true) => {
     if (!mounted.current) return;
+    if (preserveDraft) stashActiveDraft();
+    // A similar specification cannot identify an interrupted creation: another
+    // tab may have submitted it too. Only its server-bound request id can.
+    if (pendingCreation && job.creationRequestId === pendingCreation.id) {
+      const newerDraft = cachedDrafts.current.get("new");
+      if (
+        newerDraft &&
+        formSignature(
+          newerDraft.spec,
+          newerDraft.budgetEnabled,
+          newerDraft.budget,
+          newerDraft.assets,
+          newerDraft.intakeDraft,
+        ) === pendingCreation.signature
+      )
+        forgetDraft("new");
+      setPendingCreation(null);
+    }
     recoveryContext.current++;
     setEditingBaseline(null);
     setEditConflict(false);
@@ -800,14 +921,13 @@ function RequesterApp({
           )
         : [job, ...old],
     );
-    // Uploaded replacements and model suggestions belong to the editing
-    // context that produced them, never another selected or saved order.
+    // Cached replacements remain private to their original draft. A saved
+    // order always displays its own sources until that draft is resumed.
     setAssets([]);
     setIntakeDraft(null);
     setIntakeError("");
     setEditing(false);
     setError("");
-    setUnresolvedCreation(false);
   };
   const checkSavedOrders = async () => {
     const initiatingElement = document.activeElement;
@@ -1034,7 +1154,7 @@ function RequesterApp({
   };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (unresolvedCreation || editConflict) return;
+    if ((!editing && unresolvedCreation) || editConflict) return;
     if (spec.outputType !== "3d" && !spec.assetIds.length) {
       setError("Add at least one image before making a production preview.");
       return;
@@ -1072,6 +1192,10 @@ function RequesterApp({
         ? { enabled: true as const, capCents: Math.round(Number(budget) * 100) }
         : undefined,
     };
+    const submittedKey = activeDraftKey;
+    const submittedJobId = editing ? current?.id : null;
+    const submittedSignature = activeSignature;
+    const creationRequestId = editing ? null : crypto.randomUUID();
     await act("create", async () => {
       let result: { job: Job };
       try {
@@ -1081,11 +1205,18 @@ function RequesterApp({
           editing ? "PATCH" : undefined,
           editing && current && editingBaseline?.id === current.id
             ? { headers: { "If-Match": `"${editingBaseline.version}"` } }
-            : undefined,
+            : creationRequestId
+              ? { headers: { "Idempotency-Key": creationRequestId } }
+              : undefined,
         );
-        if (!validSavedJob(result?.job))
+        if (
+          !validSavedJob(result?.job) ||
+          (editing
+            ? result.job.id !== submittedJobId
+            : result.job.creationRequestId !== creationRequestId)
+        )
           throw new ApiError(
-            "The order response could not be read. Its result is unknown; check saved orders before trying again.",
+            "The order response could not be matched to this request. Its result is unknown; check saved orders before trying again.",
             "invalid_response",
             0,
             true,
@@ -1100,44 +1231,75 @@ function RequesterApp({
           void refresh();
         }
         if (!editing && error instanceof ApiError && error.outcomeUnknown) {
-          setUnresolvedCreation(true);
+          setPendingCreation({
+            id: creationRequestId!,
+            submittedSpec: value,
+            signature: submittedSignature,
+          });
           void refresh();
         }
         throw error;
       }
-      select(result.job);
+      if (submittedKey !== null) forgetDraft(submittedKey);
+      select(result.job, false);
       setEditing(false);
       focusProduction();
     });
   };
   const newOrder = () => {
+    stashActiveDraft();
     recoveryContext.current++;
     setEditingBaseline(null);
     setEditConflict(false);
-    setUnresolvedCreation(false);
     selectedId.current = null;
     removeStoredValue("local", "fabrary-current-job");
     setCurrent(null);
     setAssets([]);
     setIntakeDraft(null);
     setIntakeError("");
-    setSpec({
-      assetIds: [],
-      intent: "",
-      outputType: "sticker",
-      widthMm: 53,
-      heightMm: 50,
-      quantity: 1,
-      material: "thermal-paper",
-      permission: "authorized",
-      crop: "contain",
-    });
+    setSpec(pristineDraft.current);
     setBudgetEnabled(false);
+    setBudget("3.00");
     setEditing(false);
     setError("");
+    const cached = cachedDrafts.current.get("new");
+    if (cached) restoreDraft(cached);
     focusProduction();
   };
+  const discardDraft = (key: string) => {
+    if (busy) return;
+    const initiatingElement = document.activeElement;
+    forgetDraft(key);
+    if (key === "new") {
+      setPendingCreation(null);
+      if (activeDraftKey === "new") {
+        recoveryContext.current++;
+        setSpec(pristineDraft.current);
+        setAssets([]);
+        setBudgetEnabled(false);
+        setBudget("3.00");
+        setIntakeDraft(null);
+        setIntakeError("");
+        setError("");
+      }
+    }
+    requestAnimationFrame(() => {
+      if (
+        mounted.current &&
+        (document.activeElement === initiatingElement ||
+          document.activeElement === document.body)
+      ) {
+        const target =
+          document.querySelector<HTMLButtonElement>(
+            ".requester-drafts button:not(:disabled)",
+          ) || productionHeading.current;
+        target?.focus({ preventScroll: true });
+        target?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      }
+    });
+  };
   const cancelEdit = () => {
+    if (current) forgetDraft(current.id);
     recoveryContext.current++;
     setEditingBaseline(null);
     setEditConflict(false);
@@ -1151,7 +1313,18 @@ function RequesterApp({
   const beginEdit = (job: Job) => {
     if (!mounted.current) return;
     recoveryContext.current++;
-    setEditingBaseline({ id: job.id, version: job.version });
+    const initialBudget = String(
+      (job.spec.budgetMandate?.capCents || 300) / 100,
+    );
+    setEditingBaseline({
+      id: job.id,
+      version: job.version,
+      signature: formSignature(
+        job.spec,
+        Boolean(job.spec.budgetMandate?.enabled),
+        initialBudget,
+      ),
+    });
     setEditConflict(false);
     setPreviewVisit((visit) => visit + 1);
     setAssets([]);
@@ -1159,10 +1332,21 @@ function RequesterApp({
     setIntakeError("");
     setSpec(job.spec);
     setBudgetEnabled(Boolean(job.spec.budgetMandate?.enabled));
-    setBudget(String((job.spec.budgetMandate?.capCents || 300) / 100));
+    setBudget(initialBudget);
     setEditing(true);
     setError("");
+    const cached = cachedDrafts.current.get(job.id);
+    if (cached) restoreDraft(cached);
     focusProduction();
+  };
+  const resumeDraft = (key: string, draft: RequesterDraft) => {
+    if (busy) return;
+    if (key === "new") newOrder();
+    else if (draft.job) {
+      const job = jobs.find((item) => item.id === key) || draft.job;
+      select(job);
+      beginEdit(job);
+    }
   };
   const edit = () => {
     if (current) beginEdit(current);
@@ -1175,7 +1359,8 @@ function RequesterApp({
         throw new Error(
           "The saved specification could not be confirmed. Your draft is kept; refresh before adopting it.",
         );
-      select(job);
+      forgetDraft(current.id);
+      select(job, false);
       beginEdit(job);
     });
   };
@@ -1211,8 +1396,21 @@ function RequesterApp({
       onFocusCapture={() => {
         recoveryInteraction.current++;
       }}
-      onInputCapture={() => {
+      onInputCapture={(event) => {
         recoveryInteraction.current++;
+        // A stored selection can still be loading while this new-order form
+        // is visible. Once the requester types, keep that explicit new draft
+        // instead of letting a late startup/read-retry adopt the old order.
+        if (
+          !current &&
+          selectedId.current &&
+          event.target instanceof HTMLElement &&
+          event.target.closest(".intake-panel form")
+        ) {
+          recoveryContext.current++;
+          selectedId.current = null;
+          removeStoredValue("local", "fabrary-current-job");
+        }
       }}
     >
       <section className="intro">
@@ -1277,24 +1475,94 @@ function RequesterApp({
       )}
       {unresolvedCreation && (
         <Notice>
-          The earlier order request may still finish. Check your saved orders
-          below and open the existing order before continuing. This draft will
+          The earlier new-order request may still finish. Check your saved
+          orders and open the one marked “Matches interrupted request” to
+          resolve it. Browsing other orders keeps this draft protected. It will
           not be submitted again automatically.
           <div className="button-row">
             <button
               type="button"
               className="secondary"
+              disabled={Boolean(busy) || recoveryReadyFor !== error}
               onClick={() => {
                 void checkSavedOrders();
               }}
             >
               Check saved orders
             </button>
-            <button type="button" className="text-button" onClick={newOrder}>
+            <button
+              type="button"
+              className="text-button"
+              disabled={Boolean(busy)}
+              onClick={() => discardDraft("new")}
+            >
               Discard interrupted draft
             </button>
           </div>
         </Notice>
+      )}
+      {hiddenDrafts.length > 0 && (
+        <section
+          className="requester-drafts"
+          aria-labelledby="requester-drafts-title"
+        >
+          <h2 id="requester-drafts-title" ref={draftsHeading} tabIndex={-1}>
+            Your unsaved drafts
+          </h2>
+          <p>
+            Kept privately in this requester session. Resume to continue, or
+            discard a draft you no longer need. Closing the browser can lose it.
+          </p>
+          <ul>
+            {hiddenDrafts.map(([key, draft]) => (
+              <li key={key}>
+                <div>
+                  <h3>
+                    {key === "new" ? "New order draft" : `Edit ${shortId(key)}`}
+                  </h3>
+                  <p>{draft.spec.intent || "Untitled artwork"}</p>
+                  <small>
+                    {outputLabels[draft.spec.outputType]}
+                    {draft.baseline
+                      ? ` · saved version ${draft.baseline.version}`
+                      : ""}
+                    {key === "new" && unresolvedCreation
+                      ? " · request unresolved"
+                      : ""}
+                  </small>
+                </div>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={Boolean(busy)}
+                    aria-label={
+                      key === "new"
+                        ? "Resume new order draft"
+                        : `Resume edit ${shortId(key)}`
+                    }
+                    onClick={() => resumeDraft(key, draft)}
+                  >
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    disabled={Boolean(busy)}
+                    aria-label={
+                      key === "new"
+                        ? "Discard new order draft"
+                        : `Discard edit ${shortId(key)}`
+                    }
+                    onClick={() => discardDraft(key)}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       <div className="workbench">
         <section className="intake-panel">
@@ -1312,10 +1580,24 @@ function RequesterApp({
                 onClick={newOrder}
                 disabled={Boolean(busy)}
               >
-                New order
+                {cachedDrafts.current.has("new")
+                  ? "Resume new draft"
+                  : "New order"}
               </button>
             )}
           </div>
+          {hiddenDrafts.length > 0 && (
+            <p className="context-note draft-shortcut">
+              Your other drafts are kept in this session.{" "}
+              <button
+                type="button"
+                className="text-button"
+                onClick={focusDrafts}
+              >
+                View unsaved drafts
+              </button>
+            </p>
+          )}
           {current && !editing ? (
             <>
               <ProductionPreview
@@ -1700,7 +1982,7 @@ function RequesterApp({
                   busy={busy === "create"}
                   disabled={
                     Boolean(busy) ||
-                    unresolvedCreation ||
+                    (!editing && unresolvedCreation) ||
                     editConflict ||
                     (spec.outputType === "3d" && !catalog.length)
                   }
@@ -1716,6 +1998,15 @@ function RequesterApp({
                     onClick={cancelEdit}
                   >
                     Keep existing specification
+                  </button>
+                )}
+                {!editing && unsavedDraft && !unresolvedCreation && (
+                  <button
+                    className="text-button cancel-edit"
+                    type="button"
+                    onClick={() => discardDraft("new")}
+                  >
+                    Discard new draft
                   </button>
                 )}
               </fieldset>
@@ -1859,6 +2150,10 @@ function RequesterApp({
                     <strong>{outputLabels[job.spec.outputType]}</strong>
                     <small>
                       {shortId(job.id)} · {date(job.createdAt)}
+                      {pendingCreation &&
+                      pendingCreation.id === job.creationRequestId
+                        ? " · Matches interrupted request"
+                        : ""}
                     </small>
                   </span>
                   <span>

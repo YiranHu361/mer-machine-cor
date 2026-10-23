@@ -46,7 +46,7 @@ async function fixture(
     failureStatus: 0,
     missingJob: false,
     heldRead: hangSession ? "/api/session" : "",
-    posts: [] as { path: string; body: any }[],
+    posts: [] as { path: string; body: any; requestId?: string }[],
     sessions: 0,
     sessionReads: 0,
     machine: {
@@ -93,6 +93,7 @@ async function fixture(
       state.posts.push({
         path,
         body: path === "/api/uploads" ? null : route.request().postDataJSON(),
+        requestId: route.request().headers()["idempotency-key"],
       });
       if (path === state.held) return;
       if (state.failureStatus)
@@ -127,6 +128,7 @@ async function fixture(
         const saved = {
           ...job(`deadline_created_${state.jobs.length}`),
           spec: route.request().postDataJSON(),
+          creationRequestId: route.request().headers()["idempotency-key"],
         };
         state.jobs.push(saved);
         return route.fulfill({
@@ -235,6 +237,8 @@ test("an interrupted creation stops spinning, recovers its late committed order 
   const committed = {
     ...job("deadline_late_committed"),
     spec: state.posts.find((item) => item.path === "/api/jobs")!.body,
+    creationRequestId: state.posts.find((item) => item.path === "/api/jobs")!
+      .requestId,
   };
   state.jobs.push(committed);
   await page
@@ -411,6 +415,7 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
   await page.addInitScript(() => {
     const native = window.fetch;
     (window as any).deadlineBodySubmissions = [];
+    (window as any).deadlineBodyRequestIds = [];
     window.fetch = async (input, init) => {
       if (
         new URL(String(input), location.href).pathname === "/api/jobs" &&
@@ -418,6 +423,9 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
       ) {
         (window as any).deadlineBodySubmissions.push(
           JSON.parse(String(init.body)),
+        );
+        (window as any).deadlineBodyRequestIds.push(
+          new Headers(init.headers).get("Idempotency-Key"),
         );
         const body = new ReadableStream({
           start(controller) {
@@ -458,7 +466,13 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
   const body = await page.evaluate(
     () => (window as any).deadlineBodySubmissions[0],
   );
-  state.jobs.push({ ...job("deadline_body_committed"), spec: body });
+  state.jobs.push({
+    ...job("deadline_body_committed"),
+    spec: body,
+    creationRequestId: await page.evaluate(
+      () => (window as any).deadlineBodyRequestIds[0],
+    ),
+  });
   await page
     .getByRole("button", { name: "Check saved orders", exact: true })
     .click();
@@ -466,6 +480,9 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
   await expect(page.locator(".order-intent")).toHaveText(
     "Recover the stalled response body",
   );
+  await expect(
+    page.getByRole("button", { name: "Check saved orders", exact: true }),
+  ).toHaveCount(0);
   expect(
     await page.evaluate(() => (window as any).deadlineBodySubmissions.length),
   ).toBe(1);
@@ -520,6 +537,8 @@ for (const missingJob of [false, true])
     state.jobs.push({
       ...job("deadline_uncertain_reply"),
       spec: state.posts.find((item) => item.path === "/api/jobs")!.body,
+      creationRequestId: state.posts.find((item) => item.path === "/api/jobs")!
+        .requestId,
     });
     await page
       .getByRole("button", { name: "Check saved orders", exact: true })
@@ -528,6 +547,9 @@ for (const missingJob of [false, true])
     await expect(page.locator(".order-intent")).toHaveText(
       "Recover the ambiguous committed response",
     );
+    await expect(
+      page.getByRole("button", { name: "Check saved orders", exact: true }),
+    ).toHaveCount(0);
     expect(state.sessions).toBe(0);
   });
 

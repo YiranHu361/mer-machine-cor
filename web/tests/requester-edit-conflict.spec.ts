@@ -6,6 +6,7 @@ function order() {
   const at = new Date().toISOString();
   return {
     id: "stale_order_first",
+    creationRequestId: undefined as string | undefined,
     version: 1,
     specVersion: 1,
     createdAt: at,
@@ -45,6 +46,7 @@ async function fixture(page: Page, saved = true) {
     jobs: saved ? [order()] : [],
     patches: [] as { baseline?: string; body: any; accepted: boolean }[],
     creations: [] as any[],
+    creationIds: [] as string[],
     sessions: 0,
     malformedDetail: false,
     detailFault: "" as "" | "artifact" | "history",
@@ -162,6 +164,7 @@ async function fixture(page: Page, saved = true) {
       });
     if (path === "/api/jobs" && method === "POST") {
       state.creations.push(route.request().postDataJSON());
+      state.creationIds.push(route.request().headers()["idempotency-key"]);
       return json(
         route,
         { error: { message: "The storage acknowledgement is unavailable." } },
@@ -309,6 +312,9 @@ async function interruptedCreation(page: Page) {
   await expect(
     page.getByRole("button", { name: "Check saved orders", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Check saved orders", exact: true }),
+  ).toBeEnabled();
   return state;
 }
 async function expectInViewport(target: ReturnType<Page["locator"]>) {
@@ -323,7 +329,13 @@ test("checking saved orders focuses the recovered mobile row for immediate keybo
   page,
 }) => {
   const state = await interruptedCreation(page);
-  state.jobs = [{ ...order(), spec: state.creations[0] }];
+  state.jobs = [
+    {
+      ...order(),
+      spec: state.creations[0],
+      creationRequestId: state.creationIds[0],
+    },
+  ];
   const check = page.getByRole("button", {
     name: "Check saved orders",
     exact: true,
@@ -363,7 +375,13 @@ test("a delayed saved-order lookup respects a newer requester focus choice (offl
   page,
 }) => {
   const state = await interruptedCreation(page);
-  state.jobs = [{ ...order(), spec: state.creations[0] }];
+  state.jobs = [
+    {
+      ...order(),
+      spec: state.creations[0],
+      creationRequestId: state.creationIds[0],
+    },
+  ];
   state.holdJobs = true;
   const check = page.getByRole("button", {
     name: "Check saved orders",

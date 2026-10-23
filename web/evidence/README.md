@@ -1,10 +1,10 @@
 # Browser verification evidence
 
-Current overnight checkpoint: 2026-10-23, 04:30 Pacific. **146 scenarios passed in each of Chromium, Firefox and WebKit**, with 39 automated A/AA scans and no detected violations. 29 API/storage/wallet unit cases passed (8+6+15). Current per-engine reports are `overnight-sixth-{chromium,firefox,webkit}-browser.json`; source fingerprint and scope are recorded in [the current checkpoint](../../docs/evidence/overnight-sixth-qa.json). [Overnight log](../../docs/overnight-qa.md) tracks remaining work through 9:00 a.m. Pacific.
+Current overnight checkpoint: 2026-10-23, 04:57 Pacific. **163 scenarios passed in each of Chromium, Firefox and WebKit**, with 42 automated A/AA scans and no detected violations. 29 API/storage/wallet unit cases passed. Current per-engine reports are `overnight-seventh-{chromium,firefox,webkit}-browser.json`; [source/counts/scope](../../docs/evidence/overnight-seventh-qa.json), [ongoing log](../../docs/overnight-qa.md).
 
-New isolated evidence covers stale requester/owner settings conflicts, preserved local drafts, explicit saved-state adoption, machine clearance context, mobile saved-order and calibration retry focus, and malformed status recovery. [Requester conflict at 320px](overnight-requester-edit-conflict-320.png) and [owner settings conflict at 320px](overnight-machine-settings-conflict-320.png) show intercepted simulation fixtures. Existing scoped draft memory remains private to the authenticated owner view and does not survive forced termination.
+New isolated UI evidence covers private requester new/edit drafts, exact interrupted-creation matching, mismatched successful replies, startup draft preservation and stale bound-frame recovery. [Drafts at 320px](overnight-requester-drafts-320.png) and [desktop](overnight-requester-drafts-desktop.png) show simulation fixtures. Session-memory drafts cannot survive forced termination.
 
-The current actual local service-restart screenshot is [the reconnected dashboard](overnight-sixth-sse-reconnected.png). Reconnect disabled polling and used SpacetimeDB, simulation and mock payments. Earlier screenshots retain mobile pickup during incoming work, focus contrast and emulated touch/reflow. Native iOS, complete accessibility conformance, hardware output, funded payments and live model calls remain unverified.
+The [reconnected dashboard](overnight-seventh-sse-reconnected.png) uses actual local SpacetimeDB/simulation/mock with polling disabled. Native iOS, full accessibility conformance, hardware output, funded payments and live model calls remain unverified.
 
 The following entries are historical implementation baselines.
 

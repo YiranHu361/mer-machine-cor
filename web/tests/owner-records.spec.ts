@@ -707,6 +707,7 @@ test("requester identity changes discard private artwork, drafts and saved order
       const now = new Date().toISOString();
       privateJob = {
         id: "private_order_A",
+        creationRequestId: route.request().headers()["idempotency-key"],
         specVersion: 1,
         spec: route.request().postDataJSON(),
         artifact: { id: "private_preview_A", url: pixel, sha256: "private_A" },
@@ -917,6 +918,9 @@ for (const deferredOperation of ["upload", "create"] as const) {
         : {
             job: {
               id: "late_private_order_A",
+              creationRequestId: pending!.request().headers()[
+                "idempotency-key"
+              ],
               specVersion: 1,
               spec: createSpec,
               artifact: {

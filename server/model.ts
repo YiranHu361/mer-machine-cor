@@ -160,6 +160,8 @@ export interface Quote {
 export interface Job {
   id: string;
   requesterId: string;
+  creationRequestId?: string;
+  creationSpecHash?: string;
   machineId: string | null;
   specVersion: number;
   spec: Spec;

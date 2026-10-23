@@ -23,6 +23,17 @@ import {
 } from "../integrations/src/payments.ts";
 import { mutate } from "./store.ts";
 import {
+  parseJobCreation,
+  findCreatedJob,
+  jobCreationQueue,
+} from "./job-creation.ts";
+import {
+  evidenceUrl,
+  expectedEvidenceFrame,
+  latestCalibration,
+  requireEvidenceFrame,
+} from "./evidence.ts";
+import {
   machineSettingsFingerprint,
   machineInspectionFingerprint,
   machineDeviceFingerprint,
@@ -106,6 +117,7 @@ export function createApp(
 ) {
   const app = express();
   const serializeMachinePatch = machinePatchQueue();
+  const serializeJobCreation = jobCreationQueue();
   app.disable("x-powered-by");
   // Built UI bundles are public; uploaded job artwork stays behind /assets/:id authorization.
   app.use(
@@ -229,16 +241,19 @@ export function createApp(
     await service.job(String(req.params.id), a);
     return a;
   };
-  const view = (j: Job) => ({
-    ...j,
-    evidence: j.evidence
-      ? {
-          ...j.evidence,
-          frame: undefined,
-          url: j.evidence.url ? `/api/jobs/${j.id}/evidence` : undefined,
-        }
-      : undefined,
-  });
+  const view = (j: Job) => {
+    const { creationSpecHash, ...visible } = j;
+    return {
+      ...visible,
+      evidence: j.evidence
+        ? {
+            ...j.evidence,
+            frame: undefined,
+            url: evidenceUrl(j),
+          }
+        : undefined,
+    };
+  };
   app.get("/api/health", async (req, res) => {
     try {
       await service.store.read();
@@ -589,10 +604,25 @@ export function createApp(
       "Use requester access to create an order.",
       403,
     );
-    const artifact = await prepare(req, a.id, 1);
-    res
-      .status(201)
-      .json({ job: view(await service.create(a.id, req.body, artifact)) });
+    const creation = parseJobCreation(req.body, req.headers["idempotency-key"]);
+    const result = await serializeJobCreation(
+      a.id,
+      creation.request?.id,
+      async () => {
+        const existing =
+          creation.request &&
+          findCreatedJob(await service.read(), a.id, creation.request);
+        if (existing) return { job: existing, created: false };
+        const artifact = await prepare(req, a.id, 1, creation.spec);
+        return service.createWithResult(
+          a.id,
+          creation.spec,
+          artifact,
+          creation.request?.id,
+        );
+      },
+    );
+    res.status(result.created ? 201 : 200).json({ job: view(result.job) });
   });
   app.get("/api/jobs", async (req, res) => {
     const a = await actor(req);
@@ -746,6 +776,7 @@ export function createApp(
   app.get("/api/jobs/:id/evidence", async (req, res) => {
     await owned(req);
     const j = await service.job(String(req.params.id));
+    requireEvidenceFrame(j, expectedEvidenceFrame(req.query.frame));
     const frameUrl = j.evidence?.url;
     requireThat(
       frameUrl,
@@ -1129,7 +1160,7 @@ export function createApp(
               ? {
                   ...result.calibration.evidence,
                   frame: undefined,
-                  url: `/api/owner/machines/${req.params.id}/calibration/evidence`,
+                  url: evidenceUrl(result.calibration, true),
                 }
               : undefined,
           }
@@ -1141,11 +1172,39 @@ export function createApp(
     const state = await service.read(),
       m = ownValue(state.machines, String(req.params.id));
     requireThat(m, "NOT_FOUND", "Machine not found.", 404);
-    const c = Object.values(state.calibrations ?? {})
-      .filter((c) => c.machineId === m?.id && c.evidence?.url)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    const expected = expectedEvidenceFrame(req.query.frame);
+    const calibrationId = req.query.calibration;
     requireThat(
-      c && service.node.fetchFrame,
+      calibrationId === undefined ||
+        (typeof calibrationId === "string" &&
+          calibrationId.length > 0 &&
+          calibrationId.length <= 200 &&
+          expected !== undefined),
+      "INVALID_EVIDENCE_BINDING",
+      "Refresh the saved calibration before loading its image.",
+      400,
+    );
+    requireThat(
+      expected === undefined || calibrationId !== undefined,
+      "INVALID_EVIDENCE_BINDING",
+      "Refresh the saved calibration before loading its image.",
+      400,
+    );
+    // Legacy no-query reads retain latest-attempt behavior. Bound metadata
+    // explicitly identifies its calibration and never substitutes another one.
+    const c =
+      calibrationId === undefined
+        ? latestCalibration(state, m.id)
+        : ownValue(state.calibrations ?? {}, calibrationId);
+    requireThat(
+      c && c.machineId === m.id,
+      "EVIDENCE_UNAVAILABLE",
+      "The saved calibration frame is unavailable. Refresh the saved calibration.",
+      404,
+    );
+    requireEvidenceFrame(c, expected);
+    requireThat(
+      c.evidence?.url && service.node.fetchFrame,
       "EVIDENCE_UNAVAILABLE",
       "Capture a calibration result frame first.",
       404,

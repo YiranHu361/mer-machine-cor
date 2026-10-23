@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { mutate, type Store } from "./store.ts";
+import { latestCalibration } from "./evidence.ts";
 import {
   id,
   hash,
@@ -22,6 +23,7 @@ import type { NodeBoundary } from "./node-client.ts";
 import type { PaymentBoundary, PaymentResult } from "./payments.ts";
 import { readFile } from "node:fs/promises";
 import { createClaudeProvider } from "../integrations/src/claude.ts";
+import { parseJobCreation, findCreatedJob } from "./job-creation.ts";
 export interface Config {
   mode: "simulation" | "hardware";
   paymentMode: "mock" | "testnet";
@@ -238,18 +240,7 @@ export class Service {
       "Machine not found.",
       404,
     );
-    const latest = (state: State) => {
-      const active = ownValue(
-        state.calibrations ?? {},
-        state.machines[machineId]?.activeJobId ?? "",
-      );
-      return active?.machineId === machineId
-        ? active
-        : Object.values(state.calibrations ?? {})
-            .filter((item) => item.machineId === machineId)
-            .reverse()
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-    };
+    const latest = (state: State) => latestCalibration(state, machineId);
     const savedStatus = (calibration: Job, reason?: string) => ({
       execution_status:
         (
@@ -484,17 +475,25 @@ export class Service {
     });
     return this.calibrationStatus(machineId);
   }
-  async create(requesterId: string, input: unknown, artifact: Job["artifact"]) {
-    const parsed = specSchema.safeParse(input);
-    if (!parsed.success)
-      throw new Problem(
-        "INVALID_SPEC",
-        parsed.error.issues.map((i) => i.message).join(" "),
-        422,
-      );
-    const spec = parsed.data;
-    if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+  async create(
+    requesterId: string,
+    input: unknown,
+    artifact: Job["artifact"],
+    key?: string,
+  ) {
+    return (await this.createWithResult(requesterId, input, artifact, key)).job;
+  }
+  async createWithResult(
+    requesterId: string,
+    input: unknown,
+    artifact: Job["artifact"],
+    key?: string,
+  ) {
+    const { spec, request } = parseJobCreation(input, key);
     return mutate(this.store, (s) => {
+      const existing = request && findCreatedJob(s, requesterId, request);
+      if (existing) return { job: existing, created: false };
+      if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
       for (const a of spec.assetIds)
         requireThat(
           ownValue(s.assets, a)?.ownerId === requesterId ||
@@ -508,6 +507,12 @@ export class Service {
       const job: Job = {
         id: id("job"),
         requesterId,
+        ...(request
+          ? {
+              creationRequestId: request.id,
+              creationSpecHash: request.specHash,
+            }
+          : {}),
         machineId: null,
         specVersion: 1,
         spec,
@@ -529,7 +534,7 @@ export class Service {
           : "Production preview prepared; approve it before quoting.",
       );
       s.jobs[job.id] = job;
-      return job;
+      return { job, created: true };
     });
   }
   validateCatalog(spec: Spec, artifact: Job["artifact"]) {
@@ -769,6 +774,41 @@ export class Service {
     const h = new Date().getUTCHours();
     return m.hours.start <= h && h < m.hours.end;
   }
+  private checkoutPrerequisites(state: State, job: Job) {
+    const machine = ownValue(state.machines, job.machineId ?? "");
+    requireThat(
+      machine &&
+        machine.reservation?.jobId === job.id &&
+        Date.parse(machine.reservation.expiresAt) > Date.now(),
+      "RESERVATION_EXPIRED",
+      "The machine reservation expired. Request a new quote.",
+    );
+    requireThat(
+      machine.outputType === job.spec.outputType &&
+        machine.mode === this.config.mode &&
+        machine.paired &&
+        machine.configured &&
+        machine.calibrated &&
+        machine.listed &&
+        machine.ready &&
+        !machine.paused &&
+        !machine.activeJobId &&
+        !machine.policyReconciliationRequired &&
+        this.inHours(machine),
+      "MACHINE_NOT_READY",
+      "The reserved machine is not ready. No new payment was requested. Ask the owner to restore readiness, or cancel this unpaid order.",
+    );
+    requireThat(
+      machine.mediaRemaining >= job.spec.quantity &&
+        machine.material === job.spec.material &&
+        machine.policy.maxQuantity >= job.spec.quantity &&
+        machine.policy.authorizedArtwork &&
+        (job.spec.outputType !== "3d" ||
+          (job.spec.estimatedSeconds ?? Infinity) <= machine.maxJobSeconds),
+      "POLICY_CHANGED",
+      "The saved media or owner policy no longer supports this order. No new payment was requested. Ask the owner to restore it, or cancel and revise the order.",
+    );
+  }
   async checkout(jobId: string, key: string, payload?: any) {
     requireThat(
       typeof key === "string" && key.length >= 8 && key.length <= 200,
@@ -776,7 +816,9 @@ export class Service {
       "Checkout needs a stable idempotency key.",
       422,
     );
-    const current = await this.job(jobId);
+    const state = await this.read();
+    const current = ownValue(state.jobs, jobId);
+    requireThat(current, "NOT_FOUND", "Order not found.", 404);
     if (current.paymentState !== "unpaid") {
       requireThat(
         current.checkoutKey === key,
@@ -797,8 +839,34 @@ export class Service {
       "QUOTE_EXPIRED",
       "This quote expired. Request a new quote before paying.",
     );
+    this.checkoutPrerequisites(state, current);
     if (this.payment.mode === "testnet" && !payload && this.payment.challenge) {
       const challenge = await this.payment.challenge(current);
+      const latestState = await this.read();
+      const latest = ownValue(latestState.jobs, jobId);
+      requireThat(latest, "NOT_FOUND", "Order not found.", 404);
+      if (latest.paymentState !== "unpaid") {
+        requireThat(
+          latest.checkoutKey === key,
+          "CHECKOUT_EXISTS",
+          "Use the existing checkout for this order.",
+        );
+        return latest;
+      }
+      requireThat(
+        latest.productionState === "quoted" &&
+          latest.quote?.id === current.quote.id &&
+          latest.quote.specHash === specificationHash(latest) &&
+          latest.approvedSpecHash === latest.quote.specHash,
+        "QUOTE_REQUIRED",
+        "The order changed while checkout was being prepared. Get the current approved quote before paying.",
+      );
+      requireThat(
+        Date.parse(latest.quote.expiresAt) > Date.now(),
+        "QUOTE_EXPIRED",
+        "This quote expired. Request a new quote before paying.",
+      );
+      this.checkoutPrerequisites(latestState, latest);
       throw Object.assign(
         new Problem(
           "PAYMENT_REQUIRED",
@@ -835,13 +903,7 @@ export class Service {
         "QUOTE_EXPIRED",
         "This quote expired. Request a new quote before paying.",
       );
-      const m = s.machines[j.machineId!];
-      requireThat(
-        m.reservation?.jobId === j.id &&
-          Date.parse(m.reservation.expiresAt) > Date.now(),
-        "RESERVATION_EXPIRED",
-        "The machine reservation expired. Request a new quote.",
-      );
+      this.checkoutPrerequisites(s, j);
       j.checkoutKey = key;
       j.quote.accepted = true;
       j.paymentState = "collection_pending";

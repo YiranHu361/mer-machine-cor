@@ -47,6 +47,7 @@ function order(id = "nav_saved_order") {
   const at = new Date().toISOString();
   return {
     id,
+    creationRequestId: undefined as string | undefined,
     specVersion: 1,
     version: 1,
     createdAt: at,
@@ -144,6 +145,7 @@ async function fixture(page: Page, initial = [order()]) {
       state.creates++;
       const created = order("nav_created_order");
       created.spec = route.request().postDataJSON();
+      created.creationRequestId = route.request().headers()["idempotency-key"];
       created.productionState = "specified";
       created.approvedSpecHash = "";
       state.jobs.push(created);
@@ -483,7 +485,7 @@ test("a new uploaded draft can cancel leaving without losing its image or intent
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
 });
 
-test("untouched edits and explicit cancel or new order do not warn on navigation (offline fixture)", async ({
+test("untouched edits and explicit draft discard do not warn on navigation (offline fixture)", async ({
   page,
 }) => {
   await fixture(page);
@@ -525,11 +527,20 @@ test("untouched edits and explicit cancel or new order do not warn on navigation
   await edit();
   await page
     .getByLabel("What is it for?", { exact: true })
-    .fill("Discard this edit by explicit new order");
+    .fill("Keep this edit when starting a new order");
   await page.getByRole("button", { name: "New order", exact: true }).click();
   await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
     "",
   );
+  const drafts = page.getByRole("region", {
+    name: "Your unsaved drafts",
+    exact: true,
+  });
+  await expect(drafts).toContainText(
+    "Keep this edit when starting a new order",
+  );
+  await drafts.getByRole("button", { name: /Discard edit/ }).click();
+  await expect(drafts).toHaveCount(0);
   await page.getByRole("link", { name: "Owner workshop", exact: true }).click();
   await expect(
     page.getByLabel("Owner access code", { exact: true }),

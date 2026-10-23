@@ -241,15 +241,44 @@ A WebKit affected run initially passed 14/15 because focus restoration could run
 
 [Current machine-readable checkpoint](evidence/overnight-sixth-qa.json), [full report](test-report.md), [requester conflict at 320px](../web/evidence/overnight-requester-edit-conflict-320.png), [owner settings conflict at 320px](../web/evidence/overnight-machine-settings-conflict-320.png), [mobile image recovery](../web/evidence/overnight-evidence-recovery-320.png), [reconnected owner view](../web/evidence/overnight-sixth-sse-reconnected.png). Final browser reports are `web/evidence/overnight-sixth-*-browser.json`.
 
-## Next useful audits
+## Verified seventh checkpoint, 04:57 Pacific
 
-Continue the three concrete, privately reproduced seventh-pass repairs after committing this checkpoint:
+Continuation from commit `6d0e562` completed requester draft recovery, exact creation correlation, frame binding and fresh checkout prerequisites. Work continues through 9:00 a.m. Pacific. Source fingerprint:
 
-1. Bind evidence metadata URLs to the exact saved frame/attempt and explicit calibration identity. Actual isolated HTTP tests show frame replacement between metadata/image fetch, and equal calibration timestamps selecting different images. Reject stale bindings before fetching; never substitute newer bytes under an older caption. Keep legacy URL behavior documented.
-2. Preserve requester drafts across in-page order selection. All three engines reproduced loss of exact intent, numeric blanks, budget and uploaded replacements without a discard warning. Keep per-order/new drafts in private session memory with explicit Resume/Discard controls, original conditional-edit baseline, hidden-draft leave warnings and session expiry clearing.
-3. Add exact creation correlation/idempotency. An aborted first POST and identical second POST prove body/new-id/time cannot identify the original request; replay currently creates a third job. Use an optional scoped request key, immutable original binding, pre-prepare and atomic replay checks, and returned creationRequestId. Reconcile only that exact identity; preserve newer local edits and never automatically retry a mutation.
-4. Independently review the new boundaries, verify narrow/mobile/keyboard recovery, and retain measured affected/integration checks before the next combined checkpoint. Avoid unchanged suite reruns for volume. Physical/live blockers remain unchanged.
-5. At 9:00 a.m. Pacific perform final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Do not archive this chat.
+`0ddc4be4e47bb516e7100c77e83f9f5635e69cc7eec7fe5ef2a9337fc3274a4c`
+
+- Requester new/edit drafts survive in-page order selection with exact text, numeric blanks, budget, uploaded artwork and original conditional-save baseline. Named Resume/Discard controls, a narrow-screen shortcut and native leave warnings cover hidden drafts. Drafts remain private session memory and clear on session expiry; forced browser termination can lose them. A delayed startup/read-retry response cannot replace a newly edited form. Recovery controls wait until the interrupted action finishes settling.
+- New orders carry an exact scoped request identifier. Replaying the original request returns the current saved order, including after later edits/cancellation, without another HTTP preparation or order. A changed original specification under that key rejects. Pre-prepare lookup, local serialization and atomic CAS checks cover concurrent backends; a losing cross-backend preparation can retain its registered private preview. Interrupted UI recovery matches only that exact identifier; similar orders cannot resolve it. Successful create/edit replies must match their captured request/order before clearing a draft. No automatic mutation retry is added.
+- Saved evidence URLs bind the exact frame metadata, order/attempt and explicit calibration identity. A stale binding rejects before frame fetch instead of substituting newer bytes under an old caption. Latest-calibration selection is shared and deterministic for tied timestamps, with active attempts preferred. Legacy no-query reads retain documented latest-attempt behavior. A stale image needs an explicit metadata refresh; image-only retry cannot silently change its binding.
+- Fresh checkout rechecks reservation, current device readiness/policy, stock, material, permission, owner limits and mode before a new authorization/collection intent and inside allocation CAS retries. Delayed challenge offers also revalidate the current quote and prerequisites. Existing same-key pending/held reconciliation remains unchanged. Readiness can change after allocation commits; this does not claim atomic payment/device rollback.
+- Actual local backend/node activation retained Spacetime data/assets/journals, and native SSE reconnect passed with polling disabled. Signed simulation calibration acceptance was rerun for the changed evidence contract. Actual Spacetime-backed creation/replay/conflict/edit/cancel/list acceptance passed with exactly one correlated order and no payment or dispatch. [Reconnect](evidence/overnight-seventh-sse-reconnect.json), [simulation calibration](evidence/overnight-seventh-calibration-api.json), [creation identity](evidence/overnight-seventh-creation-api.json).
+
+| Check                                | Result                                        |
+| ------------------------------------ | --------------------------------------------- |
+| Backend/application/process/realtime | 130 passed                                    |
+| Python node                          | 67 passed in 5.50s                            |
+| Payment/Claude and Fetch fixtures    | 25+5 passed                                   |
+| API/storage/wallet unit              | 29 passed (8+6+15)                            |
+| Built-application browser scenarios  | 163 passed in each of Chromium/Firefox/WebKit |
+| Automated accessibility              | 42 A/AA scans, no detected violations         |
+| Build/strict types/secret scan       | Passed                                        |
+| Actual local restart/SSE reconnect   | Passed; polling disabled                      |
+
+That is 419 unique software cases or 745 canonical executions, with no final failed/skipped/flaky cases. The complete shared check passed before the final web-only startup-draft/focus recovery fixes. Web types/build and API/storage/wallet units were rerun after those fixes; unchanged backend/node/integration results were retained with raw logs and source fingerprints. Final three-engine browser suites used the resulting built origin. New faults use isolated stores/files or intercepted browser APIs. Actual retained runtime was restarted, not fault-injected. Earlier finite simulation/database/dependency evidence remains historical; no physical/live acceptance is substituted.
+
+Diagnostics initially exposed old navigation assumptions that New order discarded edits, a native Mac keyboard-tab convention, and recovery activation before the interrupted action settled. Tests now explicitly discard cached drafts, use the existing Option+Tab convention in WebKit, and cover the held recovery boundary. A separate late startup response reproduced loss of a newly typed draft; that product fix is covered before final build. Private affected/repeated diagnostics do not inflate unique counts. The creation acceptance log is explicitly labeled a reconstructed recorded-result summary; the JSON records the actual execution.
+
+[Current checkpoint](evidence/overnight-seventh-qa.json), [full report](test-report.md), [requester drafts at 320px](../web/evidence/overnight-requester-drafts-320.png), [requester drafts on desktop](../web/evidence/overnight-requester-drafts-desktop.png), [reconnected owner view](../web/evidence/overnight-seventh-sse-reconnected.png). Final reports are `web/evidence/overnight-seventh-*-browser.json`.
+
+## Eighth pass pending
+
+Four related private calibration/registration proofs require follow-up; none is covered by this checkpoint:
+
+1. Resolved failed/inactive or historical attempts hide the new-start form and retain the old key. Add deliberate preparation for a fresh supervised attempt, fresh readiness/key and authoritative idle eligibility. Keep active/uncertain attempts blocked and preserve typed preparation over routine historical refreshes. Proof: `.data/calibration-retry-audit.json`.
+2. A delayed confirmation of an inactive old attempt can stamp a concurrently replaced device calibrated. Fence pre-I/O/final CAS/error handling by current device and attempt context; older outcomes must preserve newer configuration. Proof: `.data/calibration-finalize-race-audit.json`.
+3. An expired quote reservation is accepted by startCalibration but retained, then blocks final inspection forever. Clear only an expired reservation atomically when explicitly accepting a fresh calibration; active/unexpired reservations remain blocked. Proof: `.data/calibration-expired-reservation-audit.json`.
+4. A delayed registration manifest can replace a newer registration or successful owner stock/policy save, including after a no-op accepted registration. Bind accepted registration observations with a persisted per-machine identity and fence device/settings/inspection context inside CAS. Proof: `.data/machine-registration-race-audit.json`; five private regressions reproduce four failures and one passing unrelated-state control.
+5. Independently review/test those repairs, verify actual simulation activation and relevant browser recovery. Avoid unchanged suite reruns for volume. At 9:00 a.m. Pacific perform final checks, leave handoff and disable heartbeat; do not archive.
 
 ## Morning handoff requirements
 

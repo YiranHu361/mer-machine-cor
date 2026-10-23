@@ -102,6 +102,9 @@ async function fixture(page: Page, initial: ReturnType<typeof job>[]) {
         job(id, spec.assetIds[0]);
       const revised = {
         ...original,
+        ...(path === "/api/jobs"
+          ? { creationRequestId: route.request().headers()["idempotency-key"] }
+          : {}),
         version: original.version + 1,
         specVersion: original.specVersion + 1,
         spec,
@@ -213,7 +216,7 @@ test("discarded multi-image replacements and suggestions never move from order A
   expect(state.approvals).toBe(0);
 });
 
-test("selecting a different order directly drops the prior order's unsaved artwork replacements (UI fixture)", async ({
+test("selecting a different order keeps prior unsaved replacements out of the selected order (UI fixture)", async ({
   page,
 }) => {
   const a = job("job_a111111", "original_A"),
