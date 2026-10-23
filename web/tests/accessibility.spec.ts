@@ -72,7 +72,7 @@ test("requester intake and production preview pass accessibility and 320px reflo
   expect(health.paymentMode).toBe("mock");
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "What are we making?" }),
+    page.getByRole("heading", { name: "Upload your pictures" }),
   ).toBeVisible();
   // macOS WebKit defaults to Option+Tab for full keyboard navigation, including links.
   await page.keyboard.press(
@@ -90,12 +90,15 @@ test("requester intake and production preview pass accessibility and 320px reflo
   await useManualSettings(page);
 
   await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill(`Black-and-white sticker accessibility check ${Date.now()}`);
+  await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
-  await page
-    .getByLabel("What is it for?", { exact: true })
-    .fill(`Overnight accessible production preview ${Date.now()}`);
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Suitable machine found");
   await authorizePictures(page);
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
@@ -187,7 +190,7 @@ test("initial service failure has an accessible retry and recovers without reloa
   available = true;
   await page.getByRole("button", { name: /try again|retry/i }).click();
   await expect(
-    page.getByRole("heading", { name: "What are we making?" }),
+    page.getByRole("heading", { name: "Upload your pictures" }),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });

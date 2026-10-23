@@ -1,7 +1,20 @@
 import { useManualSettings, authorizePictures } from "./requester-manual";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+
+async function recommendPictures(page: Page, intent: string) {
+  await page.getByLabel("What is it for?", { exact: true }).fill(intent);
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  const recommendation = page.getByRole("region", {
+    name: "Machine recommendation",
+    exact: true,
+  });
+  await expect(recommendation).toContainText("Suitable machine found");
+  await expect(recommendation).toContainText("Sticker counter");
+}
 
 test("requester and owner complete an honest simulated order, independent handling, refund and pickup", async ({
   browser,
@@ -19,8 +32,8 @@ test("requester and owner complete an honest simulated order, independent handli
   const ownerPage = await owner.newPage();
   const requestPage = await requester.newPage();
   const unique = Date.now();
-  const artworkIntent = `Makers club workshop sticker ${unique}`;
-  const cancellationIntent = `Cancellation before dispatch ${unique}`;
+  const artworkIntent = `Makers club black-and-white sticker ${unique}`;
+  const cancellationIntent = `Cancellation black-and-white sticker before dispatch ${unique}`;
   const pageErrors: string[] = [];
   ownerPage.on("pageerror", (error) => pageErrors.push(error.message));
   requestPage.on("pageerror", (error) => pageErrors.push(error.message));
@@ -97,10 +110,13 @@ test("requester and owner complete an honest simulated order, independent handli
     "Owner inspected and cleared",
   );
   await requestPage.goto("/");
-  await useManualSettings(requestPage);
   await expect(
-    requestPage.getByRole("heading", { name: "What are we making?" }),
+    requestPage.getByRole("heading", { name: "Upload your pictures" }),
   ).toBeVisible();
+  await expect(requestPage.getByRole("radio")).toHaveCount(0);
+  await expect(
+    requestPage.getByLabel("Owner-prepared model", { exact: true }),
+  ).toHaveCount(0);
   await requestPage.screenshot({
     path: "evidence/requester-desktop.png",
     fullPage: true,
@@ -111,9 +127,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await expect(
     requestPage.getByAltText("Uploaded original artwork"),
   ).toBeVisible();
-  await requestPage
-    .getByLabel("What is it for?", { exact: true })
-    .fill(artworkIntent);
+  await recommendPictures(requestPage, artworkIntent);
   await authorizePictures(requestPage);
   await requestPage
     .getByRole("button", { name: "Make production preview", exact: true })
@@ -191,16 +205,13 @@ test("requester and owner complete an honest simulated order, independent handli
   await requestPage
     .getByRole("button", { name: "New order", exact: true })
     .click();
-  await useManualSettings(requestPage);
   await requestPage
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
   await expect(
     requestPage.getByAltText("Uploaded original artwork"),
   ).toBeVisible();
-  await requestPage
-    .getByLabel("What is it for?", { exact: true })
-    .fill(cancellationIntent);
+  await recommendPictures(requestPage, cancellationIntent);
   await authorizePictures(requestPage);
   await requestPage
     .getByRole("button", { name: "Make production preview", exact: true })
@@ -321,27 +332,26 @@ test("intake validates specifications, review returns to approval, and expired/o
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
   await page.goto("/");
-  await useManualSettings(page);
-  await page.getByRole("radio", { name: /Prepared 3D print/ }).check();
   await expect(
-    page.getByText("No prepared models are configured.", { exact: false }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(
+    page.getByLabel("Owner-prepared model", { exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Make production preview", exact: true }),
   ).toBeDisabled();
-  await page.getByRole("radio", { name: /Thermal sticker/ }).check();
-  await page
-    .getByLabel("What is it for?", { exact: true })
-    .fill(`Permission review browser test ${Date.now()}`);
-  await page
-    .getByRole("button", { name: "Make production preview", exact: true })
-    .click();
-  await expect(page.getByRole("alert")).toContainText("Add at least one image");
   await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await recommendPictures(
+    page,
+    `Permission review black-and-white sticker browser test ${Date.now()}`,
+  );
   await authorizePictures(page);
+  await useManualSettings(page);
   await page.getByLabel("Width (mm)", { exact: true }).fill("17");
   await page
     .getByRole("button", { name: "Make production preview", exact: true })

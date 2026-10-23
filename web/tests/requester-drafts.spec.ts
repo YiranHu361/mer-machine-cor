@@ -1,4 +1,8 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  recommendationFor,
+} from "./requester-manual";
 import {
   test,
   expect,
@@ -117,6 +121,8 @@ async function fixture(
       }
       return json(route, { role: "requester", id: state.identity });
     }
+    if (path === "/api/recommendations")
+      return json(route, recommendationFor(route.request().postDataJSON()));
     if (path === "/api/machines")
       return json(route, { machines: [], revision: state.revision });
     if (path === "/api/catalog") return json(route, { models: [] });
@@ -255,7 +261,7 @@ async function fixture(
       name:
         initial.length && !initialLookup
           ? "Your production file"
-          : "What are we making?",
+          : "Upload your pictures",
       exact: true,
     }),
   ).toBeVisible();
@@ -290,6 +296,7 @@ const save = (page: Page) =>
 const make = (page: Page) =>
   page.getByRole("button", { name: "Make production preview", exact: true });
 async function upload(page: Page) {
+  const freshOrder = await make(page).isVisible();
   const bytes = await readFile(resolve("tests/fixtures/makers.png"));
   await page.getByLabel("Upload artwork", { exact: true }).setInputFiles(
     [1, 2].map((i) => ({
@@ -299,6 +306,10 @@ async function upload(page: Page) {
     })),
   );
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
+  if (freshOrder)
+    await expect(
+      page.getByRole("region", { name: "Machine recommendation", exact: true }),
+    ).toContainText("Fixture sticker counter");
   await authorizePictures(page);
   await expect(
     page.getByLabel("Upload artwork", { exact: true }),
@@ -378,6 +389,8 @@ for (const lookup of ["held", "failed"] as const)
     for (const route of state.heldJobs.splice(0))
       await json(route, { jobs: state.jobs, revision: state.revision });
     await uploading;
+    // Analysis supplies initial dimensions; exercise an exact raw edit after it.
+    await width(page).fill("");
     await refresh(page);
     await expect(intent(page)).toHaveValue(
       "  My new draft begins before the saved selection loads  ",
@@ -425,7 +438,9 @@ test("edits retain exact blanks, budget, artwork and suggestions across order se
   await expect(
     page.getByText("Suggestion for this draft only", { exact: true }),
   ).toHaveCount(0);
-  await page.locator('input[name="output"][value="instax"]').check();
+  await page
+    .getByLabel("Image placement", { exact: true })
+    .selectOption("cover");
   await save(page).click();
   expect(state.patches[0].body.assetIds).toEqual(["original_bravo_order"]);
   await drafts(page)
@@ -707,6 +722,12 @@ test("newer edits survive exact interrupted-create reconciliation and a later ex
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
   expect(state.creations).toHaveLength(1);
   state.createUnknown = false;
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Fixture sticker counter");
   await useManualSettings(page);
   await width(page).fill("53");
   await make(page).click();

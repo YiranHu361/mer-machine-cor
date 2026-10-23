@@ -1,0 +1,42 @@
+{
+  "at": "2026-10-23T17:53:02.647Z",
+  "boundary": "Actual built UI/HTTP/local image analysis and retained SpacetimeDB; no API interception, no production attempts, payments or live-model calls",
+  "status": "PASS",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "recommendation": {
+    "provider": "local_analysis",
+    "outputType": "sticker",
+    "machineId": "phomemo_01",
+    "reason": "The pictures suit a black-and-white graphic print. The selected thermal machine supports this format and is available in the saved workshop state."
+  },
+  "job": {
+    "id": "job_51347231-1a80-49c1-977a-6c21240302d2",
+    "recommendedMachineId": "phomemo_01",
+    "quotedMachineId": "phomemo_01",
+    "paymentState": "unpaid",
+    "attempts": 0
+  },
+  "pageErrors": [],
+  "mutations": [
+    "/api/session",
+    "/api/uploads",
+    "/api/recommendations",
+    "/api/jobs",
+    "/api/jobs/job_51347231-1a80-49c1-977a-6c21240302d2/approve",
+    "/api/jobs/job_51347231-1a80-49c1-977a-6c21240302d2/quote"
+  ],
+  "screenshots": [
+    "web/evidence/upload-first-native-empty-desktop.png",
+    "web/evidence/upload-first-native-recommended-mobile.png",
+    "web/evidence/upload-first-native-preview-desktop.png"
+  ],
+  "physicalJobs": 0,
+  "payments": 0,
+  "liveModelCalls": 0,
+  "cleanup": {
+    "unpaidOrderCancelled": true,
+    "reservationReleased": true
+  }
+}

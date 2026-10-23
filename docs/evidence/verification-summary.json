@@ -1,6 +1,6 @@
 {
-  "recordedAt": "2026-10-23T17:37:34.545Z",
-  "sourceStateSha256": "6b29d6df56b4e921afb5a5da441d11cea0c9d5ba5c627d4fc5f2a5d71403d944",
+  "recordedAt": "2026-10-23T18:08:04.750Z",
+  "sourceStateSha256": "ae0bb65e91ee2683cd21a1c53e9de8f0da698dc8393bb0fda486cf9a158f8e4e",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
     "backendApplicationAndProcessRecovery": 249,
@@ -8,10 +8,10 @@
     "paymentClaudeFixtures": 31,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 237,
+    "browserScenarios": 243,
     "browserEngines": 3,
-    "uniqueTestCases": 698,
-    "testExecutionsIncludingThreeEngines": 1172,
+    "uniqueTestCases": 704,
+    "testExecutionsIncludingThreeEngines": 1190,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -91,11 +91,11 @@
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
     ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "Picture-first requester update verified; exact current/retained source scope is in picture-first-qa.json. Overnight heartbeat remains paused; earlier endurance incomplete and required live acceptance remain blocked.",
+  "notes": "Upload-first requester selector removal and Mobbin-informed hierarchy verified. Current frontend checks and retained unchanged backend evidence are separated in upload-first-qa.json. Overnight heartbeat remains paused; earlier endurance incomplete and live acceptance blocked.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 344,
+    "candidateFiles": 355,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [
@@ -111,7 +111,7 @@
   },
   "overnightStatus": "ENDED_HEARTBEAT_PAUSED",
   "longSessionStability": "INCOMPLETE_OBSERVATION_GAP",
-  "finalEvidence": "docs/evidence/picture-first-qa.json",
-  "currentEvidence": "docs/evidence/picture-first-qa.json",
+  "finalEvidence": "docs/evidence/upload-first-qa.json",
+  "currentEvidence": "docs/evidence/upload-first-qa.json",
   "overnightFinalEvidence": "docs/evidence/overnight-final-qa.json"
 }

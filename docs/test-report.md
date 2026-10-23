@@ -1,35 +1,35 @@
 # Verification report
 
-Updated October 23, 2026, 10:37 AM Pacific for the picture-first requester update. Source `6b29d6df56b4e921afb5a5da441d11cea0c9d5ba5c627d4fc5f2a5d71403d944`. The earlier overnight task has ended and its heartbeat remains paused.
+Updated October 23, 2026, 11:07 Pacific for removal of requester machine/output choices. Source `ae0bb65e91ee2683cd21a1c53e9de8f0da698dc8393bb0fda486cf9a158f8e4e`. The overnight task has ended and its heartbeat remains paused.
 
-**Partial completion.** Current local software passes the checks below. Required physical/live acceptance and the whole PRD remain incomplete. No physical output, funded transaction, live Claude call, remote discovery or consenting customer evidence is claimed.
+**Partial required acceptance.** Current frontend checks pass; unchanged backend/node/provider checks are retained from the prior checkpoint. Required physical/live acceptance remains incomplete.
 
-The requester now starts by uploading 1–4 pictures. Analysis recommends a suitable output and a current registered machine, explains the choice and supplies supported settings. A note and technical fields are optional. The selected machine is saved in the approved specification and rechecked for quoting/checkout; a newly unavailable device never silently changes to a different machine. Preview, artwork rights, price/payment and dispatch remain deliberate. Without a vision key, limited local color/tonal analysis is labeled honestly and ambiguous pictures require explicit format clarification. Prepared 3D remains separate.
+Requesters upload pictures and review an automatic database machine recommendation. There is no output, machine or prepared-model chooser, including inside optional settings. The focused upload and image-led review hierarchy follows inspected Mobbin references, with Fabrary's existing visual identity. Print refinements preserve the exact machine; replacement pictures and changed purpose on new-order or machine-bound drafts require fresh matching. Owner artwork-review flags stay attached to unchanged pictures. Simulation/mock and limited local-analysis labels remain visible.
 
-[Current checkpoint](evidence/picture-first-qa.json), [actual native picture-only flow](evidence/picture-first-native.json), [320px initial upload](../web/evidence/picture-first-empty-320.png), [actual recommendation on mobile](../web/evidence/picture-first-native-recommended-mobile.png), [actual preview on desktop](../web/evidence/picture-first-native-preview-desktop.png).
+[Current checkpoint](evidence/upload-first-qa.json), [actual local upload-only flow](evidence/upload-first-native.json), [desktop start](../web/evidence/upload-first-native-empty-desktop.png), [320px start](../web/evidence/upload-first-empty-320.png), [actual mobile recommendation](../web/evidence/upload-first-native-recommended-mobile.png), [actual preview](../web/evidence/upload-first-native-preview-desktop.png).
 
-## Checks actually executed
+## Checks actually executed and retained
 
 | Check | Result | Boundary / evidence |
 | --- | --- | --- |
-| Backend/application/process/realtime | **249 passed** | Includes 12 new image recommendations, strict ownership/read-only matching, current database races and exact machine quote binding |
-| Python node | **147 passed** | Includes 10 new bounded local image/CLI controls; physical/network transports remain fakes |
-| Payment/Claude + Fetch fixtures | **31 + 5 passed** | Includes 6 new image-first provider controls with injected HTTP; no live model or funds |
-| API/storage/wallet units | **29 passed** | Rechecked after final frontend changes |
-| Build/strict types | PASS | Final frontend built and served on loopback 4318; backend/provider types pass |
-| Chromium 156 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-chromium-browser.json) |
-| Firefox 157 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-firefox-browser.json) |
-| WebKit 27.2 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-webkit-browser.json) |
-| Automated accessibility | **54 scans, 0 violations** | Page/scoped A/AA checks; visual/keyboard review separate, not full conformance |
-| Native picture-only flow | PASS | Actual built UI/HTTP/local analysis/retained SpacetimeDB. No note/technical entry; recommended machine survives preview/approval/quote. Unpaid test order canceled, reservation released; 0 device/payment/model calls |
-| Actual retained restart/native SSE | PASS | Simulation/mock/SpacetimeDB, polling disabled; 2 opens/1 error/4 refreshes; [evidence](evidence/picture-first-sse-reconnect.json) |
-| Configured-secret/served-byte checks | PASS | Private configuration ignored/0600; HTML/JS/CSS match build |
-| Earlier long-session stability | **INCOMPLETE** | Prior overnight 23-minute healthy sample span followed by 139m27s observation gap. Recovery did not complete the missing 75-minute continuous observation; [evidence](evidence/overnight-passive-session-soak.json) |
-| Required physical/live acceptance | BLOCKED / NOT RUN | Device/camera/readiness, funded wallets, Claude/Agentverse and customer/rules prerequisites remain missing |
+| Frontend types/build | PASS | Built files served on loopback4318 match disk |
+| API/storage/wallet units | **29 passed** | Executed after final frontend changes |
+| Chromium156 | **243 passed** | 0 failed/skipped/flaky; [report](../web/evidence/upload-first-chromium-browser.json) |
+| Firefox157 | **243 passed** | 0 failed/skipped/flaky; [report](../web/evidence/upload-first-firefox-browser.json) |
+| WebKit27.2 | **243 passed** | 0 failed/skipped/flaky; [report](../web/evidence/upload-first-webkit-browser.json) |
+| Automated accessibility | **54 scans,0 detected violations** | Page/scoped A/AA checks; keyboard and visual review separate, not full conformance |
+| Native picture-only flow | PASS | Actual built UI/HTTP/local analysis/retained SpacetimeDB; upload→recommendation→preview→approval→quote keeps exact machine. Unpaid test canceled and reservation released; 0 production attempts, payments or live-model calls in this supplemental proof |
+| Backend/application/process | **249 retained passing** | Backend source unchanged; [prior complete check](evidence/picture-first-qa.json) |
+| Python node | **147 retained passing** | Node source unchanged; same prior checkpoint |
+| Payment/Claude + Fetch fixtures | **31+5 retained passing** | Provider source unchanged; no new live model/funded calls |
+| Native restart/SSE | Retained prior pass | No backend restart needed for static frontend; [prior proof](evidence/picture-first-sse-reconnect.json). Current full suites also exercise actual polling-disabled live updates |
+| Configured-secret/build-byte checks | PASS | Private configuration stays ignored/0600; current HTML/JS/CSS match build |
+| Earlier long-session stability | **INCOMPLETE** | Earlier observation gap remains unresolved; no new endurance claim |
+| Required physical/live acceptance | BLOCKED / NOT RUN | Existing device/camera/funded wallet/Claude/Agentverse/customer/rules prerequisites remain missing |
 
-**698 unique software cases; 1172 canonical executions** counting all three engines. Five browser cases use the actual retained app, 231 intercept APIs and one intercepts startup health failure before actual-app recovery. The separate native picture-only proof uses actual retained persistence with one unpaid preview/quote; it does not claim physical fulfillment.
+Composite coverage is **704 unique cases /1190 canonical executions**: unchanged retained backend/node/provider checks plus current29 frontend units and243 browser cases per engine. This is not a new whole-stack run. Five browser cases use the actual retained app,237 isolate API fixtures, and one intercepts startup failure before actual-app recovery. Supplemental native proof is recorded separately and not double-counted.
 
-The complete shared check precedes only frontend recovery fixes for WebKit invalid-field focus, explicit recommendation gating during edits, strict machine binding on mutation replies and optional-note normalization, plus their browser regressions and explicit manual/rights interactions in legacy scenarios. Backend/node/provider bytes are unchanged after their complete checks. Final frontend types/build, 29 units and full three-engine suites follow every application change. Diagnostic/affected reruns are not additional unique cases; exact source and log hashes are in the checkpoint.
+Initial affected checks found four stale fixture assumptions and one real long-evidence wrapping bug. Updated fixtures reflect mandatory matching, actual retry labels, sticky review and absence of an empty recommendation. The CSS fix passes short-landscape, portrait and320px reflow checks. Repaired39/39 and final full suites pass. A later full WebKit run kept note focus but observed scrollY0→828 after the fixture sampled immediately on focusing an off-screen field, consistent with deferred native focus scrolling. The fixture now establishes visible note focus and waits two paint frames, retaining exact focus and absolute-scroll assertions. It passes10 WebKit repeats and3 per other engine, followed by a clean full WebKit run. App/styles/build are unchanged by that test-only fix; Chromium/Firefox full243 reports precede only this synchronization. Diagnostic repeats are private and not extra unique cases. Exact scope/source/log hashes are in the checkpoint.
 
 ## Functional evidence
 
@@ -37,7 +37,7 @@ The actual browser flow includes supported simulated-device registration, distin
 
 The live dashboard test disables all polling intervals>=2000ms, independently pauses/resumes a machine and observes the open dashboard update plus named SSE refresh events. It uses actual SpacetimeDB; polling cannot hide a disconnected subscription. Stable screenshots: [desktop requester](../web/evidence/requester-ready-desktop.png), [mobile requester](../web/evidence/requester-mobile.png), [owner](../web/evidence/owner-desktop.png), [SSE](../web/evidence/sse-live-dashboard.png).
 
-231 isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, Claude suggestion/manual fallback, artwork editing, reordered responses, session/store failures, real document navigation, focus, live queue behavior and touch layouts. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
+237 isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, Claude suggestion/manual fallback, artwork editing, reordered responses, session/store failures, real document navigation, focus, live queue behavior and touch layouts. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
 
 [Process-death evidence](evidence/process-recovery.json) records: node crash after a durable possible start→review/held with exactly1 attempt; orchestrator crash while accepted simulated work continues→reconciled completion/release with exactly1 attempt; unavailable node before acceptance→durable cancellation proof before audited failure/refund, 0 node attempts. No new physical request resolves uncertainty. This suite uses explicitly isolated SQLite development persistence; the separate real Spacetime restart and live-update tests establish the required store path.
 
@@ -60,12 +60,19 @@ Consumables, physical machine time, owner labor, failure rate, API cost, willing
 
 ## Failures found and repaired
 
+Upload-only interface follow-up repairs:
+
+- Removed every requester output/machine/model chooser, the public machine catalogue and the empty recommendation/guide panel. Upload stays visible at320/390px; images take the main review canvas.
+- All new-order uploads require automatic matching, even after optional settings were opened. Settings and explicit permission review cannot bypass unavailable or stale results.
+- Compatible size/crop/quantity/budget/review refinements retain machine identity. New-order and machine-bound replacements reset rights and analyze again; changed purpose and incompatible legacy suggestions require a fresh match.
+- Same-artwork content-review flags survive notes, analysis and later clear suggestions. Long saved evidence reasons wrap without clipping.
+
 Picture-first follow-up repairs:
 
 - Upload starts analysis automatically; technical controls are secondary and the whole upload target fits initial 320px/390px screens.
 - Late image/note/order/session results cannot overwrite newer input. Missing-device and clarification responses preserve pictures without creating an order.
 - Rights confirmation cannot erase required review. Explicit manual settings and owner review stay available.
-- Invalid hidden fields open their disclosure and recover focus in all three browsers. Editing after an unavailable recommendation requires a new match or a deliberate manual choice.
+- Invalid hidden fields open their disclosure and recover focus in all three browsers. Editing after an unavailable recommendation requires a fresh match; optional settings cannot bypass it.
 - Malformed create/edit/approval responses cannot drop the selected machine or seed an unbound replacement specification; exact saved-state recovery remains available.
 
 October 23 overnight repairs:

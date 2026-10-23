@@ -1,4 +1,8 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  recommendationFor,
+} from "./requester-manual";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -86,6 +90,11 @@ async function fixture(
   );
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     if (route.request().method() !== "GET") {
       if (path === "/api/session") {
         state.sessions++;

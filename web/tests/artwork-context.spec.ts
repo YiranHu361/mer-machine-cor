@@ -42,6 +42,7 @@ async function fixture(page: Page, initial: ReturnType<typeof job>[]) {
     jobs: initial,
     saved: [] as { path: string; spec: any }[],
     intakes: [] as any[],
+    recommendations: [] as any[],
     approvals: 0,
   };
   if (initial[0])
@@ -88,6 +89,37 @@ async function fixture(page: Page, initial: ReturnType<typeof job>[]) {
           reason: "Suggestion applies only to this replacement artwork",
           provider: "fixture",
           model: "fixture",
+        },
+      });
+    }
+    if (path === "/api/recommendations") {
+      const input = route.request().postDataJSON();
+      state.recommendations.push(input);
+      const photo = /color photo/i.test(input.intent || "");
+      const machine = {
+        id: photo ? "context_photo" : "context_thermal",
+        name: photo ? "Photo counter" : "Sticker counter",
+        model: photo ? "Instax Mini Link 3" : "Phomemo M02Pro",
+        outputType: photo ? "instax" : "sticker",
+        mode: "simulation",
+      };
+      return json(route, {
+        status: "recommended",
+        provider: "local_analysis",
+        reason: "The recommendation belongs only to these uploaded originals.",
+        questions: [],
+        machine,
+        spec: {
+          assetIds: input.assetIds,
+          intent: input.intent || "Print the uploaded pictures",
+          outputType: machine.outputType,
+          widthMm: photo ? 54 : 53,
+          heightMm: photo ? 86 : 50,
+          quantity: 1,
+          material: photo ? "photo-film" : "thermal-paper",
+          crop: "contain",
+          permission: "unclear",
+          recommendedMachineId: machine.id,
         },
       });
     }
@@ -206,11 +238,12 @@ test("discarded multi-image replacements and suggestions never move from order A
   await expect(
     page.getByLabel("Artwork permission", { exact: true }),
   ).toHaveValue("authorized");
-  await page.locator('input[name="output"][value="instax"]').check();
+  await page.getByLabel("Height (mm)", { exact: true }).fill("60");
   await save(page);
   expect(state.saved[0].path).toBe(`/api/jobs/${b.id}/spec`);
   expect(state.saved[0].spec.assetIds).toEqual(["original_B"]);
-  expect(state.saved[0].spec.outputType).toBe("instax");
+  expect(state.saved[0].spec.outputType).toBe("sticker");
+  expect(state.saved[0].spec.heightMm).toBe(60);
   expect(
     state.jobs.find((candidate) => candidate.id === a.id)!.spec.assetIds,
   ).toEqual(["original_A"]);
@@ -229,9 +262,10 @@ test("selecting a different order keeps prior unsaved replacements out of the se
   await page.locator(".order-row").filter({ hasText: "job_b222" }).click();
   await edit(page);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
-  await page.locator('input[name="output"][value="instax"]').check();
+  await page.getByLabel("Width (mm)", { exact: true }).fill("25");
   await save(page);
   expect(state.saved[0].spec.assetIds).toEqual(["original_B"]);
+  expect(state.saved[0].spec.widthMm).toBe(25);
   expect(state.approvals).toBe(0);
 });
 
@@ -248,26 +282,42 @@ test("canceling an artwork replacement restores the same order's saved sources (
     .click();
   await edit(page);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
-  await page.locator('input[name="output"][value="instax"]').check();
+  await page.getByLabel("Height (mm)", { exact: true }).fill("60");
   await save(page);
   expect(state.saved[0].spec.assetIds).toEqual(["original_A"]);
+  expect(state.saved[0].spec.heightMm).toBe(60);
   expect(state.approvals).toBe(0);
 });
 
-test("a new multi-image draft keeps its intended images through raster and 3D format switches (UI fixture)", async ({
+test("a new multi-image draft keeps its originals through automatic format recommendations and explicit permission review (UI fixture)", async ({
   page,
 }) => {
   const state = await fixture(page, []);
   await page.goto("/");
-  await useManualSettings(page);
   await replaceWithTwoImages(page);
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Sticker counter");
   await page
     .getByLabel("What is it for?", { exact: true })
-    .fill("Keep both uploaded images in this new draft");
-  await page.locator('input[name="output"][value="instax"]').check();
-  await page.locator('input[name="output"][value="3d"]').check();
-  await page.locator('input[name="output"][value="sticker"]').check();
+    .fill("color photo — keep both uploaded images");
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Photo counter");
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("black-and-white sticker — keep both uploaded images");
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Sticker counter");
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
+  await useManualSettings(page);
   await page
     .getByRole("button", { name: "Suggest specification", exact: true })
     .click();
@@ -275,6 +325,9 @@ test("a new multi-image draft keeps its intended images through raster and 3D fo
     page.getByLabel("Artwork permission", { exact: true }),
   ).toHaveValue("unclear");
   expect(state.intakes[0].assetIds).toEqual(["replacement_1", "replacement_2"]);
+  expect(state.recommendations).toHaveLength(3);
+  for (const input of state.recommendations)
+    expect(input.assetIds).toEqual(["replacement_1", "replacement_2"]);
   await page
     .getByRole("button", {
       name: "Request artwork permission review",
@@ -290,5 +343,6 @@ test("a new multi-image draft keeps its intended images through raster and 3D fo
     "replacement_2",
   ]);
   expect(state.saved[0].spec.permission).toBe("unclear");
+  expect(state.saved[0].spec.recommendedMachineId).toBe("context_thermal");
   expect(state.approvals).toBe(0);
 });

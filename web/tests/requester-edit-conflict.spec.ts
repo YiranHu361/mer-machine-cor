@@ -1,4 +1,8 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  recommendationFor,
+} from "./requester-manual";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -100,6 +104,8 @@ async function fixture(page: Page, saved = true) {
       if (method !== "GET") state.sessions++;
       return json(route, { role: "requester", id: "shared_fixture_identity" });
     }
+    if (path === "/api/recommendations")
+      return json(route, recommendationFor(route.request().postDataJSON()));
     if (path === "/api/machines") return json(route, { machines: [] });
     if (path === "/api/catalog") return json(route, { models: [] });
     if (path === "/api/jobs" && method === "GET") {

@@ -1,0 +1,455 @@
+{
+  "recordedAt": "2026-10-23T18:08:04.750Z",
+  "status": "FRONTEND_PASS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "sourceStateSha256": "ae0bb65e91ee2683cd21a1c53e9de8f0da698dc8393bb0fda486cf9a158f8e4e",
+  "software": {
+    "backendApplicationAndProcessRecovery": 249,
+    "node": 147,
+    "paymentClaudeFixtures": 31,
+    "fetchBridgeUnit": 5,
+    "browserStorageAndWalletUnit": 29,
+    "browserScenarios": 243,
+    "browserEngines": 3,
+    "uniqueTestCases": 704,
+    "testExecutionsIncludingThreeEngines": 1190,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "passed": 243,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 135370.225,
+      "startedAt": "2026-10-23T17:53:37.054Z",
+      "report": "web/evidence/upload-first-chromium-browser.json",
+      "sha256": "c882bb0eb5d61c026d5856c0962befe5899491d0c47bcef36708d368aeeb2931",
+      "accessibilityScans": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "picture-recommended-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "passed": 243,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 170861.654,
+      "startedAt": "2026-10-23T17:55:52.828Z",
+      "report": "web/evidence/upload-first-firefox-browser.json",
+      "sha256": "3f61f142e192c69242be4b535daf66029600308bd834b0fb09fce5a379d404b3",
+      "accessibilityScans": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "picture-recommended-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "passed": 243,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 150956.864,
+      "startedAt": "2026-10-23T18:04:14.783Z",
+      "report": "web/evidence/upload-first-webkit-browser.json",
+      "sha256": "10540e4a53261169ed07417fd06849d23bd059e7f1c701f5dc32835e0c92984d",
+      "accessibilityScans": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "picture-recommended-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "automatedAccessibilityScans": 54,
+  "provenance": {
+    "scope": "Requester App/styles and browser fixtures only. Final frontend types/build,29 units and243 full browser cases in each engine follow every application change. Backend,node,provider and database source are unchanged from1420eb7 and retain prior complete checks; they were not redundantly rerun.",
+    "retainedSoftwareEvidence": "docs/evidence/picture-first-qa.json",
+    "aggregateCounts": "704 unique/1190 canonical executions combine unchanged backend/node/provider checks with current frontend units and three full browser suites; they are not a new whole-stack run.",
+    "browserBoundary": {
+      "actualRetainedAppCases": 5,
+      "isolatedApiFixtureCases": 237,
+      "startupInterceptionThenActualRecoveryCases": 1
+    },
+    "testSynchronizationFollowup": "One WebKit full-run focus case kept note focus but observed scrollY0→828 after sampling immediately on focusing an off-screen note; this is consistent with deferred native focus scrolling. Its fixture now scrolls the note into view and waits two paint frames before releasing the held reply; original exact focus and absolute-scroll assertions remain. Updated case passed10 repeats in WebKit and3 in each other engine, followed by a clean full WebKit run. App/styles/build stayed unchanged; Chromium/Firefox full243 reports precede only this test synchronization change.",
+    "diagnostics": "Initial affected97:92 passed/5 failed. Four stale fixture assumptions were updated for mandatory matching, actual retry labels, sticky rights review and absent empty recommendation. The new saved-evidence touch check reproduced real unwrapped text; CSS wrapping repaired it. Repaired39/39 and final full suites pass. Diagnostic reruns are not extra unique cases."
+  },
+  "actualLocal": {
+    "nativePictureOnly": {
+      "at": "2026-10-23T17:53:02.647Z",
+      "boundary": "Actual built UI/HTTP/local image analysis and retained SpacetimeDB; no API interception, no production attempts, payments or live-model calls",
+      "status": "PASS",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "recommendation": {
+        "provider": "local_analysis",
+        "outputType": "sticker",
+        "machineId": "phomemo_01",
+        "reason": "The pictures suit a black-and-white graphic print. The selected thermal machine supports this format and is available in the saved workshop state."
+      },
+      "job": {
+        "id": "job_51347231-1a80-49c1-977a-6c21240302d2",
+        "recommendedMachineId": "phomemo_01",
+        "quotedMachineId": "phomemo_01",
+        "paymentState": "unpaid",
+        "attempts": 0
+      },
+      "pageErrors": [],
+      "mutations": [
+        "/api/session",
+        "/api/uploads",
+        "/api/recommendations",
+        "/api/jobs",
+        "/api/jobs/job_51347231-1a80-49c1-977a-6c21240302d2/approve",
+        "/api/jobs/job_51347231-1a80-49c1-977a-6c21240302d2/quote"
+      ],
+      "screenshots": [
+        "web/evidence/upload-first-native-empty-desktop.png",
+        "web/evidence/upload-first-native-recommended-mobile.png",
+        "web/evidence/upload-first-native-preview-desktop.png"
+      ],
+      "physicalJobs": 0,
+      "payments": 0,
+      "liveModelCalls": 0,
+      "cleanup": {
+        "unpaidOrderCancelled": true,
+        "reservationReleased": true
+      }
+    },
+    "finalRuntime": {
+      "checkedAt": "2026-10-23T18:07:36.599Z",
+      "sourceStateSha256": "ae0bb65e91ee2683cd21a1c53e9de8f0da698dc8393bb0fda486cf9a158f8e4e",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "retainedRestartEvidence": "docs/evidence/picture-first-sse-reconnect.json"
+  },
+  "logHashes": {
+    ".data/upload-first-build.log": "6b811e2dffdb86f0fad8b6fb96f299966a2ec42c13619e13f917437e7b4e705b",
+    ".data/upload-first-unit.log": "fe9ae0749d80c2773d940dd1bc78cb47ed451873d797a460500444780c8fe91c",
+    ".data/upload-first-native.log": "18ddce46573544372f37da5c3e726506e142e34591491e53be53b51cd39f82f0",
+    ".data/upload-first-focus-settled-webkit.log": "2b8b4693874aff66a41653e191ed4ddffdc884a515b6c7f2fbdcc9283ce5babf",
+    ".data/upload-first-focus-settled-chromium.log": "a85d804b5da7bac0f18974ec2e9a77d26534af0813c39480a555770f40a6afa4",
+    ".data/upload-first-focus-settled-firefox.log": "d398bc259a420dca3955a823e295abe67a966943a0c197526b2e97e97eb2f9ca",
+    ".data/upload-first-chromium-browser.log": "74829bd958c2dfcb9bbb646473289fc3b911b78c200a5a843183af7d64b0603d",
+    ".data/upload-first-firefox-browser.log": "15da4f8f78174355254e8e0cdd28541e987727824a5914de2fb498248543c674",
+    ".data/upload-first-webkit-browser.log": "e62b7564f452f602e56ff7c9d544509c61a2b07899719a9afe2f9b49567adc28"
+  },
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 355,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveModelCalls": 0,
+  "overnightHeartbeat": "PAUSED",
+  "inspiration": [
+    {
+      "app": "Square",
+      "url": "https://mobbin.com/screens/610ae606-5a0f-43d0-9787-9a5dfd893f8d",
+      "principle": "Single focused upload target and concise action hierarchy"
+    },
+    {
+      "app": "Recraft",
+      "url": "https://mobbin.com/screens/df0d6d5b-2ebe-478d-be27-56dd738f7a07",
+      "principle": "Image-led review with supporting machine details secondary"
+    }
+  ],
+  "behavior": [
+    "No output,machine or prepared-model chooser in requester DOM,including expanded optional print settings",
+    "All new-order uploads analyze and bind a database machine; optional print settings cannot bypass an unavailable or stale recommendation",
+    "Size,crop,quantity,budget and permission-review refinements retain the exact chosen machine; replacing pictures on machine-bound orders requires fresh matching and renewed rights confirmation",
+    "Changing purpose or an incompatible legacy specification suggestion requires fresh matching before preview; an unchanged-artwork owner-review flag remains sticky",
+    "Upload target visible without scrolling at320/390px,keyboard rights/preview and reduced motion verified; long saved evidence wraps on touch/reflow"
+  ],
+  "limits": [
+    "Current runtime remains simulation/mock/actual local SpacetimeDB. Required physical/live model/funded payment/remote discovery/customer/rules acceptance remains blocked.",
+    "Local pixel statistics are not semantic vision, print-quality proof or hardware compatibility. Configured Claude path is covered with injected HTTP fixtures, not a live paid call.",
+    "The earlier overnight75-minute stability observation remains incomplete; no new endurance pass is claimed.",
+    "Most browser cases intercept APIs; the supplemental picture-only proof uses actual retained HTTP/UI/SpacetimeDB with an unpaid cancelled preview/quote, no physical production."
+  ]
+}

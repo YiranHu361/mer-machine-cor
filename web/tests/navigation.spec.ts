@@ -1,4 +1,8 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  recommendationFor,
+} from "./requester-manual";
 import {
   test,
   expect,
@@ -125,6 +129,8 @@ async function fixture(page: Page, initial = [order()]) {
       if (method === "POST") state.sessionPosts++;
       return json(route, { role: "requester", id: "navigation_requester" });
     }
+    if (path === "/api/recommendations")
+      return json(route, recommendationFor(route.request().postDataJSON()));
     if (path === "/api/machines") return json(route, { machines: [] });
     if (path === "/api/catalog") return json(route, { models: [] });
     if (path === "/api/events")

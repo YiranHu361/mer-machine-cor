@@ -49,6 +49,8 @@ async function fixture(page: Page) {
     job: savedOrder(),
     submissions: [] as Record<string, any>[],
     failNext: false,
+    recommendationOutput: "instax" as "instax" | "sticker",
+    recommendations: [] as any[],
   };
   await page.addInitScript((id) => {
     localStorage.setItem("fabrary-current-job", id);
@@ -64,22 +66,38 @@ async function fixture(page: Page) {
     if (path === "/api/session")
       return json(route, { role: "requester", id: "numeric_requester" });
     if (path === "/api/machines") return json(route, { machines: [] });
-    if (path === "/api/catalog")
+    if (path === "/api/catalog") return json(route, { models: [] });
+    if (path === "/api/recommendations") {
+      const input = route.request().postDataJSON();
+      state.recommendations.push(input);
+      const photo = state.recommendationOutput === "instax";
+      const machine = {
+        id: photo ? "numeric_photo" : "numeric_thermal",
+        name: photo ? "Photo desk" : "Sticker desk",
+        model: photo ? "Instax Mini Link 3" : "Phomemo M02Pro",
+        outputType: state.recommendationOutput,
+        mode: "simulation",
+      };
       return json(route, {
-        models: [
-          {
-            id: "numeric_model",
-            name: "Inspected decorative fixture",
-            artifactId: "numeric_prepared",
-            widthMm: 20,
-            heightMm: 30,
-            depthMm: 10,
-            estimatedSeconds: 60,
-            color: "white",
-            material: "pla",
-          },
-        ],
+        status: "recommended",
+        provider: "local_analysis",
+        reason: "Format defaults belong to this current artwork.",
+        questions: [],
+        machine,
+        spec: {
+          assetIds: input.assetIds,
+          intent: input.intent || "A print of the numeric artwork",
+          outputType: machine.outputType,
+          widthMm: photo ? 54 : 53,
+          heightMm: photo ? 86 : 50,
+          quantity: 1,
+          material: photo ? "photo-film" : "thermal-paper",
+          crop: "contain",
+          permission: "unclear",
+          recommendedMachineId: machine.id,
+        },
       });
+    }
     if (path === "/api/events")
       return route.fulfill({
         status: 200,
@@ -253,13 +271,18 @@ test("failed numeric saves preserve the visible draft and retry the same values 
   });
 });
 
-test("format changes replace incomplete dimensions and quantity with valid format defaults (offline fixture)", async ({
+test("a fresh automatic recommendation replaces incomplete dimensions and quantity with supported format defaults (offline fixture)", async ({
   page,
 }) => {
   const state = await fixture(page);
   await clear(page.getByLabel("Width (mm)", { exact: true }));
   await clear(page.getByLabel("Quantity", { exact: true }));
-  await page.getByRole("radio", { name: /Instant photo/ }).check();
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Photo desk");
   await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
     "54",
   );
@@ -267,18 +290,16 @@ test("format changes replace incomplete dimensions and quantity with valid forma
     "86",
   );
   await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("1");
-  await page.getByRole("radio", { name: /Prepared 3D print/ }).check();
+  state.recommendationOutput = "sticker";
   await page
-    .getByLabel("Owner-prepared model", { exact: true })
-    .selectOption("numeric_model");
-  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
-    "20",
-  );
-  await expect(page.getByLabel("Height (mm)", { exact: true })).toHaveValue(
-    "30",
-  );
-  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("1");
-  await page.getByRole("radio", { name: /Thermal sticker/ }).check();
+    .getByLabel("What is it for?", { exact: true })
+    .fill("black-and-white sticker for this numeric artwork");
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Sticker desk");
   await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
     "53",
   );
@@ -292,7 +313,15 @@ test("format changes replace incomplete dimensions and quantity with valid forma
     widthMm: 53,
     heightMm: 50,
     quantity: 1,
+    recommendedMachineId: "numeric_thermal",
   });
+  expect(state.recommendations).toHaveLength(2);
+  for (const input of state.recommendations)
+    expect(input.assetIds).toEqual(["numeric_art"]);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(
+    page.getByLabel("Owner-prepared model", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("discarding an incomplete numeric edit restores saved values before the next edit (offline fixture)", async ({

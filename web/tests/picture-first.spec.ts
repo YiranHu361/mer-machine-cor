@@ -140,7 +140,9 @@ async function fixture(page: Page) {
                   ? ["unrelated_artwork"]
                   : request.assetIds,
               intent:
-                request.intent || "Picture selected for a workshop keepsake",
+                (request.intent?.trim().length ?? 0) >= 3
+                  ? request.intent
+                  : "Picture for a workshop print",
               outputType: device.outputType,
               widthMm: device.outputType === "instax" ? 54 : 53,
               heightMm: device.outputType === "instax" ? 86 : 50,
@@ -336,7 +338,7 @@ async function fixture(page: Page) {
   });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "What are we making?", exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
   return { state, respond };
 }
@@ -347,10 +349,18 @@ async function upload(page: Page) {
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(1);
 }
 async function manual(page: Page) {
-  await page.getByText("Advanced settings", { exact: true }).click();
-  await page
-    .getByRole("button", { name: "Use manual settings", exact: true })
-    .click();
+  const summary = page.getByText("Optional print settings", { exact: true });
+  if (
+    !(await summary.evaluate(
+      (element) => element.closest("details")?.open === true,
+    ))
+  )
+    await summary.click();
+  const adjust = page.getByRole("button", {
+    name: "Adjust print settings",
+    exact: true,
+  });
+  if (await adjust.isVisible()) await adjust.click();
 }
 async function boundPreview(page: Page) {
   await upload(page);
@@ -404,7 +414,7 @@ test("picture-only intake finds a database machine and waits for explicit rights
   const { state } = await fixture(page);
   await expect(
     page.getByRole("radio", { name: /Thermal sticker/ }),
-  ).toBeHidden();
+  ).toHaveCount(0);
   await expect(page.getByLabel("Width (mm)", { exact: true })).toBeHidden();
   await expect(page.locator(".counter-note")).toContainText(
     "machine available",
@@ -439,6 +449,207 @@ test("picture-only intake finds a database machine and waits for explicit rights
     "/api/recommendations",
     "/api/jobs",
   ]);
+});
+
+test("the requester has no output or machine chooser, including expanded print options", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  await expect(
+    page.locator(
+      '.output-picker, .output-choice, input[name="output"], .public-machines',
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Owner-prepared model", { exact: true }),
+  ).toHaveCount(0);
+  await expect(result(page)).toHaveCount(0);
+  await manual(page);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(
+    page.getByLabel("Owner-prepared model", { exact: true }),
+  ).toHaveCount(0);
+  expect(state.mutations).toEqual([]);
+});
+
+test("optional print refinements retain the exact machine chosen from the database", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
+  await manual(page);
+  await page.getByLabel("Width (mm)", { exact: true }).fill("25");
+  await page.getByLabel("Height (mm)", { exact: true }).fill("75");
+  await page.getByLabel("Quantity", { exact: true }).fill("2");
+  await page
+    .getByLabel("Image placement", { exact: true })
+    .selectOption("cover");
+  await rights(page).check();
+  await preview(page).click();
+  await expect(
+    page.getByRole("button", { name: "Approve production file", exact: true }),
+  ).toBeEnabled();
+  expect(state.creations[0].spec).toMatchObject({
+    recommendedMachineId: "thermal_database_device",
+    outputType: "sticker",
+    widthMm: 25,
+    heightMm: 75,
+    quantity: 2,
+    crop: "cover",
+    permission: "authorized",
+  });
+  expect(state.recommendations).toHaveLength(1);
+});
+
+test("replacing a recommended image after refinement runs a fresh machine analysis", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  state.firstOutput = "instax";
+  await upload(page);
+  await expect(result(page)).toContainText("Workshop photo desk");
+  await manual(page);
+  await page.getByLabel("Quantity", { exact: true }).fill("2");
+  await rights(page).check();
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
+  expect(state.recommendations).toHaveLength(2);
+  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("1");
+  await expect(rights(page)).not.toBeChecked();
+  await rights(page).check();
+  await preview(page).click();
+  await expect(
+    page.getByRole("button", { name: "Approve production file", exact: true }),
+  ).toBeEnabled();
+  expect(state.creations[0].spec).toMatchObject({
+    assetIds: ["picture_2"],
+    recommendedMachineId: "thermal_database_device",
+    outputType: "sticker",
+    quantity: 1,
+  });
+});
+
+test("a note change after print refinement requires a fresh recommendation before preview", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
+  await manual(page);
+  await rights(page).check();
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("A keepsake color photo");
+  await expect(preview(page)).toBeDisabled();
+  state.firstOutput = "instax";
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(result(page)).toContainText("Workshop photo desk");
+  await manual(page);
+  await page
+    .getByRole("button", {
+      name: "Request artwork permission review",
+      exact: true,
+    })
+    .click();
+  await preview(page).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "An owner review is needed",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(state.creations[0].spec).toMatchObject({
+    recommendedMachineId: "photo_database_device",
+    outputType: "instax",
+    permission: "unclear",
+  });
+});
+
+test("a legacy specification suggestion cannot silently change a recommended photo into a sticker", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  state.firstOutput = "instax";
+  await upload(page);
+  await expect(result(page)).toContainText("Workshop photo desk");
+  await manual(page);
+  await rights(page).check();
+  await page
+    .getByRole("button", { name: "Suggest specification", exact: true })
+    .click();
+  await expect(preview(page)).toBeDisabled();
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
+    "54",
+  );
+  expect(state.creations).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(result(page)).toContainText("Workshop photo desk");
+  await page
+    .getByRole("button", {
+      name: "Request artwork permission review",
+      exact: true,
+    })
+    .click();
+  await preview(page).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "An owner review is needed",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(state.creations[0].spec).toMatchObject({
+    recommendedMachineId: "photo_database_device",
+    outputType: "instax",
+    permission: "unclear",
+  });
+});
+
+test("changing a note and reanalyzing cannot erase an existing artwork review flag", async ({
+  page,
+}) => {
+  const { state } = await fixture(page);
+  await manual(page);
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("An artwork needing owner permission review");
+  await page
+    .getByRole("button", { name: "Suggest specification", exact: true })
+    .click();
+  await expect(rights(page)).toBeDisabled();
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("A revised description for the very same artwork");
+  await expect(rights(page)).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(result(page)).toContainText("Community sticker counter");
+  await expect(rights(page)).toBeDisabled();
+  await expect(preview(page)).toBeDisabled();
+  await page
+    .getByRole("button", {
+      name: "Request artwork permission review",
+      exact: true,
+    })
+    .click();
+  await preview(page).click();
+  await expect(
+    page.getByRole("heading", {
+      name: "An owner review is needed",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(state.creations[0].spec).toMatchObject({
+    recommendedMachineId: "thermal_database_device",
+    permission: "unclear",
+  });
 });
 
 test("a creation reply dropping the recommended machine stays unresolved through a read outage and recovers only its saved bound order", async ({
@@ -677,7 +888,7 @@ test("held analysis cannot overwrite a different saved order or silently finish 
 });
 
 for (const status of ["unavailable", "needs_clarification"] as const)
-  test(`an edit with ${status} analysis requires an explicit manual fallback before saving the prior format`, async ({
+  test(`an edit with ${status} analysis cannot bypass machine matching through optional print settings`, async ({
     page,
   }) => {
     const { state } = await fixture(page);
@@ -708,11 +919,19 @@ for (const status of ["unavailable", "needs_clarification"] as const)
       "53",
     );
     await page
-      .getByRole("button", { name: "Use manual settings", exact: true })
+      .getByRole("button", { name: "Adjust print settings", exact: true })
       .click();
+    await expect(save).toBeDisabled();
+    state.mode = "recommended";
+    await page
+      .getByRole("button", {
+        name: /^(Find suitable machine|Check workshop again|Refine recommendation)$/,
+      })
+      .click();
+    await expect(result(page)).toContainText("Community sticker counter");
     await expect(save).toBeEnabled();
     expect(state.creations).toHaveLength(0);
-    expect(state.recommendations).toHaveLength(1);
+    expect(state.recommendations).toHaveLength(2);
   });
 
 test("a completed analysis respects a newer keyboard focus and scroll choice", async ({
@@ -723,7 +942,16 @@ test("a completed analysis respects a newer keyboard focus and scroll choice", a
   await upload(page);
   await expect.poll(() => state.held.length).toBe(1);
   const note = page.getByLabel("What is it for?", { exact: true });
+  await note.scrollIntoViewIfNeeded();
   await note.focus();
+  // WebKit can defer native caret scrolling until the next paint. Establish
+  // the user's visible focus/scroll choice before releasing the held reply.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   const before = await page.evaluate(() => scrollY);
   await respond(state.held[0]);
   await expect(result(page)).toContainText("Community sticker counter");
@@ -736,10 +964,11 @@ test("legacy artwork review cannot be erased by the new rights checkbox", async 
 }) => {
   const { state } = await fixture(page);
   await manual(page);
-  await upload(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("An artwork that needs a permission review");
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
   await rights(page).check();
   await page
     .getByRole("button", { name: "Suggest specification", exact: true })
@@ -796,18 +1025,18 @@ test("expired requester analysis cannot restore private pictures or recommendati
     .getByRole("button", { name: "Open requester session", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "What are we making?", exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
   await respond(state.held[0]);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
-  await expect(result(page)).not.toContainText("Community sticker counter");
+  await expect(result(page)).toHaveCount(0);
   await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
     "",
   );
   expect(state.creations).toHaveLength(0);
 });
 
-test("manual settings stay deliberate across upload and permission review is a separate explicit choice", async ({
+test("upload chooses supported settings even after optional adjustments and permission review stays explicit", async ({
   page,
 }) => {
   const { state } = await fixture(page);
@@ -817,10 +1046,13 @@ test("manual settings stay deliberate across upload and permission review is a s
     .getByLabel("What is it for?", { exact: true })
     .fill("Manually sized club label");
   await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
   await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
-    "61",
+    "53",
   );
-  expect(state.recommendations).toHaveLength(0);
+  await manual(page);
+  await page.getByLabel("Width (mm)", { exact: true }).fill("61");
+  expect(state.recommendations).toHaveLength(1);
   await expect(preview(page)).toBeDisabled();
   await page
     .getByRole("button", {
@@ -839,13 +1071,15 @@ test("manual settings stay deliberate across upload and permission review is a s
     widthMm: 61,
     permission: "unclear",
   });
-  expect(state.creations[0].spec.recommendedMachineId).toBeUndefined();
+  expect(state.creations[0].spec.recommendedMachineId).toBe(
+    "thermal_database_device",
+  );
   await expect(
     page.getByRole("button", { name: "Approve production file", exact: true }),
   ).toHaveCount(0);
 });
 
-test("a fresh manual picture preview accepts an omitted or short optional note and preserves longer notes exactly", async ({
+test("a fresh picture preview accepts an omitted or short optional note and preserves longer notes exactly", async ({
   page,
 }) => {
   const { state } = await fixture(page);
@@ -854,9 +1088,9 @@ test("a fresh manual picture preview accepts an omitted or short optional note a
       await page
         .getByRole("button", { name: "New order", exact: true })
         .click();
-    await manual(page);
     await page.getByLabel("What is it for?", { exact: true }).fill(note);
     await upload(page);
+    await expect(result(page)).toContainText("Community sticker counter");
     await rights(page).check();
     await preview(page).click();
     await expect(
@@ -872,7 +1106,9 @@ test("a fresh manual picture preview accepts an omitted or short optional note a
   }
   expect(state.creations).toHaveLength(4);
   expect(new Set(state.creations.map((creation) => creation.key)).size).toBe(4);
-  expect(state.recommendations).toHaveLength(0);
+  expect(state.recommendations).toHaveLength(4);
+  for (const creation of state.creations)
+    expect(creation.spec.recommendedMachineId).toBe("thermal_database_device");
 });
 
 test("an edited optional note can be cleared or shortened without changing the raw draft or its save baseline", async ({
@@ -918,15 +1154,16 @@ test("an invalid manual field reopens its disclosure without losing the exact cl
   page,
 }) => {
   const { state } = await fixture(page);
-  await manual(page);
-  await upload(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Exact manually sized label");
+  await upload(page);
+  await expect(result(page)).toContainText("Community sticker counter");
+  await manual(page);
   await rights(page).check();
   const width = page.getByLabel("Width (mm)", { exact: true });
   await width.fill("");
-  await page.getByText("Advanced settings", { exact: true }).click();
+  await page.getByText("Optional print settings", { exact: true }).click();
   await expect(width).toBeHidden();
   await preview(page).click();
   await expect(width).toBeVisible();
@@ -958,7 +1195,7 @@ test("320px keyboard picture flow stays legible with collapsed technical fields 
   await page.emulateMedia({ reducedMotion: "reduce" });
   const { state } = await fixture(page);
   await page.screenshot({
-    path: "evidence/picture-first-empty-320.png",
+    path: "evidence/upload-first-empty-320.png",
     fullPage: false,
   });
   await upload(page);
@@ -984,13 +1221,13 @@ test("320px keyboard picture flow stays legible with collapsed technical fields 
   expect(audit.violations).toEqual([]);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
-    path: "evidence/picture-first-recommended-320.png",
+    path: "evidence/upload-first-recommended-320.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await result(page).scrollIntoViewIfNeeded();
   await page.screenshot({
-    path: "evidence/picture-first-recommended-desktop.png",
+    path: "evidence/upload-first-recommended-desktop.png",
     fullPage: false,
   });
   await preview(page).focus();

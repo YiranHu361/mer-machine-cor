@@ -161,6 +161,59 @@ test("touch intake keeps controls reachable in portrait and short landscape with
   const page = await context.newPage();
   let health: Route | null = null;
   await fixture(page, "requester", [], async (route, path) => {
+    if (path === "/api/uploads") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          assets: [
+            {
+              id: "touch_new_art",
+              url: pixel,
+              sha256: "a".repeat(64),
+              width: 626,
+              height: 591,
+            },
+          ],
+        }),
+      });
+      return true;
+    }
+    if (path === "/api/recommendations") {
+      const input = route.request().postDataJSON();
+      const photo = /color photo/i.test(input.intent || "");
+      const machine = {
+        ...longMachine,
+        id: photo ? "touch_photo" : "phomemo_01",
+        name: photo ? "Photo keepsake desk" : longMachine.name,
+        model: photo ? "Instax Mini Link 3" : longMachine.model,
+        outputType: photo ? "instax" : "sticker",
+        ready: true,
+        paused: false,
+      };
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "recommended",
+          provider: "local_analysis",
+          reason: "The current pictures fit this saved format.",
+          questions: [],
+          machine,
+          spec: {
+            assetIds: input.assetIds,
+            intent: input.intent || "Touch artwork print",
+            outputType: machine.outputType,
+            widthMm: photo ? 54 : 53,
+            heightMm: photo ? 86 : 50,
+            quantity: 1,
+            material: photo ? "photo-film" : "thermal-paper",
+            crop: "contain",
+            permission: "unclear",
+            recommendedMachineId: machine.id,
+          },
+        }),
+      });
+      return true;
+    }
     if (path !== "/api/health") return false;
     health = route;
     return true;
@@ -184,30 +237,45 @@ test("touch intake keeps controls reachable in portrait and short landscape with
     }),
   });
   await expect(
-    page.getByRole("heading", { name: "What are we making?", exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
-  await useManualSettings(page);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await page
+    .getByLabel("Upload artwork", { exact: true })
+    .setInputFiles({
+      name: "touch.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(pixel.split(",")[1], "base64"),
+    });
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText(longMachine.name);
   for (const viewport of [
     { width: 390, height: 664 },
     { width: 844, height: 320 },
   ]) {
     await page.setViewportSize(viewport);
     await reflow(page, `${viewport.width}x${viewport.height} touch intake`);
-    await page
-      .locator(".output-choice")
-      .filter({ has: page.getByRole("radio", { name: /Instant photo/ }) })
-      .tap();
-    await expect(
-      page.getByRole("radio", { name: /Instant photo/ }),
-    ).toBeChecked();
-    await page
-      .locator(".output-choice")
-      .filter({ has: page.getByRole("radio", { name: /Thermal sticker/ }) })
-      .tap();
     await page.getByLabel("What is it for?", { exact: true }).tap();
     await page
       .getByLabel("What is it for?", { exact: true })
-      .fill("Touch input stays available in a short viewport");
+      .fill("color photo — touch input stays available in a short viewport");
+    await page
+      .getByRole("button", { name: "Find suitable machine", exact: true })
+      .tap();
+    await expect(
+      page.getByRole("region", { name: "Machine recommendation", exact: true }),
+    ).toContainText("Photo keepsake desk");
+    await page
+      .getByLabel("What is it for?", { exact: true })
+      .fill("black-and-white sticker — retain the entire touch artwork");
+    await page
+      .getByRole("button", { name: "Find suitable machine", exact: true })
+      .tap();
+    await expect(
+      page.getByRole("region", { name: "Machine recommendation", exact: true }),
+    ).toContainText(longMachine.name);
+    await page.getByLabel("What is it for?", { exact: true }).tap();
     const input = await page
       .getByLabel("What is it for?", { exact: true })
       .evaluate((element) => ({
@@ -219,6 +287,7 @@ test("touch intake keeps controls reachable in portrait and short landscape with
       "Touch text entry must avoid small-font focus zoom",
     ).toBeGreaterThanOrEqual(16);
     expect(input.scale).toBe(1);
+    await useManualSettings(page);
     await page
       .getByRole("checkbox", {
         name: "Automatically accept a quote within my budget",
@@ -284,7 +353,8 @@ test("long collection and machine status text remains readable under touch and 2
       ".collection-line strong",
       "The entire collection reference",
     );
-    await readable(page, ".public-machine p", "The entire machine status");
+    await readable(page, ".evidence > p", "The entire saved evidence reason");
+    await expect(page.locator(".public-machine")).toHaveCount(0);
     await page.locator(".collection-line").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: testInfo.outputPath(
@@ -296,7 +366,7 @@ test("long collection and machine status text remains readable under touch and 2
   // This checks equivalent reflow, not native zoom, pinch gestures or an iOS keyboard.
   await page.getByRole("button", { name: "New order", exact: true }).tap();
   await expect(
-    page.getByRole("heading", { name: "What are we making?", exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
   await context.close();
 });

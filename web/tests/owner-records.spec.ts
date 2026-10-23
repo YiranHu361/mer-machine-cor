@@ -1,4 +1,8 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  recommendationFor,
+} from "./requester-manual";
 import { test, expect } from "@playwright/test";
 
 test("owner recovery forms validate references and submit measured trial records (UI fixture)", async ({
@@ -79,6 +83,12 @@ test("owner recovery forms validate references and submit measured trial records
   let measurements: unknown = null;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     let status = 200;
     let body: unknown = {};
     if (path === "/api/health")
@@ -249,6 +259,12 @@ test("requester specification suggestions preserve approval and manual fallback 
     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     let status = 200;
     let body: unknown = {};
     if (path === "/api/health")
@@ -329,23 +345,10 @@ test("requester specification suggestions preserve approval and manual fallback 
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("A label that still needs artwork");
-  await page
-    .getByRole("button", { name: "Make production preview", exact: true })
-    .click();
-  const missingArtwork = page
-    .getByRole("alert")
-    .filter({ hasText: "Add at least one image" });
-  await expect(missingArtwork).toBeFocused();
-  await expect
-    .poll(async () => {
-      const errorPosition = await missingArtwork.boundingBox();
-      return Boolean(
-        errorPosition &&
-        errorPosition.y >= 0 &&
-        errorPosition.y + errorPosition.height <= 844,
-      );
-    })
-    .toBe(true);
+  await expect(
+    page.getByRole("button", { name: "Make production preview", exact: true }),
+  ).toBeDisabled();
+  expect(createdJobs).toBe(0);
   const suggest = page.getByRole("button", {
     name: "Suggest specification",
     exact: true,
@@ -354,6 +357,9 @@ test("requester specification suggestions preserve approval and manual fallback 
   await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles("tests/fixtures/makers.png");
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Fixture sticker counter");
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("A club sticker for our local tabling event");
@@ -407,6 +413,12 @@ test("requester specification suggestions preserve approval and manual fallback 
   await expect(
     page.getByRole("button", { name: "Make production preview", exact: true }),
   ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Find suitable machine", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Fixture sticker counter");
   await page
     .getByRole("button", {
       name: "Request artwork permission review",
@@ -493,6 +505,12 @@ test("owner queue finds actionable orders, keeps history and supports keyboard v
   ];
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     const body =
       path === "/api/health"
         ? { mode: "simulation", paymentMode: "mock", store: "ui-fixture" }
@@ -601,6 +619,12 @@ test("a clear owner counter keeps archived orders reachable through finite pages
   }));
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     const body =
       path === "/api/health"
         ? { mode: "simulation", paymentMode: "mock", store: "ui-fixture" }
@@ -672,6 +696,12 @@ test("requester identity changes discard private artwork, drafts and saved order
   let privateJob: any = null;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path === "/api/recommendations")
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(recommendationFor(route.request().postDataJSON())),
+      });
     let status = 200;
     let body: unknown = {};
     if (path === "/api/health")
@@ -757,13 +787,16 @@ test("requester identity changes discard private artwork, drafts and saved order
   await page.goto("/");
   await useManualSettings(page);
   await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("Private requester A workshop artwork");
+  await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles("tests/fixtures/makers.png");
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Machine recommendation", exact: true }),
+  ).toContainText("Fixture sticker counter");
   await authorizePictures(page);
-  await page
-    .getByLabel("What is it for?", { exact: true })
-    .fill("Private requester A workshop artwork");
   await page
     .getByLabel("Automatically accept a quote within my budget", {
       exact: true,
@@ -810,7 +843,7 @@ test("requester identity changes discard private artwork, drafts and saved order
     .toBeNull();
   await reopen.click();
   await expect(
-    page.getByRole("heading", { name: "What are we making?", exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
   expect(opened).toBe(1);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
@@ -854,6 +887,14 @@ for (const deferredOperation of ["upload", "create"] as const) {
     let createSpec: unknown;
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
+      if (path === "/api/recommendations")
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(
+            recommendationFor(route.request().postDataJSON()),
+          ),
+        });
       const isCreate =
         path === "/api/jobs" && route.request().method() === "POST";
       if (
@@ -911,6 +952,12 @@ for (const deferredOperation of ["upload", "create"] as const) {
       await expect(
         page.getByAltText("Uploaded original artwork"),
       ).toBeVisible();
+      await expect(
+        page.getByRole("region", {
+          name: "Machine recommendation",
+          exact: true,
+        }),
+      ).toContainText("Fixture sticker counter");
       await authorizePictures(page);
       await page
         .getByRole("button", { name: "Make production preview", exact: true })
@@ -922,7 +969,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
       .getByRole("button", { name: "Open requester session", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "What are we making?", exact: true }),
+      page.getByRole("heading", { name: "Upload your pictures", exact: true }),
     ).toBeVisible();
     await page
       .getByLabel("What is it for?", { exact: true })
