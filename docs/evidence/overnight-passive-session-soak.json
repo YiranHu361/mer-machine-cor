@@ -1,0 +1,1118 @@
+{
+  "recordedAt": "2026-10-23T16:45:19.990Z",
+  "acceptanceStatus": "INCOMPLETE_OBSERVATION_GAP_AND_RUNTIME_DISCONNECT",
+  "helperLifecycleStatus": "completed",
+  "startedAt": "2026-10-23T13:58:40.568Z",
+  "plannedEndAt": "2026-10-23T15:13:40.568Z",
+  "hardStopAt": "2026-10-23T15:20:00.000Z",
+  "finishedAt": "2026-10-23T16:41:09.032Z",
+  "wallElapsedMs": 9748464,
+  "wallElapsedIsNotObservedCoverage": true,
+  "requiredContinuousDurationMs": 4500000,
+  "totalSamples": 26,
+  "healthySamples": 24,
+  "healthySampleSpanMs": 1380038,
+  "firstHealthySampleAt": "2026-10-23T13:58:40.870Z",
+  "lastHealthySampleAt": "2026-10-23T14:21:40.908Z",
+  "maxSampleGapMs": 8367002,
+  "samples": [
+    {
+      "at": "2026-10-23T13:58:40.870Z",
+      "elapsedMs": 302,
+      "gapFromPreviousMs": 0,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2888,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 2
+          },
+          "heapUsedBytes": 8388096,
+          "apiResponses": 10,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 30,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 0,
+            "errors": 0,
+            "refreshes": 0
+          },
+          "heapUsedBytes": 1874856,
+          "apiResponses": 2,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T13:59:40.885Z",
+      "elapsedMs": 60317,
+      "gapFromPreviousMs": 60015,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2916,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 46
+          },
+          "heapUsedBytes": 18872300,
+          "apiResponses": 79,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 45
+          },
+          "heapUsedBytes": 2420640,
+          "apiResponses": 145,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:00:40.886Z",
+      "elapsedMs": 120318,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2916,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 60
+          },
+          "heapUsedBytes": 12954084,
+          "apiResponses": 117,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 59
+          },
+          "heapUsedBytes": 3002236,
+          "apiResponses": 226,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:01:40.887Z",
+      "elapsedMs": 180319,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2916,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 60
+          },
+          "heapUsedBytes": 19455660,
+          "apiResponses": 141,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 59
+          },
+          "heapUsedBytes": 2825784,
+          "apiResponses": 279,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:02:40.887Z",
+      "elapsedMs": 240319,
+      "gapFromPreviousMs": 60000,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 7906532,
+          "apiResponses": 216,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 109
+          },
+          "heapUsedBytes": 3337428,
+          "apiResponses": 431,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:03:40.896Z",
+      "elapsedMs": 300328,
+      "gapFromPreviousMs": 60009,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 23202532,
+          "apiResponses": 240,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 109
+          },
+          "heapUsedBytes": 2860284,
+          "apiResponses": 483,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:04:40.898Z",
+      "elapsedMs": 360330,
+      "gapFromPreviousMs": 60002,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 23013048,
+          "apiResponses": 265,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 2980548,
+          "apiResponses": 538,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:05:40.899Z",
+      "elapsedMs": 420331,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 24391196,
+          "apiResponses": 289,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 2774928,
+          "apiResponses": 589,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:06:40.900Z",
+      "elapsedMs": 480332,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 19803060,
+          "apiResponses": 313,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 2724268,
+          "apiResponses": 641,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:07:40.900Z",
+      "elapsedMs": 540332,
+      "gapFromPreviousMs": 60000,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 9079832,
+          "apiResponses": 337,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3414332,
+          "apiResponses": 694,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:08:40.901Z",
+      "elapsedMs": 600333,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 13201968,
+          "apiResponses": 361,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3433936,
+          "apiResponses": 746,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:09:40.900Z",
+      "elapsedMs": 660332,
+      "gapFromPreviousMs": 59999,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 17830244,
+          "apiResponses": 385,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3427524,
+          "apiResponses": 798,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:10:40.901Z",
+      "elapsedMs": 720333,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 13216792,
+          "apiResponses": 409,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3226308,
+          "apiResponses": 850,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:11:40.902Z",
+      "elapsedMs": 780334,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 13470048,
+          "apiResponses": 433,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3891300,
+          "apiResponses": 901,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:12:40.902Z",
+      "elapsedMs": 840334,
+      "gapFromPreviousMs": 60000,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 9095700,
+          "apiResponses": 457,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3901972,
+          "apiResponses": 954,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:13:40.903Z",
+      "elapsedMs": 900335,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 13227112,
+          "apiResponses": 481,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 2783884,
+          "apiResponses": 1005,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:14:40.903Z",
+      "elapsedMs": 960335,
+      "gapFromPreviousMs": 60000,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 9081988,
+          "apiResponses": 505,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 2743216,
+          "apiResponses": 1057,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:15:40.904Z",
+      "elapsedMs": 1020336,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 13362592,
+          "apiResponses": 529,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3397932,
+          "apiResponses": 1110,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:16:40.905Z",
+      "elapsedMs": 1080337,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 15566264,
+          "apiResponses": 553,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3336320,
+          "apiResponses": 1162,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:17:40.906Z",
+      "elapsedMs": 1140338,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 18886148,
+          "apiResponses": 577,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3115960,
+          "apiResponses": 1214,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:18:40.905Z",
+      "elapsedMs": 1200337,
+      "gapFromPreviousMs": 59999,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 8116612,
+          "apiResponses": 601,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3762744,
+          "apiResponses": 1266,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:19:40.906Z",
+      "elapsedMs": 1260338,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 8140100,
+          "apiResponses": 625,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3696604,
+          "apiResponses": 1318,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:20:40.907Z",
+      "elapsedMs": 1320339,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 11353108,
+          "apiResponses": 649,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3466908,
+          "apiResponses": 1370,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T14:21:40.908Z",
+      "elapsedMs": 1380340,
+      "gapFromPreviousMs": 60001,
+      "health": {
+        "status": 200,
+        "mode": "simulation",
+        "paymentMode": "mock",
+        "store": "spacetimedb"
+      },
+      "pages": {
+        "owner": {
+          "domNodes": 2944,
+          "ownerCards": 4,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 111
+          },
+          "heapUsedBytes": 21012468,
+          "apiResponses": 673,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        },
+        "requester": {
+          "domNodes": 187,
+          "ownerCards": 0,
+          "requesterCards": 0,
+          "nativeSse": {
+            "opens": 1,
+            "errors": 0,
+            "refreshes": 110
+          },
+          "heapUsedBytes": 3432760,
+          "apiResponses": 1422,
+          "apiFailureCount": 0,
+          "requestFailureCount": 0
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T16:41:07.910Z",
+      "elapsedMs": 9747386,
+      "gapFromPreviousMs": 8367002,
+      "health": {
+        "status": 503
+      },
+      "pages": {
+        "owner": {
+          "samplingError": "page.evaluate: Target page, context or browser has been closed"
+        },
+        "requester": {
+          "samplingError": "page.evaluate: Target page, context or browser has been closed"
+        }
+      }
+    },
+    {
+      "at": "2026-10-23T16:41:09.028Z",
+      "elapsedMs": 9748460,
+      "gapFromPreviousMs": 1118,
+      "health": {
+        "status": 503
+      },
+      "pages": {
+        "owner": {
+          "samplingError": "page.evaluate: Target page, context or browser has been closed"
+        },
+        "requester": {
+          "samplingError": "page.evaluate: Target page, context or browser has been closed"
+        }
+      }
+    }
+  ],
+  "pages": {
+    "owner": {
+      "role": "owner",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "apiResponses": 686,
+      "apiFailures": [],
+      "requestFailures": [
+        {
+          "at": "2026-10-23T14:22:12.070Z",
+          "endpoint": "/api/events",
+          "error": "net::ERR_NETWORK_IO_SUSPENDED"
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": [
+        {
+          "at": "2026-10-23T14:22:12.070Z",
+          "message": "Failed to load resource: net::ERR_NETWORK_IO_SUSPENDED"
+        }
+      ],
+      "crashes": 0,
+      "closed": true,
+      "maxDomNodes": 2944,
+      "maxOwnerCards": 4,
+      "maxRequesterCards": 0,
+      "screenshotError": "page.screenshot: Target page, context or browser has been closed"
+    },
+    "requester": {
+      "role": "requester",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "apiResponses": 1450,
+      "apiFailures": [],
+      "requestFailures": [
+        {
+          "at": "2026-10-23T14:22:12.069Z",
+          "endpoint": "/api/events",
+          "error": "net::ERR_NETWORK_IO_SUSPENDED"
+        }
+      ],
+      "pageErrors": [],
+      "consoleErrors": [
+        {
+          "at": "2026-10-23T14:22:12.070Z",
+          "message": "Failed to load resource: net::ERR_NETWORK_IO_SUSPENDED"
+        }
+      ],
+      "crashes": 0,
+      "closed": true,
+      "maxDomNodes": 187,
+      "maxOwnerCards": 0,
+      "maxRequesterCards": 0,
+      "screenshotError": "page.screenshot: Target page, context or browser has been closed"
+    }
+  },
+  "safety": {
+    "submittedJobs": 0,
+    "payments": 0,
+    "machineWrites": 0,
+    "serviceRestarts": 0,
+    "blockedPageWrites": []
+  },
+  "rawPrivateStatusSha256": "76dd6b22d916812202711f26534ea9c876c8d1724d6b88b1bd0cf2a8d52130bf",
+  "failures": [
+    "139m27.002s between the last healthy sample and next observation; the planned75-minute continuous observation was not completed",
+    "Both browser EventSource requests recorded ERR_NETWORK_IO_SUSPENDED around14:22:12Z",
+    "Final two observations had closed browser pages and HTTP503; passive final screenshots could not be captured"
+  ],
+  "interpretation": "24 healthy samples span23m00.038s. The helper later wrote completed/planned_end with an empty bookkeeping failures array; these are not acceptance results. The network suspension and wall-clock gap are recorded, but their underlying cause is not established. A later explicit restart and fresh browser checks establish recovery only, not missing soak coverage.",
+  "subsequentRecovery": "docs/evidence/overnight-final-recovery.json",
+  "subsequentFreshBrowser": "docs/evidence/overnight-final-browser.json",
+  "caveats": [
+    "Passive Chromium desktop owner and mobile requester sessions; no hardware or live payments.",
+    "Requester uses a new empty session and does not create or upload content.",
+    "Root may activate a verified backend during this window; native errors/reconnects are recorded without assuming their cause.",
+    "Heap observations are browser estimates, not a leak proof; finite DOM growth may reflect other authorized test activity."
+  ]
+}

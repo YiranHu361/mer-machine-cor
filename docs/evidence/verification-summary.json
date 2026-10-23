@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-23T14:06:08.004Z",
+  "recordedAt": "2026-10-23T16:45:19.994Z",
   "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
@@ -91,11 +91,11 @@
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
     ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "Twelfth checkpoint; full current browser reports and exact application/test-fixture provenance in overnight-twelfth-qa.json. Work remains active through9a.m.Pacific; required live acceptance is blocked.",
+  "notes": "Overnight feature work ended; heartbeat PAUSED. Twelfth software647/1075 remains passing with exact split provenance in overnight-twelfth-qa.json. Passive continuous stability is INCOMPLETE after network/observation gap; explicit retained-runtime recovery and fresh browser/SSE checks pass. Required physical/live acceptance remains blocked.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 318,
+    "candidateFiles": 324,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [
@@ -108,5 +108,8 @@
         "mode": "600"
       }
     ]
-  }
+  },
+  "overnightStatus": "ENDED_HEARTBEAT_PAUSED",
+  "longSessionStability": "INCOMPLETE_OBSERVATION_GAP",
+  "finalEvidence": "docs/evidence/overnight-final-qa.json"
 }

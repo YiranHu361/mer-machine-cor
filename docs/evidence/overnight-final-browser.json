@@ -1,0 +1,60 @@
+{
+  "checkedAt": "2026-10-23T16:44:26.237Z",
+  "status": "PASS",
+  "boundary": "Fresh actual retained app sessions after explicit local recovery; no output or payment",
+  "node": [
+    {
+      "machineId": "phomemo_01",
+      "executionStatus": "completed",
+      "mode": "simulation",
+      "transportPending": false,
+      "stopPending": false
+    },
+    {
+      "machineId": "instax_01",
+      "executionStatus": "completed",
+      "mode": "simulation",
+      "transportPending": false,
+      "stopPending": false
+    },
+    {
+      "machineId": "bambu_01",
+      "executionStatus": "idle",
+      "mode": "simulation",
+      "transportPending": false,
+      "stopPending": false
+    }
+  ],
+  "pages": [
+    {
+      "role": "owner",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screenshot": "web/evidence/overnight-final-owner-1440.png",
+      "pageErrors": [],
+      "nativeSse": {
+        "opens": 1,
+        "refreshes": 1,
+        "errors": 0
+      }
+    },
+    {
+      "role": "requester",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "web/evidence/overnight-final-requester-390.png",
+      "pageErrors": [],
+      "nativeSse": {
+        "opens": 1,
+        "refreshes": 1,
+        "errors": 0
+      }
+    }
+  ],
+  "physicalJobs": 0,
+  "payments": 0
+}

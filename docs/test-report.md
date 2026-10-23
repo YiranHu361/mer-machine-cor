@@ -1,12 +1,14 @@
 # Verification report
 
-Recorded 2026-10-23 07:04 Pacific. Overnight work continues until 9:00 a.m. Pacific. Current source `4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3`.
+Final handoff recorded 2026-10-23 09:45 Pacific. The requested cutoff was 09:00; control resumed at 09:41 after the recorded observation/clock gap. Overnight feature work has ended and the heartbeat is PAUSED. Current source `4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3`.
 
 **Partial completion.** Runnable local software passes the checks below. Required physical/live acceptance and the whole PRD remain incomplete. No physical output, funded transaction, live Claude call, remote discovery or consenting customer evidence is claimed.
 
 Twelfth adds deliberate expired pickup renewal, durable exact replay and local keyboard/read recovery. It also fences actual hardware transport/cleanup through timeout and canceled shutdown, checks pinned Bambu upload/publish/stop acknowledgements and prevents missing Bluetooth from exiting Node. A configured local app port now passes origin validation without permitting other hosts or ports. Earlier media, cancellation, calibration, drafts and accessibility repairs remain verified.
 
 [Current checkpoint](evidence/overnight-twelfth-qa.json), [ongoing QA](overnight-qa.md), [SDK/transport evidence](evidence/overnight-twelfth-node-contracts.json). Runtime versions: Node 25.8.1, Python 3.12.11, SpacetimeDB 2.13.0, bambulabs-api 2.6.6, Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2. Dependency locks are unchanged.
+
+The passive check was interrupted: both sessions recorded `ERR_NETWORK_IO_SUSPENDED`, followed by a long unsampled interval and a disconnected authoritative store. No application changes were made after the requested cutoff. Final recovery restarted only the retained local services, preserved private data/journals/assets, restored HTTP200 and verified served bytes. Fresh [owner desktop](../web/evidence/overnight-final-owner-1440.png) and [requester mobile](../web/evidence/overnight-final-requester-390.png) sessions receive native SSE without page errors. These fresh checks cannot fill the missing continuous observation.
 
 ## Checks actually executed
 
@@ -24,7 +26,8 @@ Twelfth adds deliberate expired pickup renewal, durable exact replay and local k
 | Actual retained restart/native SSE | PASS | Simulation/mock/SpacetimeDB; polling disabled, 2 opens/1 error/4 refreshes; [evidence](evidence/overnight-twelfth-sse-reconnect.json) |
 | New pickup API/UI/native SSE | PASS in all 3 engines | Seeded prepared simulation item in temporary SQLite; actual HTTP/built UI, no API interception; zero Node/payment calls |
 | Configured-secret/served-byte checks | PASS | Private files ignored/0600; HTML/JS/CSS byte match |
-| Long-session stability | RUNNING | Passive actual owner/requester sessions; scheduled result 08:13 Pacific, no pass claimed yet |
+| Long-session stability | **INCOMPLETE** | 24 healthy samples over 23 minutes, then 139m27s observation gap; network suspension, closed browsers and HTTP503. No 75-minute continuous pass; [evidence](evidence/overnight-passive-session-soak.json) |
+| Final runtime recovery | PASS | Explicit retained local restart restored Spacetime connectivity; fresh owner/requester native SSE and screenshots pass,0 output/payment calls; [recovery](evidence/overnight-final-recovery.json), [browser](evidence/overnight-final-browser.json) |
 | Required physical/live acceptance | BLOCKED / NOT RUN | Device/camera/readiness, funded wallets, Claude and Agentverse prerequisites remain missing |
 
 **647 unique software cases; 1075 canonical executions** counting all three browser engines. Five browser cases use the actual retained app, 208 intercept device/service APIs and one intercepts startup health failure before actual-app recovery. The separate new native pickup checks use actual HTTP/UI/temporary persistence with a seeded prepared item; they do not claim physical production or handoff.

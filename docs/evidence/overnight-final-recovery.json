@@ -1,0 +1,43 @@
+{
+  "checkedAt": "2026-10-23T16:43:02.342Z",
+  "reason": "Authoritative Spacetime connection remained disconnected after recorded network suspension and wall-clock observation gap",
+  "before": {
+    "healthStatus": 503,
+    "code": "STORE_DISCONNECTED",
+    "node": [
+      {
+        "machineId": "phomemo_01",
+        "mode": "simulation"
+      },
+      {
+        "machineId": "instax_01",
+        "mode": "simulation"
+      },
+      {
+        "machineId": "bambu_01",
+        "mode": "simulation"
+      }
+    ]
+  },
+  "changes": {
+    "source": false,
+    "jobs": 0,
+    "payments": 0,
+    "machinePolicy": 0,
+    "privateStatePreserved": true
+  },
+  "after": {
+    "checkedAt": "2026-10-23T16:43:06.567Z",
+    "healthStatus": 200,
+    "mode": "simulation",
+    "paymentMode": "mock",
+    "store": "spacetimedb",
+    "integrations": {
+      "spacetimedb": "connected",
+      "fetch": "unverified",
+      "hardware": "not configured",
+      "claude": "not configured"
+    }
+  },
+  "status": "RECOVERED_BY_EXPLICIT_LOCAL_RESTART"
+}

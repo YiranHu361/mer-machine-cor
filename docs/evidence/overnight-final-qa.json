@@ -1,0 +1,146 @@
+{
+  "recordedAt": "2026-10-23T16:45:40.452Z",
+  "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED_ENDURANCE_INCOMPLETE",
+  "requestedCutoff": "2026-10-23T16:00:00Z",
+  "controlResumedAfterGap": "2026-10-23T16:41:23Z",
+  "implementationCommit": "1b486a7",
+  "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+  "applicationChangesAfterCutoff": 0,
+  "automation": {
+    "id": "overnight-fabrary-quality-checks",
+    "status": "PAUSED",
+    "confirmedAt": "2026-10-23T16:45:40.453Z"
+  },
+  "software": {
+    "backendApplicationProcessAndRealtime": 237,
+    "node": 137,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "webUnits": 29,
+    "browserScenarios": 214,
+    "uniqueCases": 647,
+    "checksIncludingThreeBrowserEngines": 1075,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "automatedAccessibilityScans": 51,
+  "softwareEvidence": "docs/evidence/overnight-twelfth-qa.json",
+  "endurance": {
+    "acceptanceStatus": "INCOMPLETE_OBSERVATION_GAP_AND_RUNTIME_DISCONNECT",
+    "healthySamples": 24,
+    "healthySampleSpanMs": 1380038,
+    "maxSampleGapMs": 8367002,
+    "evidence": "docs/evidence/overnight-passive-session-soak.json",
+    "notAnUninterrupted75MinutePass": true
+  },
+  "finalRuntime": {
+    "checkedAt": "2026-10-23T16:45:20.259Z",
+    "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+    "servedBuildByteMatch": true,
+    "mode": "simulation",
+    "paymentMode": "mock",
+    "store": "spacetimedb",
+    "activeJobs": 0,
+    "registeredModes": [
+      "simulation"
+    ]
+  },
+  "finalBrowser": {
+    "checkedAt": "2026-10-23T16:44:26.237Z",
+    "status": "PASS",
+    "boundary": "Fresh actual retained app sessions after explicit local recovery; no output or payment",
+    "node": [
+      {
+        "machineId": "phomemo_01",
+        "executionStatus": "completed",
+        "mode": "simulation",
+        "transportPending": false,
+        "stopPending": false
+      },
+      {
+        "machineId": "instax_01",
+        "executionStatus": "completed",
+        "mode": "simulation",
+        "transportPending": false,
+        "stopPending": false
+      },
+      {
+        "machineId": "bambu_01",
+        "executionStatus": "idle",
+        "mode": "simulation",
+        "transportPending": false,
+        "stopPending": false
+      }
+    ],
+    "pages": [
+      {
+        "role": "owner",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "screenshot": "web/evidence/overnight-final-owner-1440.png",
+        "pageErrors": [],
+        "nativeSse": {
+          "opens": 1,
+          "refreshes": 1,
+          "errors": 0
+        }
+      },
+      {
+        "role": "requester",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "screenshot": "web/evidence/overnight-final-requester-390.png",
+        "pageErrors": [],
+        "nativeSse": {
+          "opens": 1,
+          "refreshes": 1,
+          "errors": 0
+        }
+      }
+    ],
+    "physicalJobs": 0,
+    "payments": 0
+  },
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 324,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "evidenceHashes": {
+    "docs/evidence/overnight-twelfth-qa.json": "e53562dc66efbade41ff244a7a9aa4631fcfefbaf3cce1e14cb09cede1edfec3",
+    "docs/evidence/overnight-passive-session-soak.json": "7fce3fef432a07d6ba9ea6591c96130c6b4dc5c24471e58c83a845cc39900fe3",
+    "docs/evidence/overnight-final-recovery.json": "7f62303c64bc4ee8344afcfbf4ef70f6e51543104b322fc1d7eef679b8dd01ba",
+    "docs/evidence/overnight-final-browser.json": "a60da6299707c4b0fb08c5d8240fcab07c10bbde54c819028d1250f3c0726092",
+    "web/evidence/overnight-final-owner-1440.png": "99dd2755571f674ed43a3864319ec28bfc1c812d407878b8f6c36d0b239a0b0a",
+    "web/evidence/overnight-final-requester-390.png": "a9aa1761912dca5cd8001af875a48f82f09b807d339496d57ecf9132a1e37289"
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveModelCalls": 0,
+  "remoteDiscovery": "NOT_RUN",
+  "requiredRemaining": [
+    "Uninterrupted endurance observation after the documented gap",
+    "Three exact team-owned devices, camera evidence, loaded media/material and supervising owners for required finite physical acceptance",
+    "Funded Base Sepolia requester/treasury/owner test-wallet and RPC setup for actual collection/release/refund",
+    "Claude key/model and actual associated camera evidence",
+    "Agentverse seed/mailbox, ASI key and sender authorization for remote discovery/invocation",
+    "Consenting customer/owner evidence, measured physical timings/economics and official rules source"
+  ],
+  "knownCosmeticFollowup": "Requester summary says1 machines available; observed after final source verification and left unchanged at cutoff",
+  "notes": "Most browser cases intercept APIs; actual retained/local temporary-store checks are separately identified. Installed SDK tests use fake transports. Explicit local recovery establishes current health only, not missing endurance coverage. No required live or physical acceptance is relabeled passed."
+}
