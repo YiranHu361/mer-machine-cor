@@ -2,4 +2,6 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "@fontsource-variable/dm-sans";
 import "./styles.css";
+import "./requester-minimal.css";
+import "./provider-minimal.css";
 createRoot(document.getElementById("root")!).render(<App />);

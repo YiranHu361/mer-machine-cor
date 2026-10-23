@@ -1,4 +1,9 @@
 import { test, expect, type Page, type Dialog } from "@playwright/test";
+import {
+  openHandlingSteps,
+  openPaymentRecovery,
+  openTrialMeasurements,
+} from "./provider-controls";
 
 async function fixture(page: Page) {
   const at = "2026-10-23T10:00:00.000Z";
@@ -57,12 +62,30 @@ async function fixture(page: Page) {
     owner: true,
     allowLogin: false,
     ownerId: "queue_draft_owner",
+    handlingPayloads: [] as Record<string, boolean>[],
   };
   await page.routeWebSocket(/^ws:\/\/127\.0\.0\.1:4317\//, () => {});
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== "GET") {
       mutations.push(path);
+      if (path.endsWith("/prepare")) {
+        const body = route.request().postDataJSON();
+        state.handlingPayloads.push(body);
+        Object.assign(jobs[0], {
+          fulfillmentState: "ready_for_pickup",
+          pickup: {
+            code: "ISOLATED-PICKUP",
+            expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          },
+          version: jobs[0].version + 1,
+        });
+        state.revision++;
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ job: jobs[0] }),
+        });
+      }
       if (path === "/api/session" && state.allowLogin) {
         state.owner = true;
         state.ownerId = "queue_reauthenticated_owner";
@@ -160,13 +183,12 @@ const hash = "0x" + "b".repeat(64);
 async function fillDrafts(page: Page, { trial = true, payment = true } = {}) {
   const order = orderFor(page);
   if (trial) {
-    await order
-      .getByText("Trial costs & handling time", { exact: true })
-      .click();
+    await openTrialMeasurements(order);
     const trial = order.getByLabel("Consumables (USD cents)", { exact: true });
     await trial.fill("31");
   }
   if (!payment) return;
+  await openPaymentRecovery(order);
   await order
     .getByLabel("Pending test payment operation", { exact: true })
     .selectOption("release_queue_draft_0");
@@ -179,6 +201,8 @@ async function fillDrafts(page: Page, { trial = true, payment = true } = {}) {
 }
 async function expectDrafts(page: Page) {
   const order = orderFor(page);
+  await openTrialMeasurements(order);
+  await openPaymentRecovery(order);
   const observed = {
     trial: await order.locator(".trial-economics input").first().inputValue(),
     reference: await order
@@ -228,6 +252,95 @@ async function reloadWithoutWarning(page: Page) {
   }
 }
 
+const handlingConfirmation =
+  "I removed and labeled the item, stored it safely, and cleared the machine.";
+
+test("provider orders show the next handling action while technical forms stay collapsed and never attest implicitly", async ({
+  page,
+}) => {
+  const state = await fixture(page),
+    order = orderFor(page);
+  const ready = order.getByRole("button", {
+    name: "Mark ready for pickup",
+    exact: true,
+  });
+  await expect(ready).toBeVisible();
+  await expect(ready).toBeDisabled();
+  await expect(
+    order.getByLabel(handlingConfirmation, { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    order.getByLabel("Output removed", { exact: true }),
+  ).toBeHidden();
+  await expect(
+    order.getByLabel("Pending test payment operation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    order.getByLabel("Consumables (USD cents)", { exact: true }),
+  ).toBeHidden();
+  await expect(
+    order.getByRole("button", { name: "Reconcile saved outcome", exact: true }),
+  ).toBeHidden();
+  await openHandlingSteps(order);
+  await openPaymentRecovery(order);
+  await openTrialMeasurements(order);
+  for (const label of [
+    "Output removed",
+    "Order label attached",
+    "Item stored safely",
+    "Machine cleared",
+  ])
+    await expect(order.getByLabel(label, { exact: true })).not.toBeChecked();
+  await expect(
+    order.getByLabel(handlingConfirmation, { exact: true }),
+  ).not.toBeChecked();
+  await expect(ready).toBeDisabled();
+  expect(state.mutations).toEqual([]);
+  expect(state.handlingPayloads).toEqual([]);
+});
+
+test("partial handling survives queue paging and only explicit complete confirmation sends all physical attestations", async ({
+  page,
+}) => {
+  const state = await fixture(page),
+    order = orderFor(page);
+  await openHandlingSteps(order);
+  await order.getByLabel("Output removed", { exact: true }).check();
+  await expect(
+    order.getByLabel(handlingConfirmation, { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    order.getByRole("button", { name: "Mark ready for pickup", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Next orders", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Previous orders", exact: true })
+    .click();
+  await openHandlingSteps(order);
+  await expect(
+    order.getByLabel("Output removed", { exact: true }),
+  ).toBeChecked();
+  for (const label of [
+    "Order label attached",
+    "Item stored safely",
+    "Machine cleared",
+  ])
+    await expect(order.getByLabel(label, { exact: true })).not.toBeChecked();
+  await expect(
+    order.getByLabel(handlingConfirmation, { exact: true }),
+  ).not.toBeChecked();
+  expect(state.mutations).toEqual([]);
+  await order.getByLabel(handlingConfirmation, { exact: true }).check();
+  await order
+    .getByRole("button", { name: "Mark ready for pickup", exact: true })
+    .click();
+  await expect(order.getByLabel("Pickup code", { exact: true })).toBeVisible();
+  expect(state.handlingPayloads).toEqual([
+    { removed: true, labeled: true, stored: true, cleared: true },
+  ]);
+  expect(state.mutations).toEqual(["/api/owner/jobs/queue_draft_0/prepare"]);
+});
+
 test("unsaved trial and payment references survive explicit queue paging without a mutation (offline fixture)", async ({
   page,
 }) => {
@@ -256,24 +369,27 @@ test("queue search and filters preserve each order's own drafts (offline fixture
   const search = page.getByLabel("Find an order", { exact: true });
   await search.fill("Draft order 1");
   const other = orderFor(page, 1);
+  await openPaymentRecovery(other);
   await expect(
     other.getByLabel("Confirmed Base Sepolia transaction hash", {
       exact: true,
     }),
   ).toHaveValue("");
-  await other.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(other);
   await expect(
     other.getByLabel("Consumables (USD cents)", { exact: true }),
   ).toHaveValue("20");
   await other.getByLabel("Consumables (USD cents)", { exact: true }).fill("44");
   await search.fill("");
   await expectDrafts(page);
+  await openTrialMeasurements(other);
   await page
     .getByLabel("Show orders", { exact: true })
     .selectOption("completed");
   await expect(page.locator(".owner-job")).toHaveCount(0);
   await page.getByLabel("Show orders", { exact: true }).selectOption("all");
   await expectDrafts(page);
+  await openTrialMeasurements(other);
   await expect(other.locator(".trial-economics input").first()).toHaveValue(
     "44",
   );
@@ -293,9 +409,11 @@ test("discard clears only its draft and unmounted payment work still warns until
   await page
     .getByRole("button", { name: "Previous orders", exact: true })
     .click();
+  await openPaymentRecovery(orderFor(page));
   await orderFor(page)
     .getByRole("button", { name: "Discard payment draft", exact: true })
     .click();
+  await openTrialMeasurements(orderFor(page));
   await expect(
     orderFor(page).locator(".trial-economics input").first(),
   ).toHaveValue("20");
@@ -331,6 +449,7 @@ test("accepted trial and payment saves survive failed refresh and remount withou
   await page
     .getByRole("button", { name: "Previous orders", exact: true })
     .click();
+  await openTrialMeasurements(orderFor(page));
   await expect(
     orderFor(page).locator(".trial-economics input").first(),
   ).toHaveValue("31");
@@ -351,9 +470,7 @@ for (const resolution of ["settled", "ineligible"] as const)
     else state.noEligibleOperation = true;
     state.revision++;
     await expect.poll(() => page.locator(".owner-job").count()).toBe(1);
-    await page
-      .getByRole("tab", { name: "Machines & policy", exact: true })
-      .click();
+    await page.getByRole("tab", { name: "Machines", exact: true }).click();
     await expect
       .poll(() =>
         page.getByRole("button", { name: "Next orders", exact: true }).count(),
@@ -386,6 +503,7 @@ test("legacy pending record state keeps a valid unmounted payment draft after re
   await page
     .getByRole("button", { name: "Previous orders", exact: true })
     .click();
+  await openPaymentRecovery(orderFor(page));
   await expect(
     orderFor(page).getByLabel("Confirmed Base Sepolia transaction hash", {
       exact: true,
@@ -416,7 +534,7 @@ test("a newer trial record preserves an unmounted edit until the owner explicitl
     .getByRole("button", { name: "Previous orders", exact: true })
     .click();
   const order = orderFor(page);
-  await order.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(order);
   await expect(
     order.getByLabel("Consumables (USD cents)", { exact: true }),
   ).toHaveValue("31");
@@ -484,7 +602,8 @@ test("owner expiry removes cached private drafts before reauthentication and cle
     .click();
   const order = orderFor(page);
   await expect(order).toBeVisible();
-  await order.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(order);
+  await openPaymentRecovery(order);
   await expect(
     order.getByLabel("Consumables (USD cents)", { exact: true }),
   ).toHaveValue("20");

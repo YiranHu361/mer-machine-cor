@@ -25,6 +25,11 @@ for (const role of ["requester", "owner"] as const)
           permission: "authorized",
           crop: "contain",
         },
+        artifact: {
+          id: "saved_source_artifact",
+          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
+          sha256: "a".repeat(64),
+        },
         productionState: "needs_review",
         paymentState: "release_pending",
         fulfillmentState: "unprepared",
@@ -199,6 +204,11 @@ test("malformed result sources remain an inline failure through repeated retries
       material: "thermal-paper",
       permission: "authorized",
       crop: "contain",
+    },
+    artifact: {
+      id: "saved_source_artifact",
+      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
+      sha256: "a".repeat(64),
     },
     productionState: "needs_review",
     paymentState: "release_pending",

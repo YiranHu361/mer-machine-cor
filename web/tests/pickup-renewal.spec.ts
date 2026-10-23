@@ -536,8 +536,23 @@ test("an exact renewal replay returning current collected state never reopens pi
   state.mode = "success";
   await finish(state, state.held[0]);
   await expect(panel(page)).toHaveCount(0);
-  await expect(order(page)).toContainText("Collection: collected");
+  const facts = order(page).locator(".provider-order-facts");
+  await facts.getByText("Order details", { exact: true }).click();
+  const collection = facts
+    .locator("dl > div")
+    .filter({ hasText: "Collection" })
+    .locator("dd");
+  await expect(collection).toBeVisible();
+  await expect(collection).toHaveText("collected");
+  await expect(
+    order(page).getByLabel("Pickup code", { exact: true }),
+  ).toHaveCount(0);
+  await expect(order(page)).not.toContainText("ORIGINAL_CODE");
+  await expect(order(page)).not.toContainText(state.job.pickup.code);
   expect(state.renewals).toHaveLength(1);
+  expect(state.mutations).toEqual([
+    "/api/owner/jobs/pickup_primary/renew-pickup",
+  ]);
 });
 test("320px keyboard recovery survives repeated read failures with a visible local notice and no secret code", async ({
   page,

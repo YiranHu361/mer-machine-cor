@@ -1,4 +1,5 @@
-import { useManualSettings } from "./requester-manual";
+import { openPurposeNote, useManualSettings } from "./requester-manual";
+import { openMachineSettings, openProviderDetails } from "./provider-controls";
 import { test, expect, devices, type Page, type Route } from "@playwright/test";
 
 const pixel =
@@ -240,16 +241,15 @@ test("touch intake keeps controls reachable in portrait and short landscape with
     page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("radio")).toHaveCount(0);
-  await page
-    .getByLabel("Upload artwork", { exact: true })
-    .setInputFiles({
-      name: "touch.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(pixel.split(",")[1], "base64"),
-    });
+  await page.getByLabel("Upload artwork", { exact: true }).setInputFiles({
+    name: "touch.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(pixel.split(",")[1], "base64"),
+  });
   await expect(
     page.getByRole("region", { name: "Machine recommendation", exact: true }),
   ).toContainText(longMachine.name);
+  await openPurposeNote(page);
   for (const viewport of [
     { width: 390, height: 664 },
     { width: 844, height: 320 },
@@ -339,7 +339,7 @@ test("long collection and machine status text remains readable under touch and 2
   await fixture(page, "requester", [longJob]);
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Your production file", exact: true }),
+    page.getByRole("heading", { name: "Your preview", exact: true }),
   ).toBeVisible();
   for (const viewport of [
     { width: 390, height: 664 },
@@ -386,7 +386,7 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
   await page.goto("/owner");
   await expect(
     page.getByRole("heading", {
-      name: "Keep the counter moving.",
+      name: "Your workshop",
       exact: true,
     }),
   ).toBeVisible();
@@ -413,15 +413,13 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
       }),
     ).toBeVisible();
     await summary.tap();
-    await page
-      .getByRole("tab", { name: "Machines & policy", exact: true })
-      .tap();
+    await page.getByRole("tab", { name: "Machines", exact: true }).tap();
+    const machine = page.locator(".owner-machine");
+    await openProviderDetails(machine, "Connection details");
     await readable(page, ".machine-reason", "The entire saved machine reason");
     const settings = page.locator(".machine-settings");
     if (!settingsVisited) {
-      await settings
-        .getByText("Media, prices, hours & policy", { exact: true })
-        .tap();
+      await openMachineSettings(machine);
       settingsVisited = true;
     } else {
       // Owner panels now preserve drafts and disclosure state across views.
@@ -436,12 +434,10 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
         `overnight-touch-${browserName}-machine-${viewport.width}.png`,
       ),
     });
-    await page
-      .getByRole("tab", { name: "Orders & handling", exact: true })
-      .tap();
+    await page.getByRole("tab", { name: "Orders", exact: true }).tap();
   }
-  await page.getByRole("tab", { name: "Machines & policy", exact: true }).tap();
-  await page.getByText("Media, prices, hours & policy", { exact: true }).tap();
+  await page.getByRole("tab", { name: "Machines", exact: true }).tap();
+  await page.locator(".machine-settings > summary").tap();
   await expect(
     page.getByLabel("Collection point", { exact: true }),
   ).toBeHidden();

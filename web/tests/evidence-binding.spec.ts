@@ -1,3 +1,4 @@
+import { openProviderDetails } from "./provider-controls";
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -137,12 +138,8 @@ test("a terminal calibration's stale bound image fails readably and explicit met
     });
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   const surface = page.locator(".calibration-evidence");
   await expect(surface.getByRole("status")).toHaveText(
     "The result image could not be displayed.",

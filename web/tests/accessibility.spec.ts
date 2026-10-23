@@ -1,4 +1,5 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import { openPurposeNote, authorizePictures } from "./requester-manual";
+import { openMachineSettings, openProviderDetails } from "./provider-controls";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdir, readFile } from "node:fs/promises";
@@ -50,10 +51,7 @@ async function reflow(page: Page, state: string) {
       path: `evidence/overnight-${state}-${width}.png`,
       fullPage,
     });
-    if (
-      width === 1440 &&
-      ["requester-intake", "owner-orders-handling"].includes(state)
-    )
+    if (width === 1440 && ["requester-intake", "owner-orders"].includes(state))
       await page.screenshot({
         path: `evidence/overnight-${state}-overview.png`,
       });
@@ -87,7 +85,9 @@ test("requester intake and production preview pass accessibility and 320px reflo
   await expect(page.locator("#main")).toBeFocused();
   await page.locator("#main").evaluate((element) => element.blur());
   await reflow(page, "requester-intake");
-  await useManualSettings(page);
+  await expect(page.locator(".picture-recommendation")).toHaveCount(0);
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await openPurposeNote(page);
 
   await page
     .getByLabel("What is it for?", { exact: true })
@@ -101,7 +101,7 @@ test("requester intake and production preview pass accessibility and 320px reflo
   ).toContainText("Suitable machine found");
   await authorizePictures(page);
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(page.getByAltText(/Actual production preview/)).toBeVisible();
   await reflow(page, "requester-preview");
@@ -138,20 +138,20 @@ test("owner login and every dashboard tab pass accessibility and narrow reflow",
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Keep the counter moving." }),
+    page.getByRole("heading", { name: "Your workshop" }),
   ).toBeVisible();
   const ordersTab = page.getByRole("tab", {
-    name: "Orders & handling",
+    name: "Orders",
     exact: true,
   });
   await ordersTab.focus();
   await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "Machines & policy", exact: true }),
+    page.getByRole("tab", { name: "Machines", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("End");
   await expect(
-    page.getByRole("tab", { name: "Payment records", exact: true }),
+    page.getByRole("tab", { name: "Payments", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Home");
   await expect(ordersTab).toBeFocused();
@@ -160,6 +160,15 @@ test("owner login and every dashboard tab pass accessibility and narrow reflow",
     const state = "owner-" + label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     await tab.click();
     await expect(tab).toHaveAttribute("aria-selected", "true");
+    if (label === "Machines") {
+      const machine = page.locator(".owner-machine").first();
+      if (await machine.count()) {
+        await openProviderDetails(machine, "Connection details");
+        await openProviderDetails(machine, "Machine checks");
+        await openMachineSettings(machine);
+      }
+      await openProviderDetails(page, "Add a machine");
+    }
     await reflow(page, state);
   }
 });

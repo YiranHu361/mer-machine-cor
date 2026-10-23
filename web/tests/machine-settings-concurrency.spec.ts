@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openMachineSettings } from "./provider-controls";
 
 async function fixture(page: Page) {
   const machine: any = {
@@ -202,12 +203,8 @@ async function fixture(page: Page) {
     });
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Media, prices, hours & policy", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openMachineSettings(page.locator(".owner-machine"));
   const form = page.locator(".machine-settings form");
   const save = form.getByRole("button", {
     name: "Save machine settings",

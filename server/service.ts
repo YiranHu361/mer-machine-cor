@@ -882,153 +882,207 @@ export class Service {
     });
   }
   async approve(jobId: string, body: any) {
-    return mutate(this.store, (s) => {
-      const j = s.jobs[jobId];
-      requireThat(
-        j.spec.permission === "authorized",
-        "CONTENT_REVIEW",
-        "An operator must resolve unclear artwork permission before checkout.",
-      );
-      requireThat(
-        j.paymentState === "unpaid" &&
-          !j.attemptId &&
-          j.productionState !== "cancelled",
-        "LOCKED",
-        "This order cannot be reapproved.",
-      );
-      requireThat(
-        body.specVersion === j.specVersion &&
-          body.artifactSha256 === j.artifact.sha256,
-        "STALE_APPROVAL",
-        "Approve the current preview and specification.",
-      );
-      const currentHash = specificationHash(j);
-      // Retried approval must preserve a quote and its reservation instead of
-      // moving an already quoted order back to a state checkout cannot use.
-      if (
-        j.approvedSpecHash === currentHash &&
-        ["approved", "quoted"].includes(j.productionState)
-      )
-        return j;
-      j.approvedSpecHash = currentHash;
-      j.productionState = "approved";
-      record(
-        j,
-        "specification_approved",
-        "Requester approved the exact production artifact and parameters.",
-      );
+    return mutate(this.store, (s) => this.approveInState(s, jobId, body));
+  }
+  private approveInState(s: State, jobId: string, body: any) {
+    const j = s.jobs[jobId];
+    requireThat(
+      j.spec.permission === "authorized",
+      "CONTENT_REVIEW",
+      "An operator must resolve unclear artwork permission before checkout.",
+    );
+    requireThat(
+      j.paymentState === "unpaid" &&
+        !j.attemptId &&
+        j.productionState !== "cancelled",
+      "LOCKED",
+      "This order cannot be reapproved.",
+    );
+    requireThat(
+      body.specVersion === j.specVersion &&
+        body.artifactSha256 === j.artifact.sha256,
+      "STALE_APPROVAL",
+      "Approve the current preview and specification.",
+    );
+    const currentHash = specificationHash(j);
+    // Retried approval must preserve a quote and its reservation instead of
+    // moving an already quoted order back to a state checkout cannot use.
+    if (
+      j.approvedSpecHash === currentHash &&
+      ["approved", "quoted"].includes(j.productionState)
+    )
       return j;
-    });
+    j.approvedSpecHash = currentHash;
+    j.productionState = "approved";
+    record(
+      j,
+      "specification_approved",
+      "Requester approved the exact production artifact and parameters.",
+    );
+    return j;
   }
   async quote(jobId: string, autoAccept = false) {
-    return mutate(this.store, (s) => {
-      const j = s.jobs[jobId];
+    return mutate(this.store, (s) => this.quoteInState(s, jobId, autoAccept));
+  }
+  private quoteInState(
+    s: State,
+    jobId: string,
+    autoAccept: boolean,
+    preserveLiveReplay = false,
+  ) {
+    const j = s.jobs[jobId];
+    requireThat(
+      j.approvedSpecHash === specificationHash(j),
+      "APPROVAL_REQUIRED",
+      "Approve the current production preview first.",
+    );
+    requireThat(
+      j.paymentState === "unpaid" && !j.attemptId,
+      "LOCKED",
+      "This order already has a payment or dispatch.",
+    );
+    requireThat(
+      ["approved", "quoted"].includes(j.productionState),
+      "ORDER_CLOSED",
+      "Only an approved active order can be quoted.",
+    );
+    const reservedMachine = ownValue(s.machines, j.machineId ?? "");
+    const liveQuote =
+      j.quote &&
+      Date.parse(j.quote.expiresAt) > Date.now() &&
+      reservedMachine?.reservation?.jobId === j.id &&
+      (!preserveLiveReplay ||
+        (j.quote.specHash === j.approvedSpecHash &&
+          (!j.spec.recommendedMachineId ||
+            reservedMachine.id === j.spec.recommendedMachineId) &&
+          Date.parse(reservedMachine.reservation.expiresAt) > Date.now()))
+        ? j.quote
+        : null;
+    // A lost reply may be retried after readiness changes. Returning an already
+    // saved live quote authorizes no new work; checkout rechecks readiness.
+    if (preserveLiveReplay && liveQuote && (!autoAccept || liveQuote.accepted))
+      return j;
+    if (j.spec.recommendedMachineId) {
+      const recommended = ownValue(s.machines, j.spec.recommendedMachineId);
       requireThat(
-        j.approvedSpecHash === specificationHash(j),
-        "APPROVAL_REQUIRED",
-        "Approve the current production preview first.",
+        recommended &&
+          machineSupportsSpec(
+            recommended,
+            j.spec,
+            this.config.mode,
+            Date.now(),
+            j.id,
+          ),
+        "RECOMMENDED_MACHINE_UNAVAILABLE",
+        "The recommended machine is no longer available for this artwork. Request and approve a fresh recommendation before quoting; another machine was not substituted.",
       );
-      requireThat(
-        j.paymentState === "unpaid" && !j.attemptId,
-        "LOCKED",
-        "This order already has a payment or dispatch.",
-      );
-      requireThat(
-        ["approved", "quoted"].includes(j.productionState),
-        "ORDER_CLOSED",
-        "Only an approved active order can be quoted.",
-      );
-      if (j.spec.recommendedMachineId) {
-        const recommended = ownValue(s.machines, j.spec.recommendedMachineId);
+    }
+    if (liveQuote) {
+      if (autoAccept) {
         requireThat(
-          recommended &&
-            machineSupportsSpec(
-              recommended,
-              j.spec,
-              this.config.mode,
-              Date.now(),
-              j.id,
-            ),
-          "RECOMMENDED_MACHINE_UNAVAILABLE",
-          "The recommended machine is no longer available for this artwork. Request and approve a fresh recommendation before quoting; another machine was not substituted.",
+          j.spec.budgetMandate?.enabled &&
+            liveQuote.totalCents <= j.spec.budgetMandate.capCents,
+          "MANDATE_REQUIRED",
+          "Automatic acceptance needs an explicit mandate covering the approved quote.",
         );
-      }
-      if (
-        j.quote &&
-        Date.parse(j.quote.expiresAt) > Date.now() &&
-        j.machineId &&
-        s.machines[j.machineId].reservation?.jobId === j.id
-      ) {
-        if (autoAccept) {
-          requireThat(
-            j.spec.budgetMandate?.enabled &&
-              j.quote.totalCents <= j.spec.budgetMandate.capCents,
-            "MANDATE_REQUIRED",
-            "Automatic acceptance needs an explicit mandate covering the approved quote.",
-          );
-          j.quote.accepted = true;
+        if (!preserveLiveReplay || !liveQuote.accepted) {
+          liveQuote.accepted = true;
           record(
             j,
             "mandate_accepted",
             "Existing approved quote accepted within explicit budget mandate.",
           );
         }
-        return j;
       }
-      const machine = Object.values(s.machines)
-        .filter(
-          (m) =>
-            (!j.spec.recommendedMachineId ||
-              m.id === j.spec.recommendedMachineId) &&
-            machineSupportsSpec(m, j.spec, this.config.mode),
-        )
-        .sort((a, b) => this.price(a, j) - this.price(b, j))[0];
-      requireThat(
-        machine,
-        "NO_MACHINE",
-        "No ready machine supports this output. Ask the owner to calibrate, list and resume a matching machine.",
-      );
-      const card = machine.priceCard;
-      const items = [
-        { label: "Consumables", cents: card.consumables * j.spec.quantity },
-        { label: "Machine time", cents: card.machine * j.spec.quantity },
-        { label: "Owner handling", cents: card.handling },
-        { label: "Platform fee", cents: card.platform },
-      ];
-      const totalCents = items.reduce((a, b) => a + b.cents, 0);
-      if (autoAccept)
-        requireThat(
-          j.spec.budgetMandate?.enabled &&
-            totalCents <= j.spec.budgetMandate.capCents,
-          "MANDATE_REQUIRED",
-          "Automatic acceptance needs an explicit budget mandate covering this approved quote.",
-        );
-      const expiresAt = new Date(
-        Date.now() + this.config.quoteMs,
-      ).toISOString();
-      j.machineId = machine.id;
-      j.quote = {
-        id: id("quote"),
-        version: (j.quote?.version ?? 0) + 1,
-        expiresAt,
-        specHash: j.approvedSpecHash!,
-        items,
-        totalCents,
-        ownerCents: totalCents - card.platform,
-        platformCents: card.platform,
-        currency: "USD",
-        paymentMode: this.config.paymentMode,
-        collectionPoint: machine.collectionPoint,
-        accepted: autoAccept,
-      };
-      machine.reservation = { jobId: j.id, expiresAt };
-      j.productionState = "quoted";
-      record(
-        j,
-        "quoted",
-        "Machine reserved until quote expiry. Prices are an unmeasured development price card.",
-      );
       return j;
+    }
+    const machine = Object.values(s.machines)
+      .filter(
+        (m) =>
+          (!j.spec.recommendedMachineId ||
+            m.id === j.spec.recommendedMachineId) &&
+          machineSupportsSpec(m, j.spec, this.config.mode),
+      )
+      .sort((a, b) => this.price(a, j) - this.price(b, j))[0];
+    requireThat(
+      machine,
+      "NO_MACHINE",
+      "No ready machine supports this output. Ask the owner to calibrate, list and resume a matching machine.",
+    );
+    const card = machine.priceCard;
+    const items = [
+      { label: "Consumables", cents: card.consumables * j.spec.quantity },
+      { label: "Machine time", cents: card.machine * j.spec.quantity },
+      { label: "Owner handling", cents: card.handling },
+      { label: "Platform fee", cents: card.platform },
+    ];
+    const totalCents = items.reduce((a, b) => a + b.cents, 0);
+    if (autoAccept)
+      requireThat(
+        j.spec.budgetMandate?.enabled &&
+          totalCents <= j.spec.budgetMandate.capCents,
+        "MANDATE_REQUIRED",
+        "Automatic acceptance needs an explicit budget mandate covering this approved quote.",
+      );
+    const expiresAt = new Date(Date.now() + this.config.quoteMs).toISOString();
+    j.machineId = machine.id;
+    j.quote = {
+      id: id("quote"),
+      version: (j.quote?.version ?? 0) + 1,
+      expiresAt,
+      specHash: j.approvedSpecHash!,
+      items,
+      totalCents,
+      ownerCents: totalCents - card.platform,
+      platformCents: card.platform,
+      currency: "USD",
+      paymentMode: this.config.paymentMode,
+      collectionPoint: machine.collectionPoint,
+      accepted: autoAccept,
+    };
+    machine.reservation = { jobId: j.id, expiresAt };
+    j.productionState = "quoted";
+    record(
+      j,
+      "quoted",
+      "Machine reserved until quote expiry. Prices are an unmeasured development price card.",
+    );
+    return j;
+  }
+  async approveAndQuote(
+    jobId: string,
+    body: {
+      artifactSha256: string;
+      specVersion: number;
+      recommendedMachineId: string | null;
+      autoAccept?: boolean;
+    },
+  ) {
+    requireThat(
+      body &&
+        typeof body === "object" &&
+        typeof body.artifactSha256 === "string" &&
+        /^[a-f0-9]{64}$/.test(body.artifactSha256) &&
+        Number.isSafeInteger(body.specVersion) &&
+        body.specVersion > 0 &&
+        (body.recommendedMachineId === null ||
+          (typeof body.recommendedMachineId === "string" &&
+            /^[A-Za-z0-9_-]{1,128}$/.test(body.recommendedMachineId))) &&
+        (body.autoAccept === undefined || typeof body.autoAccept === "boolean"),
+      "INVALID_APPROVAL",
+      "Confirm the displayed production artifact, specification version and recommended machine before requesting its quote.",
+      422,
+    );
+    return mutate(this.store, (s) => {
+      const j = ownValue(s.jobs, jobId);
+      requireThat(j, "NOT_FOUND", "Order not found.", 404);
+      requireThat(
+        (j.spec.recommendedMachineId ?? null) === body.recommendedMachineId,
+        "STALE_APPROVAL",
+        "The recommended machine changed. Review the current production preview before requesting a quote.",
+      );
+      this.approveInState(s, jobId, body);
+      return this.quoteInState(s, jobId, body.autoAccept === true, true);
     });
   }
   price(m: Machine, j: Job) {

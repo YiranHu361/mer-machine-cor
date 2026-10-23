@@ -1,0 +1,347 @@
+/* One task at a time: pictures first, decisions only when the app needs one. */
+:root {
+  background: #f7f9fc;
+  --paper: #fff;
+}
+body {
+  background: #f7f9fc;
+}
+.site-header {
+  max-width: 1200px;
+  padding: 20px 28px;
+}
+.brand {
+  font-size: 25px;
+  gap: 8px;
+}
+.brand-mark {
+  width: 29px;
+  height: 32px;
+  font-size: 30px;
+}
+.brand-note {
+  display: none;
+}
+.site-header nav {
+  gap: 22px;
+}
+.site-header nav a {
+  font-size: 13px;
+  padding: 8px 0;
+}
+.modebar {
+  background: transparent;
+  border-block: 1px solid var(--line);
+  padding: 8px 28px;
+  gap: 12px;
+  min-height: 36px;
+  font-size: 11px;
+}
+.modebar .mode-detail {
+  position: relative;
+  border: 0;
+  margin-left: 0;
+  padding-left: 0;
+  font-size: 11px;
+}
+.modebar .mode-detail summary {
+  min-height: 24px;
+  cursor: pointer;
+}
+.modebar .mode-detail > span {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  top: 30px;
+  width: 180px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 4px 12px #22314d12;
+}
+#main {
+  margin-inline: auto;
+  max-width: 1200px;
+  padding: 44px 28px;
+}
+.site-footer {
+  max-width: 1200px;
+  padding: 22px 28px;
+  margin: 0 auto;
+  border: 0;
+  color: var(--muted);
+}
+.requester {
+  padding: 0;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.requester.picture-first {
+  max-width: 720px;
+}
+.requester .panel-heading h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+}
+.requester .panel-heading {
+  margin-bottom: 12px;
+}
+.requester .intake-panel {
+  padding: 24px;
+  border-color: #e0e6ef;
+  box-shadow: none;
+}
+.requester.picture-first .intake-panel {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.requester .picture-intro {
+  font-size: 15px;
+  margin: 0 0 25px;
+  color: var(--muted);
+}
+.requester .upload-workbench {
+  max-width: none;
+}
+.requester .picture-upload {
+  min-height: 220px;
+  padding: 25px;
+  border: 1px dashed #9dadcc;
+  background: #f0f4ff;
+  border-radius: 9px;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+.requester .picture-upload strong {
+  font-size: 18px;
+}
+.requester .upload-symbol {
+  background: transparent;
+  box-shadow: none;
+  border: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  font-size: 34px;
+}
+.requester .picture-upload.has-pictures {
+  min-height: 52px;
+  padding: 10px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 12px;
+}
+.requester .picture-upload.has-pictures strong {
+  font-size: 13px;
+}
+.requester .picture-upload.has-pictures .upload-symbol {
+  display: none;
+}
+.requester .originals {
+  margin: 12px 0 20px;
+  gap: 12px;
+}
+.requester .originals figure {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.requester .originals img {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #edf2f7;
+}
+.requester .originals figcaption {
+  margin-top: 6px;
+  font-size: 11px;
+}
+.requester .picture-recommendation {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+.requester .recommendation-top {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.requester .recommendation-top .eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+.requester .picture-recommendation h3 {
+  font-size: 19px;
+}
+.requester .recommended-device {
+  margin: 8px 0 12px;
+  padding: 0;
+  border: 0;
+}
+.requester .recommended-device svg {
+  width: 40px;
+  height: 40px;
+}
+.requester .recommended-device strong {
+  font-size: 13px;
+}
+.requester .recommended-device span {
+  font-size: 11px;
+}
+.requester .picture-context,
+.requester .advanced-specification {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.requester .picture-context > summary,
+.requester .advanced-specification > summary {
+  font-size: 13px;
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.requester .picture-context[open] {
+  padding-bottom: 14px;
+}
+.requester .picture-context .field {
+  margin-top: 8px;
+}
+.requester .recommendation-details {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.requester .recommendation-details > summary {
+  cursor: pointer;
+  min-height: 34px;
+  padding: 8px 0;
+}
+.requester .recommendation-details p {
+  font-size: 12px;
+}
+.requester .picture-permission {
+  background: transparent;
+  padding: 8px 0;
+  border: 0;
+  margin-bottom: 10px;
+}
+.requester .picture-permission .check {
+  font-size: 13px;
+  align-items: start;
+}
+.requester .picture-permission small {
+  font-size: 11px;
+}
+.requester .orders-section {
+  margin-top: 44px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.requester .orders-section h2 {
+  font-size: 19px;
+}
+.requester .order-row {
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.requester .order-panel {
+  box-shadow: none;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.requester .ticket-title {
+  font-size: 23px;
+}
+.requester .phase-line {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.requester .request-state-details {
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.requester .request-state-details > summary,
+.requester .price-breakdown > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  min-height: 34px;
+  font-size: 12px;
+}
+.requester .state-facts {
+  margin-top: 8px;
+}
+.requester .price-breakdown {
+  margin-bottom: 8px;
+}
+.requester .quote {
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .site-header {
+    padding: 16px 20px;
+    gap: 12px;
+  }
+  .site-header nav {
+    gap: 15px;
+  }
+  .site-header nav a {
+    font-size: 12px;
+  }
+  .modebar {
+    padding: 7px 20px;
+    gap: 6px 10px;
+  }
+  #main {
+    padding: 32px 20px;
+  }
+  .requester .panel-heading h1 {
+    font-size: 27px;
+  }
+  .requester .picture-intro {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+  .requester .picture-upload {
+    min-height: 200px;
+  }
+  .requester .picture-upload.has-pictures > span:not(.upload-symbol) {
+    display: none;
+  }
+  .requester .intake-panel {
+    padding: 20px;
+  }
+  .requester .originals img {
+    max-height: 260px;
+  }
+  .requester .recommendation-top {
+    flex-wrap: wrap;
+  }
+  .requester .recommendation-top .badge {
+    font-size: 10px;
+  }
+  .site-footer {
+    padding: 18px 20px;
+    gap: 12px;
+    font-size: 11px;
+  }
+}

@@ -1,6 +1,10 @@
 # Browser verification evidence
 
-Current checkpoint: 2026-10-23 06:04 Pacific. **198 cases pass in each of Chromium, Firefox and WebKit**; 48 automated A/AA scans find 0 violations. Keyboard and visual checks are separate; this is not full accessibility conformance. [Source/counts/provenance](../../docs/evidence/overnight-tenth-qa.json), [ongoing QA](../../docs/overnight-qa.md). Final reports: `overnight-tenth-{chromium,firefox,webkit}-browser.json`.
+Current minimal-UI checkpoint:260 full built cases pass in each of Chromium/Firefox/WebKit,0 failed/skipped/flaky;60 automated A/AA scans find0 violations. [Provenance and boundaries](../../docs/evidence/minimal-ui-qa.json). Reports: `minimal-ui-{chromium,firefox,webkit}-browser.json`. `minimal-ui-empty-320.png` and `minimal-ui-empty-1440.png` are isolated keyboard/intake fixture views. `minimal-ui-native-*.png` use actual built UI/retained Spacetime/local image statistics: requester upload/recommendation/preview/unpaid price and read-only provider desktop/mobile views. `minimal-ui-sse-reconnected.png` records the actual retained restart with polling disabled. Required physical/live acceptance and earlier interrupted endurance observation remain incomplete; heartbeat paused.
+
+The entries below are historical checkpoints, not the current screen or verification count.
+
+Historical checkpoint: 2026-10-23 06:04 Pacific. **198 cases pass in each of Chromium, Firefox and WebKit**; 48 automated A/AA scans find 0 violations. Keyboard and visual checks are separate; this is not full accessibility conformance. [Source/counts/provenance](../../docs/evidence/overnight-tenth-qa.json), [ongoing QA](../../docs/overnight-qa.md). Final reports: `overnight-tenth-{chromium,firefox,webkit}-browser.json`.
 
 [Local calibration error recovery at 320px](overnight-calibration-operator-error-320.png) uses intercepted APIs: the local alert and enabled Refresh stay visible/focused, and newer operator focus is respected. [Fresh preparation](overnight-calibration-retry-320.png) retains saved history, uses fresh unchecked readiness and labels local unsent cancellation explicitly. Separate buttons distinguish unusable-output rejection and durable cancellation before device acceptance. No physical operation is represented by these fixtures.
 

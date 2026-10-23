@@ -1,3 +1,4 @@
+import { openHandlingSteps } from "./provider-controls";
 import { test, expect, type Page, type Route } from "@playwright/test";
 
 const pixel =
@@ -163,6 +164,7 @@ test("an old owner refresh cannot restore preparation after a confirmed handling
     hold = true;
     await refresh(page);
     await expect.poll(() => entered).toBe(true);
+    await openHandlingSteps(page.locator(".owner-job"));
     for (const label of [
       "Output removed",
       "Order label attached",
@@ -212,22 +214,20 @@ test("an old requester refresh cannot roll a newer order back when its row is se
   try {
     await page.goto("/");
     await expect(page.locator(".ticket-title")).toHaveText(
-      "Check your production file",
+      "Review your preview",
     );
     hold = true;
     await refresh(page);
     await expect.poll(() => entered).toBe(true);
     state = { ...state, version: 2, productionState: "approved" };
     await refresh(page);
-    await expect(page.locator(".ticket-title")).toHaveText(
-      "Production file approved",
-    );
+    await expect(page.locator(".ticket-title")).toHaveText("Preview approved");
     delayed.resolve();
     await expect.poll(() => returned).toBe(true);
     await renderNetworkResult(page);
     await page.locator(".order-row").click();
     expect(await page.locator(".ticket-title").textContent()).toBe(
-      "Production file approved",
+      "Preview approved",
     );
     expect(await page.locator(".order-row .badge").textContent()).toBe(
       "approved",
@@ -283,7 +283,7 @@ test("an old owner authentication error cannot end a successfully reopened sessi
   try {
     await page.goto("/owner");
     const clear = page.getByRole("heading", {
-      name: "The counter is clear.",
+      name: "You’re all caught up",
       exact: true,
     });
     await expect(clear).toBeVisible();
@@ -351,15 +351,13 @@ test("authoritative revisions win when an earlier request reads the newer snapsh
   try {
     await page.goto("/");
     await expect(page.locator(".ticket-title")).toHaveText(
-      "Check your production file",
+      "Review your preview",
     );
     newerRequest = true;
     await refresh(page);
     await expect.poll(() => held).toBe(true);
     await refresh(page);
-    await expect(page.locator(".ticket-title")).toHaveText(
-      "Production file approved",
-    );
+    await expect(page.locator(".ticket-title")).toHaveText("Preview approved");
     delayed.resolve();
     await expect.poll(() => returned).toBe(true);
     await renderNetworkResult(page);

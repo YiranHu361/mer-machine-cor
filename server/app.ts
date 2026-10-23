@@ -708,6 +708,8 @@ export function createApp(
   });
   for (const [route, action] of Object.entries({
     approve: (jobId: string, b: any) => service.approve(jobId, b),
+    "approve-and-quote": (jobId: string, b: any) =>
+      service.approveAndQuote(jobId, b),
     quote: (jobId: string, b: any) =>
       service.quote(jobId, b.autoAccept === true),
     checkout: (jobId: string, b: any) =>

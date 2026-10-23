@@ -88,7 +88,7 @@ for (const context of [
     try {
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const approve = page.getByRole("button", {
-        name: "Approve production file",
+        name: "Approve preview & see price",
         exact: true,
       });
       await expect(approve).toBeEnabled();
@@ -108,13 +108,13 @@ for (const context of [
         await expect(approve).toBeEnabled();
         await page
           .getByRole("button", {
-            name: "Edit artwork or specifications",
+            name: "Edit item",
             exact: true,
           })
           .click();
         await page
           .getByRole("button", {
-            name: "Keep existing specification",
+            name: "Keep current item",
             exact: true,
           })
           .click();

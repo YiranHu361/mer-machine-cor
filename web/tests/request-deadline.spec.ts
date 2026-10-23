@@ -1,11 +1,13 @@
 import {
   useManualSettings,
+  openPurposeNote,
   authorizePictures,
   recommendationFor,
 } from "./requester-manual";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { openMachineSettings } from "./provider-controls";
 
 function job(id = "deadline_saved") {
   const at = new Date().toISOString();
@@ -203,6 +205,12 @@ async function fixture(
     });
   });
   await page.goto(owner ? "/owner" : "/");
+  if (!owner && !initial.length && !hangSession && !hangSessionCreation) {
+    await expect(
+      page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+    ).toBeVisible();
+    await openPurposeNote(page);
+  }
   return state;
 }
 async function upload(page: Page) {
@@ -232,7 +240,7 @@ test("an interrupted creation stops spinning, recovers its late committed order 
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
   await authorizePictures(page);
   const submit = page.getByRole("button", {
-    name: "Make production preview",
+    name: "Preview your item",
     exact: true,
   });
   await submit.click();
@@ -266,6 +274,7 @@ test("an interrupted creation stops spinning, recovers its late committed order 
   expect(state.sessions).toBe(0);
   state.held = "";
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await openPurposeNote(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Recover a stalled creation");
@@ -307,7 +316,7 @@ test("a stalled specification save keeps the draft and recovers a late saved ver
   state.held = "/api/jobs/deadline_saved/spec";
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -315,7 +324,7 @@ test("a stalled specification save keeps the draft and recovers a late saved ver
     .getByLabel("What is it for?", { exact: true })
     .fill("Late saved specification");
   const save = page.getByRole("button", {
-    name: "Save changes & rebuild preview",
+    name: "Update preview",
     exact: true,
   });
   await save.click();
@@ -337,6 +346,64 @@ test("a stalled specification save keeps the draft and recovers a late saved ver
     "Late saved specification",
   );
   expect(state.posts).toHaveLength(1);
+});
+
+test("a stalled combined approval keeps its exact displayed intent and recovers the late quote without a second action (offline fixture)", async ({
+  page,
+}) => {
+  const state = await fixture(page, [job()]);
+  const path = "/api/jobs/deadline_saved/approve-and-quote";
+  state.held = path;
+  const approval = page.getByRole("button", {
+    name: "Approve preview & see price",
+    exact: true,
+  });
+  await expect(approval).toBeEnabled();
+  await approval.click();
+  await expect.poll(() => state.posts.length).toBe(1);
+  expect(state.posts[0]).toMatchObject({
+    path,
+    body: {
+      artifactSha256: "a".repeat(64),
+      specVersion: 1,
+      recommendedMachineId: null,
+      autoAccept: false,
+    },
+  });
+  await expire(page);
+  await page.clock.fastForward(180_001);
+  expect(state.posts.map((item) => item.path)).toEqual([path]);
+  state.jobs[0] = {
+    ...state.jobs[0],
+    version: 2,
+    productionState: "quoted",
+    approvedSpecHash: "late_exact_approved_spec",
+    quote: {
+      id: "deadline_late_quote",
+      version: 1,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      items: [],
+      totalCents: 75,
+      ownerCents: 60,
+      platformCents: 15,
+      currency: "USD",
+      paymentMode: "mock",
+      collectionPoint: "Deadline desk",
+      accepted: false,
+    },
+  };
+  await page.clock.fastForward(2501);
+  await expect(
+    page.getByRole("heading", { name: "Your quote is ready", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Confirm mock payment · $0.75",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(state.posts.map((item) => item.path)).toEqual([path]);
+  expect(state.sessions).toBe(0);
 });
 
 for (const action of ["checkout", "dispatch"] as const)
@@ -404,12 +471,8 @@ test("a stalled owner settings save releases busy controls and keeps the exact e
 }) => {
   const state = await fixture(page, [], true);
   state.held = "/api/owner/machines/deadline_machine";
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Media, prices, hours & policy", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openMachineSettings(page.locator(".owner-machine"));
   const input = page.getByLabel("Collection point", { exact: true });
   await input.fill("Unconfirmed deadline collection point");
   await page
@@ -469,7 +532,7 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
   await authorizePictures(page);
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect
     .poll(() =>
@@ -540,7 +603,7 @@ for (const missingJob of [false, true])
     state.failureStatus = missingJob ? 0 : 500;
     state.missingJob = missingJob;
     const submit = page.getByRole("button", {
-      name: "Make production preview",
+      name: "Preview your item",
       exact: true,
     });
     await submit.click();
@@ -583,8 +646,12 @@ test("retry after a stalled session creation first recovers the existing identit
   await expect(page.getByRole("alert")).toContainText("result is unknown");
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(
-    page.getByLabel("What is it for?", { exact: true }),
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
   ).toBeVisible();
+  await openPurposeNote(page);
+  await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
+    "",
+  );
   expect(state.sessions).toBe(1);
   expect(state.posts.map((item) => item.path)).toEqual(["/api/session"]);
 });

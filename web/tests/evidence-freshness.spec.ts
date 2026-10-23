@@ -1,3 +1,4 @@
+import { openProviderDetails } from "./provider-controls";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -62,6 +63,11 @@ async function fixture(
       material: "thermal-paper",
       permission: "authorized",
       crop: "contain",
+    },
+    artifact: {
+      id: "saved_source_artifact",
+      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
+      sha256: "a".repeat(64),
     },
     productionState: "needs_review",
     paymentState: "release_pending",
@@ -190,12 +196,8 @@ async function fixture(
   });
   await page.goto(kind === "requester" ? "/" : "/owner");
   if (isCalibration) {
-    await page
-      .getByRole("tab", { name: "Machines & policy", exact: true })
-      .click();
-    await page
-      .getByText("Physical calibration job & inspection", { exact: true })
-      .click();
+    await page.getByRole("tab", { name: "Machines", exact: true }).click();
+    await openProviderDetails(page, "Physical calibration job & inspection");
   }
   const surface = page.locator(
     isCalibration

@@ -1,4 +1,8 @@
 import {
+  openMachineSettings,
+  openTrialMeasurements,
+} from "./provider-controls";
+import {
   test,
   expect,
   type Page,
@@ -150,7 +154,7 @@ async function fixture(
   await page.goto("/owner");
   await expect(
     page.getByRole("heading", {
-      name: "Keep the counter moving.",
+      name: "Your workshop",
       exact: true,
     }),
   ).toBeVisible();
@@ -164,12 +168,8 @@ async function fixture(
   };
 }
 async function machineForm(page: Page) {
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Media, prices, hours & policy", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openMachineSettings(page.locator(".owner-machine"));
   return page.locator(".machine-settings form");
 }
 async function documentIdentity(page: Page) {
@@ -268,13 +268,9 @@ test("failed machine saves keep all changes through owner view switches and allo
   await expect(
     form.getByLabel("Collection point", { exact: true }),
   ).toHaveValue("West counter — unsaved draft");
-  await page.getByRole("tab", { name: "Payment records", exact: true }).click();
-  await page
-    .getByRole("tab", { name: "Orders & handling", exact: true })
-    .click();
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Payments", exact: true }).click();
+  await page.getByRole("tab", { name: "Orders", exact: true }).click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
   await expect(
     form.getByLabel("Collection point", { exact: true }),
   ).toBeVisible();
@@ -358,15 +354,15 @@ test("payment and trial drafts survive view switches without authorizing or savi
   await recovery
     .getByLabel("Payment recovery reason", { exact: true })
     .fill("Observed reference retained while checking payment records.");
-  await page.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(page.locator(".owner-job"));
   const trial = page.getByRole("form", {
     name: "Record trial costs and handling",
     exact: true,
   });
   await trial.getByLabel("Consumables (USD cents)", { exact: true }).fill("31");
-  await page.getByRole("tab", { name: "Payment records", exact: true }).click();
+  await page.getByRole("tab", { name: "Payments", exact: true }).click();
   await expect(trial).toBeHidden();
-  await page.getByRole("tab", { name: "Payment records", exact: true }).focus();
+  await page.getByRole("tab", { name: "Payments", exact: true }).focus();
   for (let step = 0; step < 14; step++) {
     await page.keyboard.press("Tab");
     expect(
@@ -375,12 +371,8 @@ test("payment and trial drafts survive view switches without authorizing or savi
       ),
     ).not.toMatch(/^owner-(queue|machines)$/);
   }
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByRole("tab", { name: "Orders & handling", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await page.getByRole("tab", { name: "Orders", exact: true }).click();
   await expect(
     recovery.getByLabel("Confirmed Base Sepolia transaction hash", {
       exact: true,
@@ -402,7 +394,7 @@ test("a newer saved trial does not overwrite in-progress measured edits", async 
   page,
 }) => {
   const state = await fixture(page);
-  await page.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(page.locator(".owner-job"));
   const input = page.getByLabel("Consumables (USD cents)", { exact: true });
   await input.fill("31");
   state.job.economics = {

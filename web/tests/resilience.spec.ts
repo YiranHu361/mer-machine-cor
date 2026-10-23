@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { openPurposeNote, recommendationFor } from "./requester-manual";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -72,6 +73,8 @@ async function requesterFixture(
       });
     if (path === "/api/session")
       return json(route, { role: "requester", id: "fixture_requester" });
+    if (path === "/api/recommendations")
+      return json(route, recommendationFor(route.request().postDataJSON()));
     if (path === "/api/machines") return json(route, { machines: [] });
     if (path === "/api/catalog") return json(route, { models: [] });
     if (path === "/api/jobs") return json(route, { jobs });
@@ -118,6 +121,10 @@ test("invalid and failed uploads preserve the form and allow a deliberate retry 
     return true;
   });
   await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
+  await openPurposeNote(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Preserve my workshop label draft");
@@ -193,7 +200,7 @@ for (const failure of ["unavailable", "corrupt"] as const)
     ).toContainText("production preview is unavailable");
     await expect(
       page.getByRole("button", {
-        name: "Approve production file",
+        name: "Approve preview & see price",
         exact: true,
       }),
     ).toBeDisabled();
@@ -203,7 +210,7 @@ for (const failure of ["unavailable", "corrupt"] as const)
       .click();
     await expect(
       page.getByRole("button", {
-        name: "Approve production file",
+        name: "Approve preview & see price",
         exact: true,
       }),
     ).toBeEnabled();

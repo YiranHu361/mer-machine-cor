@@ -40,6 +40,11 @@ async function fixture(page: Page, kind: "result" | "preview") {
     history: [],
     ...(kind === "result"
       ? {
+          artifact: {
+            id: "saved_source_artifact",
+            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
+            sha256: "a".repeat(64),
+          },
           attemptId: "image_deadline_attempt",
           evidence: {
             url,
@@ -224,7 +229,7 @@ for (const kind of ["result", "preview"] as const)
         if (kind === "preview")
           await expect(
             page.getByRole("button", {
-              name: "Approve production file",
+              name: "Approve preview & see price",
               exact: true,
             }),
           ).toBeDisabled();
@@ -243,7 +248,7 @@ for (const kind of ["result", "preview"] as const)
         if (kind === "preview")
           await expect(
             page.getByRole("button", {
-              name: "Approve production file",
+              name: "Approve preview & see price",
               exact: true,
             }),
           ).toBeEnabled();

@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-23T21:28:53.288Z",
+  "status": "PASS",
+  "boundary": "Actual built UI and retained SpacetimeDB, read-only workshop inspection after owner sign-in",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "pageErrors": [],
+  "jobMutations": 0,
+  "machineMutations": 0,
+  "payments": 0,
+  "physicalJobs": 0,
+  "screenshots": [
+    "web/evidence/minimal-ui-native-owner-orders-desktop.png",
+    "web/evidence/minimal-ui-native-owner-orders-mobile.png",
+    "web/evidence/minimal-ui-native-owner-machines-desktop.png"
+  ]
+}

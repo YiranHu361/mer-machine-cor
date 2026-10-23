@@ -1,4 +1,4 @@
-import { useManualSettings } from "./requester-manual";
+import { useManualSettings, openPurposeNote } from "./requester-manual";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -155,7 +155,7 @@ async function fixture(page: Page, initial: ReturnType<typeof job>[]) {
       ];
       return json(route, { job: revised });
     }
-    if (path.endsWith("/approve")) state.approvals++;
+    if (path.endsWith("/approve-and-quote")) state.approvals++;
     if (path === "/api/events")
       return route.fulfill({
         status: 200,
@@ -186,7 +186,7 @@ async function replaceWithTwoImages(page: Page) {
 async function edit(page: Page) {
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -194,13 +194,16 @@ async function edit(page: Page) {
 async function save(page: Page) {
   await page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();
   await expect(page.locator(".hash-note")).toContainText("cccccccccccccccc");
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeVisible();
 }
 
@@ -225,7 +228,7 @@ test("discarded multi-image replacements and suggestions never move from order A
     page.getByLabel("Artwork permission", { exact: true }),
   ).toHaveValue("unclear");
   await page
-    .getByRole("button", { name: "Keep existing specification", exact: true })
+    .getByRole("button", { name: "Keep current item", exact: true })
     .click();
   await page.locator(".order-row").filter({ hasText: "job_b222" }).click();
   await edit(page);
@@ -278,7 +281,7 @@ test("canceling an artwork replacement restores the same order's saved sources (
   await edit(page);
   await replaceWithTwoImages(page);
   await page
-    .getByRole("button", { name: "Keep existing specification", exact: true })
+    .getByRole("button", { name: "Keep current item", exact: true })
     .click();
   await edit(page);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
@@ -298,6 +301,7 @@ test("a new multi-image draft keeps its originals through automatic format recom
   await expect(
     page.getByRole("region", { name: "Machine recommendation", exact: true }),
   ).toContainText("Sticker counter");
+  await openPurposeNote(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("color photo — keep both uploaded images");
@@ -335,7 +339,7 @@ test("a new multi-image draft keeps its originals through automatic format recom
     })
     .click();
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(page.locator(".hash-note")).toContainText("cccccccccccccccc");
   expect(state.saved[0].spec.assetIds).toEqual([

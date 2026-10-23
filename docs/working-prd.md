@@ -7,6 +7,10 @@ Fabrary starts with pictures. The requester uploads images, and the agent recomm
 The Cal Hacks build runs this loop on the team's three machines. Stickers on the Phomemo M02Pro are the main interactive demo, the Instax Mini Link 3 is the second output, and a short prepared print on the Bambu Lab A1 mini shows the same orchestration on a longer job. Known-device onboarding is shown live. Photo-to-3D and adapter generation for unfamiliar models stay visible stretch goals.
 The requester view has no output-type cards, machine selector or prepared-model chooser, including inside optional settings. The first screen centers on uploading pictures; machine identity and capabilities appear only after analysis as a read-only recommendation. Optional size, crop, quantity, rights review and budget refinements cannot silently remove or switch a recommended machine. Replacing pictures or changing their purpose on new-order or machine-bound drafts requires a fresh match before previewing. Existing reviewed prepared-3D records remain supported outside this image intake.
 
+The implemented interface starts with one upload target and no empty preview or order list. **Add a note** and **Optional print settings** are secondary to the pictures and recommendation. The provider workspace is a work inbox with **Orders**, **Machines** and **Payments** tabs. It shows the next required action first and keeps status facts, settings and history in native disclosures. Providers still explicitly confirm physical work; fewer visible controls do not imply automatic inspection or handling.
+
+The minimalism pass uses [Microsoft Copilot’s start screen](https://mobbin.com/screens/dfec08cd-925a-4145-852b-bbbdc30d3f59) for one primary input and quiet navigation, and [Square’s order list](https://mobbin.com/screens/9b7f70e1-3194-4995-b0bd-a74a3861198f) for a provider inbox with secondary filters. The app owns capability matching, preparation, quoting and status updates; people review the preview/payment and confirm physical work. Details open when needed instead of making every user complete setup fields up front.
+
 Design references inspected on Mobbin: [Square image upload](https://mobbin.com/screens/610ae606-5a0f-43d0-9787-9a5dfd893f8d) for a focused upload target and concise action hierarchy; [Recraft image review](https://mobbin.com/screens/df0d6d5b-2ebe-478d-be27-56dd738f7a07) for an image-led canvas with supporting details alongside it. Adapt those hierarchy principles to Fabrary's existing blue/ink/paper workshop identity; no reference assets are copied.
 
 The platform automates intake, preparation, matching, payment tracking, dispatch and visible-output checks. Owners still load media, clear machines, remove finished items and hand them off. The demo uses team-operated machines and test funds. Submission closes Sunday, October 25 at 9 AM PT, as the organizers' October 22 email states; the product name is still open.
@@ -21,7 +25,7 @@ The hackathon proves the transaction and the machine interface. Two or three con
 
 | User | Gives Fabrary | Receives | Still does |
 | --- | --- | --- | --- |
-| Requester | 1 to 4 images, intent, size, an approved preview, budget, pickup choice | Itemized quote, job progress, result photo, pickup code | Approves the output specification and collects the item |
+| Requester | 1 to 4 images, explicit artwork permission, an approved preview; optional note, print refinements and budget | Recommended result and machine, itemized quote, job progress, result photo, pickup code | Reviews the output, confirms payment and production, and collects the item |
 | Owner | A supported connected machine, loaded media, price card, hours, content rules | Standardized jobs, a status dashboard, a payout record | Prepares the machine, reloads media, clears outputs, handles collection and exceptions |
 
 
@@ -48,22 +52,22 @@ Out of scope for the hackathon: real customer funds, real postage, a public owne
 
 ### Requester flow
 
-1. Upload 1 to 4 images. The agent recommends an output and a suitable registered machine, explains the choice and fills supported dimensions, material, crop and a default quantity of one. A description is optional. Ask a short bundled clarification only when the pictures leave an essential choice unresolved. Technical settings remain an optional refinement, rather than an intake requirement. If vision is unavailable, identify limited local analysis honestly; if no suitable machine is available, say so without silently choosing an unsuitable output.
-2. Approve a production preview with dimensions, crop, material, color limits and estimated turnaround. A thermal sticker preview shows the actual monochrome conversion.
-3. Fabrary rechecks the recommended machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. A different machine requires a fresh recommendation and approval instead of a silent switch. The demo uses one designated collection point.
-4. Accept and pay. With a configured budget mandate, the agent may accept a quote for an already approved specification within that mandate; any change to price or output needs new approval.
-5. The approved artifact is dispatched. The requester sees preparation, payment, machine progress, verification and any owner action needed.
+1. Upload 1 to 4 images into one upload target. The agent recommends an output and a suitable registered machine, explains the choice and fills supported dimensions, material, crop and a default quantity of one. **Add a note** and **Optional print settings** offer secondary refinements after upload; neither is an intake requirement. Ask a short bundled clarification only when the pictures leave an essential choice unresolved. If vision is unavailable, identify limited local analysis honestly; if no suitable machine is available, say so without silently choosing an unsuitable output. Empty preview and order-history panels are absent until there is content to show.
+2. Confirm artwork permission explicitly and select **Preview your item**. If permission is uncertain, explicitly request owner review instead of inferring permission from the pictures. Inspect the production preview with dimensions, crop, material and color limits. A thermal sticker preview shows the actual monochrome conversion.
+3. Select **Approve preview & see price**. Fabrary atomically approves the displayed file/specification, rechecks the recommended machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. A failed quote cannot leave a newly approved intermediate state. A different machine requires a fresh recommendation and approval instead of a silent switch. The demo uses one designated collection point.
+4. Confirm the displayed mock or testnet payment separately. With a configured budget mandate, the agent may accept a quote for an already approved specification within that mandate; this never substitutes for checkout consent. Any change to price or output needs new approval.
+5. Select **Start production** after payment is confirmed. The approved artifact is dispatched only by this deliberate action. The requester sees payment, machine progress, verification and any owner action needed; analysis, preview creation and preview approval do not start a machine.
 6. A passing output check releases the held test amount to the owner's payable balance. Ambiguous evidence pauses release for operator review.
 7. Once the owner confirms the item is removed and safe to collect, the requester redeems a single-use pickup code.
 The requester can cancel before dispatch. Cancellation after payment but before dispatch initiates a refund; the job remains refund pending until the transaction is confirmed. After dispatch, an operator resolves the job; cancelling in the UI never means the hardware has stopped.
 
 ### Owner flow
 
-1. Install the node app, then connect and pair the supported machine.
-2. Confirm the model. The node installs a pinned adapter, reads capabilities and sets up camera access where needed.
-3. Set loaded media, price card, hours, maximum job length and content policy, then run and inspect a calibration job.
-4. List the machine. The node accepts one authorized job at a time and enforces declared capabilities and owner limits locally.
-5. After each job, remove, label and store the output, clear the tray or bed, and resume machine availability. The next job does not wait for collection. Mark the stored item ready for pickup, then record handoff when its pickup code is redeemed. Enter media estimates by hand when the device cannot report them.
+1. Configure the node connection, credentials, pairing and camera in the private local setup. Open the provider workspace with the owner code; the browser does not ask for a node URL or claim to discover devices automatically.
+2. In **Machines → Add a machine**, confirm the supported model and simulation/hardware mode. Registration checks the app-configured connection and capabilities. Each machine shows its actual next step, with saved pairing/configuration facts under **Connection details**.
+3. Use **Settings** for loaded media, price card, hours, maximum job length, collection point and content policy. Open **Machine checks** to explicitly inspect/clear and calibrate. Physical calibration still requires supervision, a finite authorized attempt and inspection of the associated result; simulation remains labeled.
+4. List the machine and resume only after the required checks. The node accepts one authorized job at a time and enforces declared capabilities and owner limits locally. **Orders** defaults to actionable work; search, filters and pages reach the rest. Production updates automatically, while order status, evidence, payment recovery, trial measurements and history remain available through native disclosures. **Payments** shows the ledger separately.
+5. After each job, remove, label and store the output and clear the tray or bed. One deliberate checkbox attests all four completed actions, or **Record steps separately** retains individual progress. The app never infers those confirmations from a camera frame. Mark the stored item ready for pickup and resume availability separately; the next job does not wait for collection. Record handoff when its pickup code is redeemed. Enter media estimates by hand when the device cannot report them.
 The target is under five minutes of active setup for a supported device, after installation, pairing, credentials and media are ready. Calibration and print time are reported separately. Unfamiliar models follow a separate supervised workflow.
 
 ### Output specifications
@@ -83,7 +87,7 @@ Unsupported dimensions and materials are rejected before quoting, and content is
 ### Architecture
 
 One backend application holds modules for intake, assets, registry, matching, jobs, payments, verification and fulfillment, and each owner installs one node. Every node exposes the same five tools, so orchestration stays the same across machines while each adapter keeps its own preparation and handling steps.
-A request runs down the right column from quote to payment to dispatch. The camera frame returns through the verifier, which decides whether the held test amount becomes payable, and fulfillment marks the item ready once the owner confirms preparation, then records collection after handoff.
+A requester moves from uploaded pictures to the production preview, quote, payment and explicit dispatch. Supporting settings and detailed states are disclosed when needed. The camera frame returns through the verifier, which decides whether the held test amount becomes payable, and fulfillment marks the item ready once the owner confirms preparation, then records collection after handoff.
 
 ### Components
 
@@ -124,6 +128,7 @@ A job records the requester, machine, approved specification version, artifact h
 ```
 
 The quote stores itemized integer minor-unit amounts, currency, payment mode, expiry and the approved specification hash. Changing the artifact, dimensions, material, quantity or price invalidates the matching approval. The sample budget is illustrative until measured costs replace it.
+The browser combines preview approval and quoting through `POST /api/jobs/:id/approve-and-quote`. Its body captures `artifactSha256`, positive `specVersion`, the exact `recommendedMachineId` (or `null` for a legacy unbound order) and optional boolean `autoAccept`. One store mutation validates that displayed identity and commits approval, reservation and quote together. A still-current replay preserves the live quote; stale identity or unavailable capacity fails without a partial approval. The endpoint neither pays nor dispatches. Quote acceptance by `autoAccept` remains conditional on the saved explicit budget mandate.
 The machine manifest lists adapter version, outputs, printable bounds, media, color modes, readiness, collection point, hours, handling requirements, price card, content policy, camera support and abort support, and reports unknown values explicitly.
 
 ### Job lifecycle and recovery

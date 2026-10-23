@@ -1,3 +1,4 @@
+import { openHandlingSteps } from "./provider-controls";
 import { test, expect, type Page, type Dialog } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -173,6 +174,7 @@ async function pageAwayAndBack(page: Page) {
 }
 async function checklist(page: Page, index = 0) {
   const order = orderFor(page, index);
+  await openHandlingSteps(order);
   for (const name of [
     "Output removed",
     "Order label attached",
@@ -421,6 +423,7 @@ test("changed evidence invalidates an off-screen review result and reason withou
       exact: true,
     }),
   ).toBeVisible();
+  await openHandlingSteps(orderFor(page, 4));
   await expect(
     orderFor(page, 4).getByRole("checkbox", {
       name: "Output removed",

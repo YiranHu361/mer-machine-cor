@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openOrderDetails, openProviderDetails } from "./provider-controls";
 
 const epoch = Date.UTC(2026, 9, 23, 8, 30);
 function pickupJob(index: number) {
@@ -102,7 +103,7 @@ async function ownerQueue(page: Page, initial: QueueJob[]) {
   await page.goto("/owner");
   await expect(
     page.getByRole("heading", {
-      name: "Keep the counter moving.",
+      name: "Your workshop",
       exact: true,
     }),
   ).toBeVisible();
@@ -202,9 +203,12 @@ test("a completed handoff moves to history and returns keyboard focus to queue c
     .selectOption("completed");
   await expect(first).toBeVisible();
   await expect(first.getByLabel("Pickup code", { exact: true })).toHaveCount(0);
-  await expect(first.locator(".job-states")).toContainText(
-    "Collection: collected",
-  );
+  await openProviderDetails(first, "Order details");
+  await expect(
+    first
+      .locator(".provider-order-facts dd")
+      .filter({ hasText: /^collected$/ }),
+  ).toBeVisible();
 });
 
 test("a settled follow-up leaves the active search safely and remains reachable in history", async ({
@@ -221,7 +225,7 @@ test("a settled follow-up leaves the active search safely and remains reachable 
   const search = page.getByLabel("Find an order", { exact: true });
   await search.fill("Collection order 1");
   const first = order(page, "Collection order 1");
-  await first.getByText("Recovery & order history", { exact: true }).click();
+  await openOrderDetails(first);
   await first
     .getByRole("button", { name: "Reconcile saved outcome", exact: true })
     .focus();
@@ -245,7 +249,10 @@ test("a settled follow-up leaves the active search safely and remains reachable 
     .getByRole("button", { name: "Show all orders", exact: true })
     .click();
   await expect(first).toBeVisible();
-  await expect(first.locator(".job-states")).toContainText("Payment: released");
+  await openProviderDetails(first, "Order details");
+  await expect(
+    first.locator(".provider-order-facts dd").filter({ hasText: /^released$/ }),
+  ).toBeVisible();
   await expect(order(page, "Collection order 2")).toBeVisible();
   await expect(search).toHaveValue("");
 });

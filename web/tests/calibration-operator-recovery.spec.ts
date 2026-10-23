@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { openProviderDetails } from "./provider-controls";
 import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 
@@ -434,12 +435,8 @@ async function fixture(
     );
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   if (options.existing === false)
     await expect(
       page.getByLabel("Calibration artwork", { exact: true }),

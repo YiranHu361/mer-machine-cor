@@ -1,3 +1,4 @@
+import { openPurposeNote } from "./requester-manual";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -186,8 +187,12 @@ for (const failure of ["getter", "quota"] as const) {
     await requester(page, job());
     await page.goto("/");
     await expect(
-      page.getByLabel("What is it for?", { exact: true }),
+      page.getByRole("heading", { name: "Upload your pictures", exact: true }),
     ).toBeVisible();
+    await openPurposeNote(page);
+    await expect(
+      page.getByLabel("What is it for?", { exact: true }),
+    ).toHaveValue("");
     await page.locator(".order-row").filter({ hasText: "job_stor" }).click();
     await expect(page.locator(".order-intent")).toHaveText(
       "Storage recovery fixture order",
@@ -405,9 +410,7 @@ test("denied session storage leaves owner calibration visible and blocks a new p
     );
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
   await page
     .getByText("Physical calibration job & inspection", { exact: true })
     .click();

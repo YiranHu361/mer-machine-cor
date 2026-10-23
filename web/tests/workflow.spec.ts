@@ -1,9 +1,20 @@
-import { useManualSettings, authorizePictures } from "./requester-manual";
+import {
+  useManualSettings,
+  authorizePictures,
+  openPurposeNote,
+} from "./requester-manual";
+import {
+  openProviderDetails,
+  openMachineSettings,
+  revealProviderControl,
+  openHandlingSteps,
+} from "./provider-controls";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
 async function recommendPictures(page: Page, intent: string) {
+  await openPurposeNote(page);
   await page.getByLabel("What is it for?", { exact: true }).fill(intent);
   await page
     .getByRole("button", { name: "Find suitable machine", exact: true })
@@ -57,19 +68,26 @@ test("requester and owner complete an honest simulated order, independent handli
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
   await expect(
-    ownerPage.getByRole("heading", { name: "Keep the counter moving." }),
+    ownerPage.getByRole("heading", { name: "Your workshop" }),
   ).toBeVisible();
-  await ownerPage.getByRole("tab", { name: "Machines & policy" }).click();
+  await ownerPage.getByRole("tab", { name: "Machines" }).click();
   const machine = ownerPage.locator(".owner-machine").filter({
     has: ownerPage.getByRole("heading", {
       name: "Sticker counter",
       exact: true,
     }),
   });
+  await openProviderDetails(ownerPage, "Add a machine");
   await ownerPage
     .getByRole("button", { name: "Register supported device", exact: true })
     .click();
   await expect(machine.locator(".machine-reason")).toContainText("Registered;");
+  await revealProviderControl(
+    machine.getByLabel(
+      "I inspected the output area, loaded media and cleared the machine.",
+      { exact: true },
+    ),
+  );
   await machine
     .getByLabel(
       "I inspected the output area, loaded media and cleared the machine.",
@@ -81,9 +99,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await expect(machine.locator(".machine-reason")).toContainText(
     "Simulated calibration passed",
   );
-  await machine
-    .getByText("Media, prices, hours & policy", { exact: true })
-    .click();
+  await openMachineSettings(machine);
   await machine.getByLabel("List this machine for requester discovery").check();
   const saved = ownerPage.waitForResponse(
     (r) =>
@@ -102,6 +118,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await expect(
     machine.getByRole("button", { name: "Resume machine", exact: true }),
   ).toBeDisabled();
+  await revealProviderControl(clearance);
   await clearance.check();
   await machine
     .getByRole("button", { name: "Resume machine", exact: true })
@@ -130,17 +147,15 @@ test("requester and owner complete an honest simulated order, independent handli
   await recommendPictures(requestPage, artworkIntent);
   await authorizePictures(requestPage);
   await requestPage
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(
     requestPage.getByAltText(/Actual production preview/),
   ).toBeVisible();
   await requestPage
-    .getByRole("button", { name: "Approve production file", exact: true })
+    .getByRole("button", { name: "Approve preview & see price", exact: true })
     .click();
-  await requestPage
-    .getByRole("button", { name: "Get a quote", exact: true })
-    .click();
+
   await expect(requestPage.locator(".quote")).toContainText("Mock payment");
   await requestPage
     .getByRole("button", { name: /Confirm mock payment/ })
@@ -165,10 +180,11 @@ test("requester and owner complete an honest simulated order, independent handli
       exact: false,
     }),
   ).toBeVisible();
-  await ownerPage.getByRole("tab", { name: "Orders & handling" }).click();
+  await ownerPage.getByRole("tab", { name: "Orders" }).click();
   const order = ownerPage.locator(".owner-job").filter({
     has: ownerPage.getByText(artworkIntent, { exact: true }),
   });
+  await openHandlingSteps(order);
   for (const label of [
     "Output removed",
     "Order label attached",
@@ -189,7 +205,13 @@ test("requester and owner complete an honest simulated order, independent handli
     path: "evidence/requester-ready-desktop.png",
     fullPage: true,
   });
-  await ownerPage.getByRole("tab", { name: "Machines & policy" }).click();
+  await ownerPage.getByRole("tab", { name: "Machines" }).click();
+  await revealProviderControl(
+    machine.getByLabel(
+      "I inspected the output area, loaded media and cleared the machine.",
+      { exact: true },
+    ),
+  );
   await machine
     .getByLabel(
       "I inspected the output area, loaded media and cleared the machine.",
@@ -214,14 +236,12 @@ test("requester and owner complete an honest simulated order, independent handli
   await recommendPictures(requestPage, cancellationIntent);
   await authorizePictures(requestPage);
   await requestPage
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await requestPage
-    .getByRole("button", { name: "Approve production file", exact: true })
+    .getByRole("button", { name: "Approve preview & see price", exact: true })
     .click();
-  await requestPage
-    .getByRole("button", { name: "Get a quote", exact: true })
-    .click();
+
   await requestPage
     .getByRole("button", { name: /Confirm mock payment/ })
     .click();
@@ -246,7 +266,7 @@ test("requester and owner complete an honest simulated order, independent handli
     .getByRole("button")
     .filter({ hasText: "ready for pickup" })
     .click();
-  await ownerPage.getByRole("tab", { name: "Orders & handling" }).click();
+  await ownerPage.getByRole("tab", { name: "Orders" }).click();
   await order.getByLabel("Pickup code", { exact: true }).fill(pickupCode);
   await order
     .getByRole("button", { name: "Redeem & record collection", exact: true })
@@ -294,7 +314,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await requestPage.goto("/");
   await expect(
     requestPage.getByRole("heading", {
-      name: "Your production file",
+      name: "Your preview",
       exact: true,
     }),
   ).toBeVisible();
@@ -340,8 +360,8 @@ test("intake validates specifications, review returns to approval, and expired/o
     page.getByLabel("Owner-prepared model", { exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Make production preview", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "Preview your item", exact: true }),
+  ).toHaveCount(0);
   await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
@@ -354,25 +374,25 @@ test("intake validates specifications, review returns to approval, and expired/o
   await useManualSettings(page);
   await page.getByLabel("Width (mm)", { exact: true }).fill("17");
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(page.getByRole("alert")).toContainText("15, 25 or 53 mm");
   await page.getByLabel("Width (mm)", { exact: true }).fill("53");
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Approve production file", exact: true })
+    .getByRole("button", { name: "Approve preview & see price", exact: true })
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Production file approved",
+      name: "Your quote is ready",
       exact: true,
     }),
   ).toBeVisible();
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -388,7 +408,7 @@ test("intake validates specifications, review returns to approval, and expired/o
   await page.getByLabel("Budget cap (USD)", { exact: true }).fill("3.00");
   await page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();
@@ -404,7 +424,10 @@ test("intake validates specifications, review returns to approval, and expired/o
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toHaveCount(0);
   await expect(
     page.getByText("specification v2", { exact: false }),
@@ -436,15 +459,18 @@ test("intake validates specifications, review returns to approval, and expired/o
     .getByRole("button", { name: "Record reviewed result", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByText("specification v3", { exact: false }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Approve production file", exact: true })
+    .getByRole("button", { name: "Approve preview & see price", exact: true })
     .click();
-  await page.getByRole("button", { name: "Get a quote", exact: true }).click();
+
   await expect(page.locator(".mandate-confirmation")).toContainText(
     "explicit budget of $3.00",
   );
@@ -570,9 +596,7 @@ test("live subscription updates the open owner dashboard with polling disabled",
     await page
       .getByRole("button", { name: "Open owner workshop", exact: true })
       .click();
-    await page
-      .getByRole("tab", { name: "Machines & policy", exact: true })
-      .click();
+    await page.getByRole("tab", { name: "Machines", exact: true }).click();
     const machine = page.locator(".owner-machine").filter({
       has: page.getByRole("heading", {
         name: "Sticker counter",

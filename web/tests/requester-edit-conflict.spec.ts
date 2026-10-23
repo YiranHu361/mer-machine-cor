@@ -190,13 +190,13 @@ async function fixture(page: Page, saved = true) {
 const edit = (page: Page) =>
   page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
 const save = (page: Page) =>
   page.getByRole("button", {
-    name: "Save changes & rebuild preview",
+    name: "Update preview",
     exact: true,
   });
 
@@ -316,7 +316,7 @@ async function interruptedCreation(page: Page) {
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
   await authorizePictures(page);
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Check saved orders", exact: true }),
@@ -361,7 +361,7 @@ test("checking saved orders focuses the recovered mobile row for immediate keybo
   expect(state.creations).toHaveLength(1);
   expect(state.sessions).toBe(0);
 });
-test("checking an empty saved-order list focuses its mobile heading without another creation (offline fixture)", async ({
+test("checking an empty saved-order list keeps its visible mobile recovery control focused without another creation (offline fixture)", async ({
   page,
 }) => {
   const state = await interruptedCreation(page);
@@ -371,12 +371,12 @@ test("checking an empty saved-order list focuses its mobile heading without anot
   });
   await check.focus();
   await check.press("Enter");
-  const heading = page.getByRole("heading", {
-    name: "Your orders",
-    exact: true,
-  });
-  await expect(heading).toBeFocused();
-  await expectInViewport(heading);
+  await expect(check).toBeFocused();
+  await expectInViewport(check);
+  await expect(page.locator(".orders-section")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
   expect(state.creations).toHaveLength(1);
   expect(state.sessions).toBe(0);
 });

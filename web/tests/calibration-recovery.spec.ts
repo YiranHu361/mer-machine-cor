@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { openProviderDetails } from "./provider-controls";
 
 const at = "2026-10-23T10:30:00.000Z";
 const calibration = (suffix = "one") => ({
@@ -193,12 +194,8 @@ async function fixture(
     });
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   return Object.assign(state, { machine });
 }
 
@@ -310,8 +307,10 @@ for (const changed of ["attempt", "frame", "adapter"] as const)
       await expect(
         page.getByText(/Attempt calibration_attempt_two/),
       ).toBeVisible();
-    if (changed === "adapter")
-      await expect(page.getByText(/adapter offline-fixture-v2/)).toBeVisible();
+    if (changed === "adapter") {
+      await openProviderDetails(page, "Connection details");
+      await expect(page.getByText(/adapter offline-fixture-v2/i)).toBeVisible();
+    }
     await expect(inspected).not.toBeChecked();
     await expect(reason).toHaveValue("");
     expect(state.mutations).toEqual([]);
@@ -408,8 +407,9 @@ test("physical start supervision must be reconfirmed after adapter and pairing c
   state.machine.paired = false;
   state.revision++;
   await page.clock.fastForward(3001);
+  await openProviderDetails(page, "Connection details");
   await expect(
-    page.getByText(/adapter new-adapter-needs-supervision/),
+    page.getByText(/adapter new-adapter-needs-supervision/i),
   ).toBeVisible();
   await expect(ready).not.toBeChecked();
   await expect(start).toBeDisabled();
@@ -515,8 +515,9 @@ test("a device change fences a pending old calibration reply before the queued c
   state.machine.adapterVersion = "generation-fenced-adapter";
   state.revision++;
   await page.clock.fastForward(3001);
+  await openProviderDetails(page, "Connection details");
   await expect(
-    page.getByText(/adapter generation-fenced-adapter/),
+    page.getByText(/adapter generation-fenced-adapter/i),
   ).toBeVisible();
   expect(reads).toBe(1);
   await page.evaluate(() => {
@@ -561,7 +562,7 @@ test("a malformed optional calibration status stays recoverable instead of blank
   );
   await expect(
     page.getByRole("heading", {
-      name: "Keep the counter moving.",
+      name: "Your workshop",
       exact: true,
     }),
   ).toBeVisible();
@@ -659,7 +660,7 @@ test("a recovered calibration lookup respects a newer owner focus choice while i
   await retry.press("Enter");
   await expect.poll(() => state.heldLookups.length).toBe(1);
   const newFocus = page.getByRole("tab", {
-    name: "Payment records",
+    name: "Payments",
     exact: true,
   });
   await newFocus.focus();

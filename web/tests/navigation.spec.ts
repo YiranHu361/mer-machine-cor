@@ -1,5 +1,6 @@
 import {
   useManualSettings,
+  openPurposeNote,
   authorizePictures,
   recommendationFor,
 } from "./requester-manual";
@@ -112,6 +113,7 @@ async function fixture(page: Page, initial = [order()]) {
     creates: 0,
     edits: 0,
     quotes: 0,
+    approvals: [] as unknown[],
     lost: "" as "" | "create" | "edit" | "quote",
     quoteGate: null as Promise<void> | null,
   };
@@ -171,7 +173,8 @@ async function fixture(page: Page, initial = [order()]) {
       if (state.lost === "edit") return route.abort("failed");
       return json(route, { job: current });
     }
-    if (path.endsWith("/quote") && method === "POST") {
+    if (path.endsWith("/approve-and-quote") && method === "POST") {
+      state.approvals.push(route.request().postDataJSON());
       state.quotes++;
       const current = state.jobs[0];
       current.productionState = "quoted";
@@ -258,7 +261,7 @@ test("a committed creation with lost response remains recoverable after reload w
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
   await authorizePictures(page);
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect.poll(() => state.creates).toBe(1);
   expect(await reloadDocument(page)).toEqual(["beforeunload"]);
@@ -279,7 +282,7 @@ test("an edited specification committed before connection loss reloads as unappr
   await page.goto("/");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -291,7 +294,7 @@ test("an edited specification committed before connection loss reloads as unappr
   );
   await page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();
@@ -304,10 +307,13 @@ test("an edited specification committed before connection loss reloads as unappr
     "Committed edited navigation artwork",
   );
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Get a quote", exact: true }),
+    page.getByRole("button", { name: "See current price", exact: true }),
   ).toHaveCount(0);
   expect(state.edits).toBe(1);
   expect(state.sessionPosts).toBe(0);
@@ -319,7 +325,9 @@ test("a quote committed before connection loss survives reload without a duplica
   const state = await fixture(page);
   state.lost = "quote";
   await page.goto("/");
-  await page.getByRole("button", { name: "Get a quote", exact: true }).click();
+  await page
+    .getByRole("button", { name: "See current price", exact: true })
+    .click();
   await expect.poll(() => state.quotes).toBe(1);
   await reloadDocument(page);
   await expect(
@@ -333,6 +341,14 @@ test("a quote committed before connection loss survives reload without a duplica
     page.getByRole("heading", { name: "Your quote is ready", exact: true }),
   ).toBeVisible();
   expect(state.quotes).toBe(1);
+  expect(state.approvals).toEqual([
+    {
+      artifactSha256: state.jobs[0].artifact.sha256,
+      specVersion: 1,
+      recommendedMachineId: null,
+      autoAccept: false,
+    },
+  ]);
   expect(state.sessionPosts).toBe(0);
 });
 
@@ -348,7 +364,7 @@ test("unsaved requester edits can cancel accidental navigation without discardin
   await page.goto("/");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -475,6 +491,10 @@ test("a new uploaded draft can cancel leaving without losing its image or intent
     await dialog.dismiss();
   });
   await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
+  await openPurposeNote(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Keep this unsaved new artwork");
@@ -506,7 +526,7 @@ test("untouched edits and explicit draft discard do not warn on navigation (offl
   const edit = () =>
     page
       .getByRole("button", {
-        name: "Edit artwork or specifications",
+        name: "Edit item",
         exact: true,
       })
       .click();
@@ -530,7 +550,7 @@ test("untouched edits and explicit draft discard do not warn on navigation (offl
     .getByLabel("What is it for?", { exact: true })
     .fill("Discard this edit by explicit cancel");
   await page
-    .getByRole("button", { name: "Keep existing specification", exact: true })
+    .getByRole("button", { name: "Keep current item", exact: true })
     .click();
   await leave();
   await edit();
@@ -538,6 +558,7 @@ test("untouched edits and explicit draft discard do not warn on navigation (offl
     .getByLabel("What is it for?", { exact: true })
     .fill("Keep this edit when starting a new order");
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await openPurposeNote(page);
   await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
     "",
   );
@@ -569,7 +590,7 @@ test("a successful specification save removes the navigation warning (offline fi
   await page.goto("/");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -578,7 +599,7 @@ test("a successful specification save removes the navigation warning (offline fi
     .fill("Successfully saved navigation artwork");
   await page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();
@@ -610,7 +631,9 @@ test("an in-flight quote can cancel navigation and disarms after its saved respo
     await dialog.dismiss();
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Get a quote", exact: true }).click();
+  await page
+    .getByRole("button", { name: "See current price", exact: true })
+    .click();
   try {
     await expect.poll(() => state.quotes).toBe(1);
     const previousDocument = await documentIdentity(page);
@@ -635,6 +658,14 @@ test("an in-flight quote can cancel navigation and disarms after its saved respo
     ).toBeVisible();
     expect(dialogs).toEqual(["beforeunload"]);
     expect(state.quotes).toBe(1);
+    expect(state.approvals).toEqual([
+      {
+        artifactSha256: state.jobs[0].artifact.sha256,
+        specVersion: 1,
+        recommendedMachineId: null,
+        autoAccept: false,
+      },
+    ]);
   } finally {
     release();
   }
@@ -664,7 +695,7 @@ test("deferred edit-heading focus cannot steal focus after the requester starts 
   await page.goto("/");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -683,7 +714,7 @@ test("deferred edit-heading focus cannot steal focus after the requester starts 
   );
   await page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();

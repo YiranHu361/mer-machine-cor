@@ -1,5 +1,6 @@
 import {
   useManualSettings,
+  openPurposeNote,
   authorizePictures,
   recommendationFor,
 } from "./requester-manual";
@@ -260,7 +261,7 @@ async function fixture(
     page.getByRole("heading", {
       name:
         initial.length && !initialLookup
-          ? "Your production file"
+          ? "Your preview"
           : "Upload your pictures",
       exact: true,
     }),
@@ -284,19 +285,19 @@ const row = (page: Page, id: string) =>
 const edit = (page: Page) =>
   page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
 const save = (page: Page) =>
   page.getByRole("button", {
-    name: "Save changes & rebuild preview",
+    name: "Update preview",
     exact: true,
   });
 const make = (page: Page) =>
-  page.getByRole("button", { name: "Make production preview", exact: true });
+  page.getByRole("button", { name: "Preview your item", exact: true });
 async function upload(page: Page) {
-  const freshOrder = await make(page).isVisible();
+  const freshOrder = !(await save(page).isVisible());
   const bytes = await readFile(resolve("tests/fixtures/makers.png"));
   await page.getByLabel("Upload artwork", { exact: true }).setInputFiles(
     [1, 2].map((i) => ({
@@ -310,6 +311,7 @@ async function upload(page: Page) {
     await expect(
       page.getByRole("region", { name: "Machine recommendation", exact: true }),
     ).toContainText("Fixture sticker counter");
+  await useManualSettings(page);
   await authorizePictures(page);
   await expect(
     page.getByLabel("Upload artwork", { exact: true }),
@@ -379,9 +381,6 @@ for (const lookup of ["held", "failed"] as const)
     await intent(page).fill(
       "  My new draft begins before the saved selection loads  ",
     );
-    await width(page).fill("");
-    await budgetToggle(page).check();
-    await budget(page).fill("6.75");
     const uploading = upload(page);
     await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
     state.holdJobs = false;
@@ -389,8 +388,10 @@ for (const lookup of ["held", "failed"] as const)
     for (const route of state.heldJobs.splice(0))
       await json(route, { jobs: state.jobs, revision: state.revision });
     await uploading;
-    // Analysis supplies initial dimensions; exercise an exact raw edit after it.
+    // Print refinements become available only after pictures and matching.
     await width(page).fill("");
+    await budgetToggle(page).check();
+    await budget(page).fill("6.75");
     await refresh(page);
     await expect(intent(page)).toHaveValue(
       "  My new draft begins before the saved selection loads  ",
@@ -541,7 +542,7 @@ test("hidden edits warn before leaving; explicit mobile keyboard discard clears 
   expect(violations).toEqual([]);
   await row(page, "bravo_order").click();
   const production = page.getByRole("heading", {
-    name: "Your production file",
+    name: "Your preview",
     exact: true,
   });
   await expect(production).toBeFocused();
@@ -575,7 +576,7 @@ test("hidden edits warn before leaving; explicit mobile keyboard discard clears 
   await expect(resume).toBeFocused();
   await resume.press("Enter");
   await expect(
-    page.getByRole("heading", { name: "Revise your order", exact: true }),
+    page.getByRole("heading", { name: "Edit item", exact: true }),
   ).toBeFocused();
   await expect(intent(page)).toHaveValue(
     `A very long private draft ${"long-content".repeat(30)}`,
@@ -589,7 +590,7 @@ test("hidden edits warn before leaving; explicit mobile keyboard discard clears 
   await discard.press("Enter");
   await expect(drafts(page)).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Your production file", exact: true }),
+    page.getByRole("heading", { name: "Your preview", exact: true }),
   ).toBeFocused();
   await noLeaveWarning(page);
 });
@@ -643,7 +644,7 @@ test("a resumed edit retains its original immutable save baseline after a newer 
   );
   await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("2");
   await page
-    .getByRole("button", { name: "Keep existing specification", exact: true })
+    .getByRole("button", { name: "Keep current item", exact: true })
     .click();
   await expect(drafts(page)).toHaveCount(0);
   expect(state.patches).toHaveLength(1);
@@ -722,6 +723,7 @@ test("newer edits survive exact interrupted-create reconciliation and a later ex
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
   expect(state.creations).toHaveLength(1);
   state.createUnknown = false;
+  await openPurposeNote(page);
   await page
     .getByRole("button", { name: "Find suitable machine", exact: true })
     .click();
@@ -951,9 +953,13 @@ test("requester expiry clears hidden and active private drafts before an explici
   await page
     .getByRole("button", { name: "Open requester session", exact: true })
     .click();
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
+  await openPurposeNote(page);
   await expect(intent(page)).toHaveValue("");
-  await expect(width(page)).toHaveValue("53");
-  await expect(budgetToggle(page)).not.toBeChecked();
+  await expect(width(page)).toHaveCount(0);
+  await expect(budgetToggle(page)).toHaveCount(0);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
   await expect(drafts(page)).toHaveCount(0);
   expect(state.sessionPosts).toBe(1);

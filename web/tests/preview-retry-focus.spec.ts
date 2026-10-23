@@ -100,7 +100,10 @@ test("keyboard preview retry keeps focus while loading, ignores duplicates and f
   await expect(f.retry).toBeFocused();
   await expect(f.retry).toHaveAttribute("aria-disabled", "true");
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeDisabled();
   await f.retry.press("Enter");
   await f.retry.press("Enter");
@@ -123,7 +126,10 @@ test("keyboard preview retry keeps focus while loading, ignores duplicates and f
     )
     .toBeGreaterThan(0);
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeEnabled();
   await expect(f.retry).toHaveCount(0);
   expect(f.imageRequests).toHaveLength(2);
@@ -136,23 +142,24 @@ test("a recovered preview preserves a newer keyboard focus choice (UI fixture)",
   const f = await previewFixture(page);
   await expect(f.retry).toBeFocused();
   const edit = page.getByRole("button", {
-    name: "Edit artwork or specifications",
+    name: "Edit item",
     exact: true,
   });
   await edit.focus();
   f.release();
   await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
+    page.getByRole("button", {
+      name: "Approve preview & see price",
+      exact: true,
+    }),
   ).toBeEnabled();
   await expect(
     page.getByRole("img", { name: /Actual production preview/ }),
   ).toBeVisible();
   await expect(edit).toBeFocused();
   await expect(
-    page.getByText("Review the production preview with a keyboard", {
-      exact: true,
-    }),
-  ).toBeVisible();
+    page.getByRole("img", { name: /Actual production preview/ }),
+  ).toHaveAttribute("tabindex", "-1");
   expect(f.imageRequests).toHaveLength(2);
   expect(f.mutations).toEqual([]);
 });

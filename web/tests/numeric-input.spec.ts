@@ -142,7 +142,7 @@ async function fixture(page: Page) {
   await page.goto("/");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -160,7 +160,7 @@ async function replace(input: Locator, value: string) {
 function save(page: Page) {
   return page
     .getByRole("button", {
-      name: "Save changes & rebuild preview",
+      name: "Update preview",
       exact: true,
     })
     .click();
@@ -331,11 +331,11 @@ test("discarding an incomplete numeric edit restores saved values before the nex
   await clear(page.getByLabel("Height (mm)", { exact: true }));
   await clear(page.getByLabel("Quantity", { exact: true }));
   await page
-    .getByRole("button", { name: "Keep existing specification", exact: true })
+    .getByRole("button", { name: "Keep current item", exact: true })
     .click();
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();

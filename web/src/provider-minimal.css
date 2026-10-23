@@ -1,0 +1,406 @@
+.provider-minimal,
+.provider-login-minimal {
+  --paper: #fff;
+  --line: #dce3ed;
+  --muted: #5b6a82;
+  color: #22314d;
+  font-size: 15px;
+}
+
+.provider-minimal {
+  padding-inline: 0;
+  max-width: 960px;
+  margin-inline: auto;
+  padding-bottom: 48px;
+}
+
+.provider-login-minimal {
+  display: block;
+  max-width: 460px;
+  padding: 48px 20px 80px;
+}
+
+.provider-login-minimal form {
+  padding: 28px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.provider-login-minimal h1,
+.provider-minimal .owner-intro h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  margin-bottom: 10px;
+}
+
+.provider-login-minimal form > p,
+.provider-login-minimal form > small {
+  font-size: 14px;
+}
+
+.provider-login-minimal form > .quiet {
+  margin-bottom: 12px;
+}
+
+.provider-login-minimal form > a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.provider-minimal .owner-intro {
+  padding: 30px 0 24px;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.provider-minimal .owner-intro .quiet {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.provider-minimal .owner-intro p:last-child {
+  font-size: 14px;
+}
+
+.provider-minimal .provider-summary {
+  flex-shrink: 0;
+  margin-top: 30px;
+  padding: 0;
+  max-width: 240px;
+}
+
+.provider-summary strong {
+  color: var(--ink);
+  font-weight: 750;
+}
+
+.provider-minimal .owner-tabs {
+  gap: 28px;
+  margin-bottom: 24px;
+  border-color: var(--line);
+}
+
+.provider-minimal .owner-tabs button {
+  min-height: 48px;
+  font-size: 15px;
+  padding: 12px 2px;
+}
+
+.provider-minimal
+  :is(.queue-summary h2, .section-heading h2, .payment-records h2) {
+  font-size: 21px;
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+
+.provider-minimal
+  :is(.queue-summary > p, .section-heading p, .payment-records > p) {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.provider-minimal .queue-tools {
+  padding: 16px 0;
+  border: 0;
+  border-block: 1px solid var(--line);
+  background: transparent;
+  border-radius: 0;
+  margin-bottom: 18px;
+}
+
+.provider-minimal .owner-job-list,
+.provider-minimal .owner-machine-list {
+  gap: 16px;
+}
+
+.provider-minimal :is(.owner-job, .owner-machine) {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.provider-minimal .owner-job.attention {
+  border-left: 3px solid #d0a060;
+}
+
+.provider-minimal :is(.owner-job-head, .machine-card-head) {
+  padding: 20px;
+  gap: 16px;
+}
+
+.provider-minimal .job-thumb {
+  width: 52px;
+  height: 52px;
+  background: #f7f9fc;
+}
+
+.provider-minimal .owner-job-head h3,
+.provider-minimal .machine-card-head h3 {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.provider-minimal :is(.owner-job-head p, .machine-card-head p) {
+  font-size: 14px;
+  line-height: 1.5;
+  margin-block: 5px 0;
+}
+
+.provider-minimal .owner-job-head p {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.provider-minimal .machine-card-head > svg {
+  width: 52px;
+  height: 52px;
+}
+
+.provider-minimal .machine-card-head .badge-row {
+  margin-top: 10px;
+}
+
+.provider-minimal .provider-next-step {
+  padding: 0 20px 18px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.provider-minimal
+  :is(
+    .provider-order-facts,
+    .provider-connection-details,
+    .provider-machine-checks,
+    .machine-settings,
+    .provider-registration
+  ) {
+  padding: 0 20px;
+  border-top: 1px solid var(--line);
+}
+
+.provider-minimal
+  :is(
+    .provider-order-facts,
+    .provider-connection-details,
+    .provider-machine-checks,
+    .machine-settings,
+    .provider-registration
+  )
+  > summary {
+  padding-block: 14px;
+  min-height: 48px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.provider-minimal
+  :is(.provider-order-facts, .provider-connection-details)[open] {
+  padding-bottom: 16px;
+}
+
+.provider-minimal .provider-order-facts p {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.provider-order-facts dl {
+  display: flex;
+  gap: 16px 32px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+}
+
+.provider-order-facts dt,
+.provider-order-facts dd {
+  font-size: 13px;
+  margin: 0;
+}
+
+.provider-order-facts dt {
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.provider-minimal
+  .provider-connection-details
+  :is(.readiness-facts, .machine-reason) {
+  padding: 0;
+  margin: 0 0 12px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.provider-minimal .readiness-facts {
+  gap: 12px 20px;
+}
+
+.provider-minimal .calibration-row {
+  padding: 10px 0 20px;
+  border-top: 0;
+  align-items: flex-start;
+}
+
+.provider-minimal :is(.preparation, .review-form, .redeem-form) {
+  background: #f7f9fc;
+  padding: 20px;
+}
+
+.provider-minimal
+  :is(.preparation > p, .review-form > p, .redeem-form p, .check) {
+  font-size: 14px;
+}
+
+.provider-minimal .provider-handling-confirmation {
+  margin-block: 20px 10px;
+  max-width: 620px;
+}
+
+.provider-handling-steps {
+  margin-bottom: 16px;
+}
+
+.provider-handling-steps > summary {
+  min-height: 44px;
+  padding-block: 12px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.provider-minimal .preparation-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 4px 0 16px;
+  gap: 12px;
+}
+
+.provider-minimal .machine-settings form {
+  margin-top: 8px;
+  padding-bottom: 20px;
+}
+
+.provider-minimal .provider-registration {
+  margin-block: 24px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.provider-minimal .register-form {
+  padding: 8px 0 20px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.provider-minimal .register-form > div:first-child > p {
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.provider-minimal
+  :is(
+    .register-form .primary,
+    .machine-card-head button,
+    .calibration-row > .secondary
+  ) {
+  font-size: 14px;
+}
+
+@media (max-width: 760px) {
+  .provider-minimal .owner-intro {
+    gap: 10px;
+    padding-top: 20px;
+  }
+
+  .provider-minimal .provider-summary {
+    margin-top: 0;
+    max-width: none;
+  }
+
+  .provider-minimal .owner-tabs {
+    gap: 20px;
+  }
+
+  .provider-minimal .owner-tabs button {
+    flex: 0 1 auto;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .provider-minimal :is(.owner-job-head, .machine-card-head) {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .provider-minimal
+    :is(.owner-job-head > div:nth-child(2), .machine-card-head > div) {
+    flex-basis: calc(100% - 64px);
+  }
+
+  .provider-minimal .owner-job-head h3 span {
+    display: inline;
+  }
+
+  .provider-minimal .job-states {
+    padding-left: 64px;
+    align-items: center;
+  }
+
+  .provider-minimal .machine-card-head > button {
+    margin-left: 64px;
+  }
+
+  .provider-minimal
+    :is(
+      .provider-order-facts,
+      .provider-connection-details,
+      .provider-machine-checks,
+      .machine-settings,
+      .provider-registration
+    ) {
+    padding-inline: 16px;
+  }
+
+  .provider-minimal .provider-next-step {
+    padding-inline: 16px;
+  }
+
+  .provider-minimal :is(.preparation, .review-form, .redeem-form) {
+    padding: 16px;
+  }
+
+  .provider-minimal :is(input, select, textarea),
+  .provider-login-minimal :is(input, select, textarea) {
+    font-size: 16px;
+  }
+
+  .provider-login-minimal {
+    padding: 24px 16px 48px;
+  }
+
+  .provider-login-minimal form {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 380px) {
+  .provider-minimal .preparation-checks {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-login-minimal h1,
+  .provider-minimal .owner-intro h1 {
+    font-size: 26px;
+  }
+}

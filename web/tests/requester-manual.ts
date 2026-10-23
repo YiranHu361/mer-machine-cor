@@ -2,7 +2,9 @@ import { expect, type Page } from "@playwright/test";
 
 /** Existing lifecycle scenarios deliberately open the optional print refinements. */
 export async function useManualSettings(page: Page) {
+  await openPurposeNote(page);
   const summary = page.getByText("Optional print settings", { exact: true });
+  if (!(await summary.count())) return;
   await expect(summary).toBeVisible();
   const expanded = await summary.evaluate(
     (element) => element.closest("details")?.open === true,
@@ -13,6 +15,17 @@ export async function useManualSettings(page: Page) {
     exact: true,
   });
   if (await manual.isVisible()) await manual.click();
+}
+
+export async function openPurposeNote(page: Page) {
+  const summary = page.locator(".picture-context > summary");
+  await expect(summary).toBeVisible();
+  if (
+    !(await summary.evaluate(
+      (element) => element.closest("details")?.open === true,
+    ))
+  )
+    await summary.click();
 }
 
 export async function authorizePictures(page: Page) {

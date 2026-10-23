@@ -1,9 +1,15 @@
 import {
   useManualSettings,
+  openPurposeNote,
   authorizePictures,
   recommendationFor,
 } from "./requester-manual";
 import { test, expect } from "@playwright/test";
+import {
+  openPaymentRecovery,
+  openProviderDetails,
+  openTrialMeasurements,
+} from "./provider-controls";
 
 test("owner recovery forms validate references and submit measured trial records (UI fixture)", async ({
   page,
@@ -150,6 +156,8 @@ test("owner recovery forms validate references and submit measured trial records
     });
   });
   await page.goto("/owner");
+  const order = page.locator('[data-owner-order="job_ui_fixture"]');
+  await openPaymentRecovery(order);
   const reference = page.getByRole("form", {
     name: "Resolve pending test payment",
     exact: true,
@@ -190,7 +198,10 @@ test("owner recovery forms validate references and submit measured trial records
   await expect(reference.getByRole("alert")).toContainText(
     "The reference was not confirmed",
   );
-  await expect(page.locator(".job-states")).toContainText("release pending");
+  await openProviderDetails(order, "Order details");
+  await expect(order.locator(".provider-order-facts")).toContainText(
+    "release pending",
+  );
   expect(submittedReferences).toEqual([
     {
       operationId: "pending_release",
@@ -205,9 +216,11 @@ test("owner recovery forms validate references and submit measured trial records
     })
     .click();
   await expect(reference).toHaveCount(0);
-  await expect(page.locator(".job-states")).toContainText("Payment: released");
+  await expect(
+    order.locator(".provider-order-facts dd").filter({ hasText: /^released$/ }),
+  ).toBeVisible();
   expect(submittedReferences).toHaveLength(2);
-  await page.getByText("Trial costs & handling time", { exact: true }).click();
+  await openTrialMeasurements(order);
   const trial = page.getByRole("form", {
     name: "Record trial costs and handling",
     exact: true,
@@ -340,26 +353,30 @@ test("requester specification suggestions preserve approval and manual fallback 
     });
   });
   await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
   await useManualSettings(page);
   await page.setViewportSize({ width: 320, height: 844 });
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("A label that still needs artwork");
   await expect(
-    page.getByRole("button", { name: "Make production preview", exact: true }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: "Preview your item", exact: true }),
+  ).toHaveCount(0);
   expect(createdJobs).toBe(0);
   const suggest = page.getByRole("button", {
     name: "Suggest specification",
     exact: true,
   });
-  await expect(suggest).toBeDisabled();
+  await expect(suggest).toHaveCount(0);
   await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles("tests/fixtures/makers.png");
   await expect(
     page.getByRole("region", { name: "Machine recommendation", exact: true }),
   ).toContainText("Fixture sticker counter");
+  await useManualSettings(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("A club sticker for our local tabling event");
@@ -411,7 +428,7 @@ test("requester specification suggestions preserve approval and manual fallback 
     ),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Make production preview", exact: true }),
+    page.getByRole("button", { name: "Preview your item", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("button", { name: "Find suitable machine", exact: true })
@@ -426,7 +443,7 @@ test("requester specification suggestions preserve approval and manual fallback 
     })
     .click();
   await expect(
-    page.getByRole("button", { name: "Make production preview", exact: true }),
+    page.getByRole("button", { name: "Preview your item", exact: true }),
   ).toBeEnabled();
   await expect(page.getByLabel("Height (mm)", { exact: true })).toBeEnabled();
   expect(createdJobs).toBe(0);
@@ -569,22 +586,22 @@ test("owner queue finds actionable orders, keeps history and supports keyboard v
     fullPage: true,
   });
   const queueTab = page.getByRole("tab", {
-    name: "Orders & handling",
+    name: "Orders",
     exact: true,
   });
   await queueTab.focus();
   await page.keyboard.press("End");
   await expect(
-    page.getByRole("tab", { name: "Payment records", exact: true }),
+    page.getByRole("tab", { name: "Payments", exact: true }),
   ).toBeFocused();
   await expect(
-    page.getByRole("tab", { name: "Payment records", exact: true }),
+    page.getByRole("tab", { name: "Payments", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Home");
   await expect(queueTab).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(
-    page.getByRole("tab", { name: "Machines & policy", exact: true }),
+    page.getByRole("tab", { name: "Machines", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(queueTab).toBeFocused();
@@ -785,6 +802,9 @@ test("requester identity changes discard private artwork, drafts and saved order
     });
   });
   await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+  ).toBeVisible();
   await useManualSettings(page);
   await page
     .getByLabel("What is it for?", { exact: true })
@@ -796,6 +816,7 @@ test("requester identity changes discard private artwork, drafts and saved order
   await expect(
     page.getByRole("region", { name: "Machine recommendation", exact: true }),
   ).toContainText("Fixture sticker counter");
+  await useManualSettings(page);
   await authorizePictures(page);
   await page
     .getByLabel("Automatically accept a quote within my budget", {
@@ -810,10 +831,10 @@ test("requester identity changes discard private artwork, drafts and saved order
     page.getByRole("heading", { name: "Suggested specification", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Make production preview", exact: true })
+    .getByRole("button", { name: "Preview your item", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Your production file", exact: true }),
+    page.getByRole("heading", { name: "Your preview", exact: true }),
   ).toBeVisible();
   await expect
     .poll(() =>
@@ -822,7 +843,7 @@ test("requester identity changes discard private artwork, drafts and saved order
     .toBe("private_order_A");
   await page
     .getByRole("button", {
-      name: "Edit artwork or specifications",
+      name: "Edit item",
       exact: true,
     })
     .click();
@@ -847,24 +868,21 @@ test("requester identity changes discard private artwork, drafts and saved order
   ).toBeVisible();
   expect(opened).toBe(1);
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
+  await openPurposeNote(page);
   await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
     "",
   );
-  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
-    "53",
-  );
-  await expect(page.getByLabel("Height (mm)", { exact: true })).toHaveValue(
-    "50",
-  );
-  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("1");
-  await expect(page.getByLabel("Image placement", { exact: true })).toHaveValue(
-    "contain",
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Height (mm)", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Quantity", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Image placement", { exact: true })).toHaveCount(
+    0,
   );
   await expect(
     page.getByLabel("Automatically accept a quote within my budget", {
       exact: true,
     }),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
   await expect(
     page.getByLabel("Budget cap (USD)", { exact: true }),
   ).toHaveCount(0);
@@ -941,6 +959,9 @@ for (const deferredOperation of ["upload", "create"] as const) {
       });
     });
     await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Upload your pictures", exact: true }),
+    ).toBeVisible();
     await useManualSettings(page);
     await page
       .getByLabel("What is it for?", { exact: true })
@@ -960,7 +981,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
       ).toContainText("Fixture sticker counter");
       await authorizePictures(page);
       await page
-        .getByRole("button", { name: "Make production preview", exact: true })
+        .getByRole("button", { name: "Preview your item", exact: true })
         .click();
     }
     await expect.poll(() => Boolean(pending)).toBe(true);
@@ -971,6 +992,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
     await expect(
       page.getByRole("heading", { name: "Upload your pictures", exact: true }),
     ).toBeVisible();
+    await openPurposeNote(page);
     await page
       .getByLabel("What is it for?", { exact: true })
       .fill("New requester B draft stays separate");

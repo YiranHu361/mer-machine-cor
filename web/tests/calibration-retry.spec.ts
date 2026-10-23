@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { openProviderDetails } from "./provider-controls";
 import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 
@@ -315,12 +316,8 @@ async function fixture(
     );
   });
   await page.goto("/owner");
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   if (options.existing === false)
     await expect(
       page.getByLabel("Calibration artwork", { exact: true }),
@@ -386,7 +383,8 @@ test("a replacement setup cannot inherit old inspection and keeps fresh draft fi
   state.machine.adapterVersion = "fixture-v2";
   state.revision++;
   await refresh(page);
-  await expect(page.getByText(/adapter fixture-v2/)).toBeVisible();
+  await openProviderDetails(page, "Connection details");
+  await expect(page.getByText(/adapter fixture-v2/i)).toBeVisible();
   await expect(
     page.getByLabel(inspectionLabel, { exact: true }),
   ).toBeDisabled();
@@ -474,7 +472,8 @@ test("a registration change fences an old upload and its finally callback cannot
   state.machine.adapterVersion = "fixture-v2";
   state.revision++;
   await refresh(page);
-  await expect(page.getByText(/adapter fixture-v2/)).toBeVisible();
+  await openProviderDetails(page, "Connection details");
+  await expect(page.getByText(/adapter fixture-v2/i)).toBeVisible();
   await expect(prepare(page)).toBeEnabled();
   await prepare(page).click();
   await artwork(page).setInputFiles(resolve("tests/fixtures/makers.png"));
@@ -519,12 +518,8 @@ test("an uncertain new start keeps one pending checkpoint across absent reads an
   expect(await checkpoint(page)).toEqual(pending);
   await expect(prepare(page)).toHaveCount(0);
   await page.reload();
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   await expect(surface(page)).toContainText(
     "An earlier calibration request has not been matched",
   );
@@ -730,12 +725,8 @@ test("a failed settlement checkpoint write remains recoverable by exact GET afte
   state.calibration!.productionState = "produced";
   state.revision++;
   await page.reload();
-  await page
-    .getByRole("tab", { name: "Machines & policy", exact: true })
-    .click();
-  await page
-    .getByText("Physical calibration job & inspection", { exact: true })
-    .click();
+  await page.getByRole("tab", { name: "Machines", exact: true }).click();
+  await openProviderDetails(page, "Physical calibration job & inspection");
   await expect(prepare(page)).toBeEnabled();
   expect(state.queryKeys).toContain(pending.key);
   expect(state.starts).toHaveLength(1);

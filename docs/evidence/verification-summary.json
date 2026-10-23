@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T18:08:04.750Z",
-  "sourceStateSha256": "ae0bb65e91ee2683cd21a1c53e9de8f0da698dc8393bb0fda486cf9a158f8e4e",
+  "recordedAt": "2026-10-23T21:29:18.905767+00:00",
+  "sourceStateSha256": "88075bb584ca3deff4489a07aaf24dd7609af51eab4555d03facc371deda1260",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 249,
+    "backendApplicationAndProcessRecovery": 260,
     "node": 147,
     "paymentClaudeFixtures": 31,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 243,
+    "browserScenarios": 260,
     "browserEngines": 3,
-    "uniqueTestCases": 704,
-    "testExecutionsIncludingThreeEngines": 1190,
+    "uniqueTestCases": 732,
+    "testExecutionsIncludingThreeEngines": 1252,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -89,13 +89,21 @@
     ".data/overnight-tenth-calibration-acceptance-final.log": "893bc11b5bb594210d4abcee422b6911ff386d611840132ee1ba77d2878d129b",
     ".data/overnight-tenth-chromium-browser.log": "b0f15fee16e3d39fd6f8d3c488313dd1a9210929a337d788083761d8c57a1036",
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
-    ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
+    ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84",
+    ".data/minimal-ui-software-check.log": "a4b75fef8299f0a3005e6139be0f933dacec7d343c6ea8a5f93a13b5361e8280",
+    ".data/minimal-ui-final-typecheck.log": "c8349c9275680173724f6a2e0d034fcf8eea2f13279c600a8e2a1328b64f0f33",
+    ".data/minimal-ui-final-build.log": "86ce3fcf3ba82e92a5119dd6035f26ff1112f8579ca4bdefd8928537b6bd5e07",
+    ".data/minimal-ui-final-unit.log": "80006b3cb6fb03887c88fcf3f14eaa3f50d6a1f4d2c07cc843763e7ffdf99943",
+    ".data/minimal-ui-native.log": "4e10ec108f924ac19956c86b9f7dc2ebf74d1ee0b470968d4454434bf3d7f683",
+    ".data/minimal-ui-chromium-browser.log": "5b13fcb0b839e057fb66139fd0c96ce00cb2435597a1798a9280a937525842e1",
+    ".data/minimal-ui-firefox-browser.log": "ca35d5796ec05ded6a72af3a69d97391fbfc849fb3fe3fe78e4d1920022a7a09",
+    ".data/minimal-ui-webkit-browser.log": "88ed1fb8b2e538b8996170102fd28acb0dbf9ebb19ce67c7fa1cc09ef9c11d85"
   },
-  "notes": "Upload-first requester selector removal and Mobbin-informed hierarchy verified. Current frontend checks and retained unchanged backend evidence are separated in upload-first-qa.json. Overnight heartbeat remains paused; earlier endurance incomplete and live acceptance blocked.",
+  "notes": "Minimal requester/provider UI and atomic exact preview approval plus quote verified with current complete shared checks and all three built browser suites. Honest simulation/mock/local-analysis limits remain. Overnight heartbeat remains paused, earlier endurance incomplete and required live acceptance blocked. Final browser runs are finite checks: an approximately151-minute observation gap preceded fresh successful native/runtime inspection; no uninterrupted stability claim.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 355,
+    "candidateFiles": 379,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [
@@ -111,7 +119,7 @@
   },
   "overnightStatus": "ENDED_HEARTBEAT_PAUSED",
   "longSessionStability": "INCOMPLETE_OBSERVATION_GAP",
-  "finalEvidence": "docs/evidence/upload-first-qa.json",
-  "currentEvidence": "docs/evidence/upload-first-qa.json",
+  "finalEvidence": "docs/evidence/minimal-ui-qa.json",
+  "currentEvidence": "docs/evidence/minimal-ui-qa.json",
   "overnightFinalEvidence": "docs/evidence/overnight-final-qa.json"
 }
