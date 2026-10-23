@@ -116,6 +116,8 @@ export interface Machine {
   model: string;
   outputType: Spec["outputType"];
   adapterVersion: string;
+  registrationId?: string;
+  policyObservationId?: string;
   mode: "simulation" | "hardware";
   paired: boolean;
   configured: boolean;
@@ -142,6 +144,7 @@ export interface Machine {
   ownerAddress?: string;
   policyReconciliationRequired?: boolean;
   calibrationAt?: string;
+  calibrationConfirmationId?: string;
 }
 export interface Quote {
   id: string;
@@ -162,6 +165,7 @@ export interface Job {
   requesterId: string;
   creationRequestId?: string;
   creationSpecHash?: string;
+  calibrationDeviceContext?: string;
   machineId: string | null;
   specVersion: number;
   spec: Spec;

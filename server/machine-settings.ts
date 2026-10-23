@@ -23,6 +23,7 @@ export function machineDeviceFingerprint(machine: Machine) {
   return hash({
     id: machine.id,
     adapterVersion: machine.adapterVersion,
+    registrationId: machine.registrationId,
     mode: machine.mode,
     outputType: machine.outputType,
     nodeUrl: machine.nodeUrl,
@@ -38,6 +39,7 @@ export function machineInspectionFingerprint(machine: Machine) {
     material: machine.material,
     calibrated: machine.calibrated,
     calibrationAt: machine.calibrationAt,
+    calibrationConfirmationId: machine.calibrationConfirmationId,
     activeJobId: machine.activeJobId,
     reservation: machine.reservation,
     ready: machine.ready,

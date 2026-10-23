@@ -82,6 +82,7 @@ async function fixture(
   };
   const calibration = {
     id: "calibration_frame_first",
+    machineId: machine.id,
     attemptId: "calibration_attempt_first",
     productionState: "produced",
     evidence: {
@@ -159,7 +160,22 @@ async function fixture(
       "/api/catalog": { models: [] },
       [`/api/owner/machines/${machine.id}/calibration`]: {
         calibration: state.calibration,
-        status: { execution_status: state.calibration.productionState },
+        status: {
+          execution_status:
+            state.calibration.productionState === "produced"
+              ? "completed"
+              : "failed",
+        },
+        lifecycle: {
+          activeJobId: null,
+          calibrationActive: false,
+          canRequestNew: true,
+          context: "c".repeat(64),
+          contextMatch: null,
+          reasonCode: "NEW_CALIBRATION_ALLOWED",
+          reason:
+            "Saved idle fixture permits an explicitly supervised new request.",
+        },
       },
     };
     return route.fulfill({

@@ -255,7 +255,7 @@ test("owner price changes invalidate unpaid approval while preserving an already
   try {
     f.service.node = {
       async call() {
-        return { calibrated: true };
+        return { calibrated: true, mode: "simulation" };
       },
       token() {
         throw new Error("No device execution in this HTTP policy test");
@@ -514,7 +514,7 @@ test("in-flight calibration confirmation cannot reserve work or clear a newer ca
         enter();
         await gate;
       }
-      return { calibrated: true };
+      return { calibrated: true, mode: "simulation" };
     };
     f.service.node.token = () => ({
       token: "isolated-test-token",

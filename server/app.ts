@@ -23,6 +23,13 @@ import {
 } from "../integrations/src/payments.ts";
 import { mutate } from "./store.ts";
 import {
+  calibrationDeviceContext,
+  calibrationOperationContext,
+  calibrationStartObservation,
+  expectedCalibrationContext,
+  requireCalibrationStart,
+} from "./calibration-context.ts";
+import {
   parseJobCreation,
   findCreatedJob,
   jobCreationQueue,
@@ -869,7 +876,12 @@ export function createApp(
       process.env[
         `FABRARY_${machineId.split("_")[0].toUpperCase()}_NODE_URL`
       ] ?? service.config.nodeUrl;
-    const selected = { ...(await service.read()).machines[machineId], nodeUrl };
+    const observed = (await service.read()).machines[machineId];
+    const observedSettings = machineSettingsFingerprint(observed);
+    const observedInspection = machineInspectionFingerprint(observed);
+    const observedPolicy = observed.policyObservationId;
+    const registrationId = id("registration");
+    const selected = { ...observed, nodeUrl };
     const manifest = await service.node.call(
       "get_capabilities",
       { machine_id: machineId },
@@ -883,6 +895,14 @@ export function createApp(
     const machine = await mutate(service.store, (s) => {
       const m = s.machines[machineId];
       requireThat(
+        machineSettingsFingerprint(m) === observedSettings &&
+          machineInspectionFingerprint(m) === observedInspection &&
+          m.policyObservationId === observedPolicy,
+        "STALE_MACHINE_REGISTRATION",
+        "The saved device or its settings changed while registration was being checked. The newer setup was preserved. Refresh the workshop before registering again.",
+        409,
+      );
+      requireThat(
         !m.activeJobId && !m.reservation,
         "MACHINE_BUSY",
         "Finish existing orders before registering a different adapter.",
@@ -893,6 +913,8 @@ export function createApp(
         "The configured node must be in the selected simulation or hardware mode.",
       );
       m.mode = req.body.mode;
+      // Even an identical accepted observation supersedes older pending reads.
+      m.registrationId = registrationId;
       m.nodeUrl = nodeUrl;
       m.paired = manifest.paired === true;
       m.configured = manifest.configured === true;
@@ -975,12 +997,14 @@ export function createApp(
           }).filter(([, value]) => value !== undefined),
         );
         const hasNodePolicy = Object.keys(nodePolicy).length > 0;
+        const policyObservationId = id("policy_observation");
         const pauseForReconciliation = async () => {
           try {
             // Preserve the current editable configuration even if another
             // workflow changed it or the preceding write committed ambiguously.
             await mutate(service.store, (s) => {
               const m = s.machines[before.id];
+              m.policyObservationId = policyObservationId;
               m.policyReconciliationRequired = true;
               m.ready = false;
               m.paused = true;
@@ -1041,6 +1065,7 @@ export function createApp(
                 card.platform !== m.priceCard.platform);
             const { inspected, cleared, ownerAddress, ...patch } = body;
             Object.assign(m, patch);
+            if (hasNodePolicy) m.policyObservationId = policyObservationId;
             if (ownerAddress === null) delete m.ownerAddress;
             else if (ownerAddress !== undefined) m.ownerAddress = ownerAddress;
             if (body.paused !== undefined) {
@@ -1124,7 +1149,8 @@ export function createApp(
   app.post("/api/owner/machines/:id/calibration/start", async (req, res) => {
     const a = await owner(req);
     const machineId = String(req.params.id);
-    const machine = ownValue((await service.read()).machines, machineId);
+    const s = await service.read(),
+      machine = ownValue(s.machines, machineId);
     requireThat(machine, "NOT_FOUND", "Machine not found.", 404);
     requireThat(
       machine.ownerId === a.id,
@@ -1136,6 +1162,18 @@ export function createApp(
       req.body.idempotencyKey,
       req.body.ownerReady,
     );
+    const expectedContext = expectedCalibrationContext(
+      req.body.expectedContext,
+    );
+    requireCalibrationStart(
+      s,
+      machineId,
+      a.id,
+      service.config.mode,
+      req.body.idempotencyKey,
+      expectedContext,
+    );
+    const observedStart = calibrationStartObservation(s, machineId);
     const artifact = await prepare(req, a.id, 1, req.body.spec);
     res.json({
       calibration: await service.startCalibration(
@@ -1145,26 +1183,36 @@ export function createApp(
         artifact,
         req.body.idempotencyKey,
         req.body.ownerReady,
+        expectedContext,
+        observedStart,
       ),
     });
   });
   app.get("/api/owner/machines/:id/calibration", async (req, res) => {
     await owner(req);
-    const result = await service.calibrationStatus(String(req.params.id));
-    res.json({
-      ...result,
-      calibration: result.calibration
+    const result = await service.calibrationStatus(
+      String(req.params.id),
+      req.query.requestKey,
+    );
+    const calibrationView = (calibration: Job | null | undefined) =>
+      calibration
         ? {
-            ...result.calibration,
-            evidence: result.calibration.evidence
+            ...calibration,
+            evidence: calibration.evidence
               ? {
-                  ...result.calibration.evidence,
+                  ...calibration.evidence,
                   frame: undefined,
-                  url: evidenceUrl(result.calibration, true),
+                  url: evidenceUrl(calibration, true),
                 }
               : undefined,
           }
-        : null,
+        : null;
+    res.json({
+      ...result,
+      calibration: calibrationView(result.calibration),
+      ...(Object.hasOwn(result, "requestedCalibration")
+        ? { requestedCalibration: calibrationView(result.requestedCalibration) }
+        : {}),
     });
   });
   app.get("/api/owner/machines/:id/calibration/evidence", async (req, res) => {
@@ -1235,14 +1283,29 @@ export function createApp(
       "INSPECTION_REQUIRED",
       "Inspect calibration output before confirming calibration.",
     );
-    const sameAttempt = (current: Machine) =>
-      current.activeJobId === m.activeJobId && !current.reservation;
+    const target = req.body.attemptId
+      ? Object.values(s.calibrations ?? {}).find(
+          (c) => c.machineId === m.id && c.attemptId === req.body.attemptId,
+        )
+      : undefined;
+    requireThat(
+      !req.body.attemptId || target,
+      "CALIBRATION_NOT_FOUND",
+      "This calibration attempt does not belong to the machine.",
+    );
+    requireThat(
+      !target?.calibrationDeviceContext ||
+        target.calibrationDeviceContext === calibrationDeviceContext(m),
+      "CALIBRATION_CONTEXT_CHANGED",
+      "This calibration belongs to an earlier device setup. Authorize a new supervised calibration for the current setup.",
+    );
+    const observed = calibrationOperationContext(s, m.id, target?.id);
     // Remove availability before contacting the node so a quote cannot reserve
     // the machine while its calibration confirmation is still in flight.
-    await mutate(service.store, (s) => {
+    const pending = await mutate(service.store, (s) => {
       const current = s.machines[m.id];
       requireThat(
-        sameAttempt(current),
+        calibrationOperationContext(s, m.id, target?.id) === observed,
         "MACHINE_BUSY",
         "The machine changed during calibration. Refresh before confirming it.",
       );
@@ -1250,6 +1313,14 @@ export function createApp(
       current.ready = false;
       current.paused = true;
       current.reason = "Owner calibration confirmation is in progress.";
+      current.calibrationConfirmationId = id("calibration_confirmation");
+      if (target)
+        record(
+          s.calibrations![target.id],
+          "calibration_confirmation_requested",
+          "Owner requested inspection confirmation of this exact attempt.",
+        );
+      return calibrationOperationContext(s, m.id, target?.id);
     });
     let result;
     try {
@@ -1267,7 +1338,8 @@ export function createApp(
       );
     } catch (e) {
       await mutate(service.store, (s) => {
-        if (!sameAttempt(s.machines[m.id])) return;
+        if (calibrationOperationContext(s, m.id, target?.id) !== pending)
+          return;
         s.machines[m.id].calibrated = false;
         s.machines[m.id].paused = true;
         s.machines[m.id].ready = false;
@@ -1275,27 +1347,38 @@ export function createApp(
       });
       throw e;
     }
-    if (result.calibrated !== true) {
-      await mutate(service.store, (s) => {
+    const modeUnconfirmed =
+      result?.calibrated === true && result.mode !== m.mode;
+    const failureReason = modeUnconfirmed
+      ? "The node did not confirm calibration in this machine's configured mode. Refresh and inspect the current device before trying again."
+      : typeof result?.reason === "string"
+        ? result.reason
+        : "Calibration failed; inspect and recover before listing.";
+    if (result?.calibrated !== true || modeUnconfirmed) {
+      const applied = await mutate(service.store, (s) => {
         const m = s.machines[String(req.params.id)];
-        if (!sameAttempt(m)) return;
+        if (calibrationOperationContext(s, m.id, target?.id) !== pending)
+          return false;
         m.calibrated = false;
         m.ready = false;
         m.paused = true;
-        m.reason =
-          result.reason ??
-          "Calibration failed; inspect and recover before listing.";
+        m.reason = failureReason;
+        return true;
       });
+      requireThat(
+        applied,
+        "MACHINE_BUSY",
+        "The machine or inspection changed while confirmation was pending. The newer saved state was preserved.",
+      );
       throw new Problem(
-        "CALIBRATION_FAILED",
-        result.reason ??
-          "Calibration did not pass. Inspect and recover before listing.",
+        modeUnconfirmed ? "CALIBRATION_MODE_UNCONFIRMED" : "CALIBRATION_FAILED",
+        failureReason,
       );
     }
     const machine = await mutate(service.store, (s) => {
       const m = s.machines[String(req.params.id)];
       requireThat(
-        sameAttempt(m),
+        calibrationOperationContext(s, m.id, target?.id) === pending,
         "MACHINE_BUSY",
         "The machine moved to another attempt during calibration. Refresh before confirming it.",
       );
@@ -1308,6 +1391,12 @@ export function createApp(
         m.mode === "simulation"
           ? "Simulated calibration passed. List and explicitly resume."
           : "Calibration passed with owner inspection; list and resume.";
+      if (target)
+        record(
+          s.calibrations![target.id],
+          "calibration_inspected",
+          "Owner confirmed the output and current device configuration.",
+        );
       return m;
     });
     res.json({ machine, calibration: result });

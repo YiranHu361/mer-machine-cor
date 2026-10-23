@@ -11,6 +11,7 @@ test("a terminal calibration's stale bound image fails readably and explicit met
     frameB = "b".repeat(64);
   const calibration = (suffix: string, frame: string) => ({
     id: `calibration_${suffix}`,
+    machineId,
     attemptId: `attempt_${suffix}`,
     productionState: "produced",
     evidence: {
@@ -84,6 +85,15 @@ test("a terminal calibration's stale bound image fails readably and explicit met
       body = {
         calibration: metadataReads === 1 ? old : fresh,
         status: { execution_status: "completed" },
+        lifecycle: {
+          activeJobId: null,
+          calibrationActive: false,
+          canRequestNew: true,
+          context: "c".repeat(64),
+          contextMatch: null,
+          reasonCode: "AVAILABLE_TO_REQUEST",
+          reason: "Offline fixture store permission only.",
+        },
       };
     } else if (path === `${endpoint}/evidence`) {
       const frame = url.searchParams.get("frame"),

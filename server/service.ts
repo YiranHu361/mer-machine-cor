@@ -24,6 +24,16 @@ import type { PaymentBoundary, PaymentResult } from "./payments.ts";
 import { readFile } from "node:fs/promises";
 import { createClaudeProvider } from "../integrations/src/claude.ts";
 import { parseJobCreation, findCreatedJob } from "./job-creation.ts";
+import { machineInspectionFingerprint } from "./machine-settings.ts";
+import {
+  calibrationDeviceContext,
+  calibrationLifecycle,
+  calibrationOperationContext,
+  calibrationStartObservation,
+  expectedCalibrationContext,
+  requestedCalibrationKey,
+  requireCalibrationStart,
+} from "./calibration-context.ts";
 export interface Config {
   mode: "simulation" | "hardware";
   paymentMode: "mock" | "testnet";
@@ -85,18 +95,24 @@ export class Service {
     artifact: Job["artifact"],
     key: string,
     ownerReady: boolean,
+    expectedContext?: string,
+    observedStart?: string,
   ) {
     this.validateCalibrationIntent(key, ownerReady);
+    const expected = expectedCalibrationContext(expectedContext);
     const spec = specSchema.parse(input);
     if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+    const observed =
+      observedStart ??
+      calibrationStartObservation(await this.read(), machineId);
     const accepted = await mutate(this.store, (s) => {
-      const m = ownValue(s.machines, machineId);
-      requireThat(m, "NOT_FOUND", "Machine not found.", 404);
-      requireThat(
-        m.ownerId === ownerId,
-        "FORBIDDEN",
-        "This machine belongs to another owner.",
-        403,
+      const m = requireCalibrationStart(
+        s,
+        machineId,
+        ownerId,
+        this.config.mode,
+        key,
+        expected,
       );
       s.calibrations ??= {};
       const existing = Object.values(s.calibrations).find(
@@ -111,6 +127,11 @@ export class Service {
         );
         return { calibration: existing, start: false };
       }
+      requireThat(
+        calibrationStartObservation(s, machineId) === observed,
+        "CALIBRATION_AUTHORIZATION_CHANGED",
+        "A newer calibration or owner clearance changed while this request was being prepared. Refresh before explicitly authorizing another calibration.",
+      );
       requireThat(
         !m.activeJobId &&
           (!m.reservation || Date.parse(m.reservation.expiresAt) <= Date.now()),
@@ -138,6 +159,7 @@ export class Service {
         id: id("calibration"),
         requesterId: ownerId,
         machineId,
+        calibrationDeviceContext: calibrationDeviceContext(m),
         specVersion: 1,
         spec,
         artifact,
@@ -157,6 +179,10 @@ export class Service {
         "Owner explicitly authorized this finite calibration job; it is not a paid customer order.",
       );
       s.calibrations[calibration.id] = calibration;
+      // A finite calibration accepted after quote expiry owns the idle slot.
+      // Retaining the expired reservation would prevent its later inspection.
+      if (m.reservation && Date.parse(m.reservation.expiresAt) <= Date.now())
+        delete m.reservation;
       m.activeJobId = calibration.id;
       m.ready = false;
       m.paused = true;
@@ -167,15 +193,7 @@ export class Service {
       const c = accepted.calibration,
         m = (await this.read()).machines[machineId];
       const deviceContext = (machine: Machine) =>
-        JSON.stringify([
-          machine.mode,
-          machine.adapterVersion,
-          machine.nodeUrl,
-          machine.material,
-          machine.paired,
-          machine.configured,
-          machine.calibrated,
-        ]);
+        JSON.stringify([calibrationDeviceContext(machine), machine.calibrated]);
       const observedContext = deviceContext(m);
       const stillCurrent = (state: State) => {
         const current = state.calibrations?.[c.id];
@@ -232,7 +250,8 @@ export class Service {
     }
     return (await this.read()).calibrations![accepted.calibration.id];
   }
-  async calibrationStatus(machineId: string) {
+  async calibrationStatus(machineId: string, requestKey?: unknown) {
+    const requestedKey = requestedCalibrationKey(requestKey);
     const s = await this.read();
     requireThat(
       ownValue(s.machines, machineId),
@@ -241,6 +260,30 @@ export class Service {
       404,
     );
     const latest = (state: State) => latestCalibration(state, machineId);
+    const response = (
+      state: State,
+      calibration: Job | undefined,
+      status: any,
+    ) => ({
+      calibration: calibration ?? null,
+      status,
+      lifecycle: calibrationLifecycle(
+        state,
+        machineId,
+        this.config.mode,
+        calibration?.id,
+      ),
+      ...(requestedKey === undefined
+        ? {}
+        : {
+            requestedCalibration:
+              Object.values(state.calibrations ?? {}).find(
+                (item) =>
+                  item.machineId === machineId &&
+                  item.checkoutKey === requestedKey,
+              ) ?? null,
+          }),
+    });
     const savedStatus = (calibration: Job, reason?: string) => ({
       execution_status:
         (
@@ -255,25 +298,21 @@ export class Service {
       ...(reason ? { reason } : {}),
     });
     const c = latest(s);
-    if (!c) return { calibration: null, status: null };
+    if (!c) return response(s, undefined, null);
     if (s.machines[machineId].activeJobId !== c.id)
-      return {
-        calibration: c,
-        status: savedStatus(
+      return response(
+        s,
+        c,
+        savedStatus(
           c,
           "Showing the saved calibration; it is no longer the active machine attempt.",
         ),
-      };
+      );
     const context = (state: State) => {
       const machine = state.machines[machineId];
       return JSON.stringify([
         machine.activeJobId,
-        machine.mode,
-        machine.adapterVersion,
-        machine.nodeUrl,
-        machine.material,
-        machine.paired,
-        machine.configured,
+        calibrationDeviceContext(machine),
         machine.calibrated,
       ]);
     };
@@ -402,22 +441,22 @@ export class Service {
     }
     const finalState = await this.read();
     const current = latest(finalState);
-    return {
-      calibration: current ?? null,
-      status:
-        current &&
+    return response(
+      finalState,
+      current,
+      current &&
         (!status ||
           current.id !== c.id ||
           snapshot(current) !== observedSnapshot ||
           context(finalState) !== observedContext ||
           (status.execution_status !== "unknown" &&
             status.execution_status !== savedStatus(current).execution_status))
-          ? savedStatus(
-              current,
-              "The calibration changed while its status was checked. Showing the newer saved record.",
-            )
-          : status,
-    };
+        ? savedStatus(
+            current,
+            "The calibration changed while its status was checked. Showing the newer saved record.",
+          )
+        : status,
+    );
   }
   async resolveCalibration(machineId: string, body: any) {
     requireThat(
@@ -444,6 +483,20 @@ export class Service {
       "CALIBRATION_NOT_CURRENT",
       "This calibration is no longer the active machine attempt. Refresh before resolving it.",
     );
+    const observed = calibrationOperationContext(s, machineId, c.id);
+    const pending = await mutate(this.store, (state) => {
+      requireThat(
+        calibrationOperationContext(state, machineId, c.id) === observed,
+        "CALIBRATION_NOT_CURRENT",
+        "The machine or calibration changed before resolution. Refresh before inspecting again.",
+      );
+      record(
+        state.calibrations![c.id],
+        "calibration_resolution_requested",
+        "Owner requested a recorded resolution of this exact attempt.",
+      );
+      return calibrationOperationContext(state, machineId, c.id);
+    });
     await this.node.call(
       "/reconcile",
       {
@@ -459,7 +512,7 @@ export class Service {
     await mutate(this.store, (s) => {
       const current = s.calibrations![c.id];
       requireThat(
-        s.machines[machineId].activeJobId === c.id,
+        calibrationOperationContext(s, machineId, c.id) === pending,
         "CALIBRATION_NOT_CURRENT",
         "The machine moved to another attempt while this calibration was being resolved.",
       );
@@ -1963,6 +2016,11 @@ export class Service {
     const candidates = Object.values(state.machines).filter(
       (m) => m.ready && !m.paused && !m.activeJobId,
     );
+    const observation = (machine: Machine) =>
+      JSON.stringify([
+        machineInspectionFingerprint(machine),
+        machine.policyObservationId ?? null,
+      ]);
     const results = await Promise.allSettled(
       candidates.map(async (machine) => {
         const status = await this.node.call(
@@ -1976,31 +2034,48 @@ export class Service {
     for (let i = 0; i < results.length; i++) {
       const result = results[i],
         machine = candidates[i];
+      const status =
+        result.status === "fulfilled" ? result.value.status : undefined;
+      const known =
+        status !== null &&
+        typeof status === "object" &&
+        !Array.isArray(status) &&
+        status.machine_id === machine.id &&
+        status.mode === machine.mode &&
+        typeof status.ready === "boolean" &&
+        typeof status.calibrated === "boolean";
       const unavailable =
         result.status === "rejected" ||
-        result.value.status.ready !== true ||
-        result.value.status.calibrated === false;
+        !known ||
+        status.ready !== true ||
+        status.calibrated === false;
       if (unavailable)
         await mutate(this.store, (s) => {
           const current = s.machines[machine.id];
-          if (current.activeJobId || !current.ready) return;
+          if (
+            !current ||
+            observation(current) !== observation(machine) ||
+            current.activeJobId ||
+            !current.ready
+          )
+            return;
           current.ready = false;
           current.paused = true;
           // A configured authenticated node may revoke calibration after its
           // physical identity/capture configuration changes. Connectivity loss
           // alone provides no evidence that the recorded inspection is invalid.
-          if (
-            result.status === "fulfilled" &&
-            result.value.status.calibrated === false
-          ) {
+          if (known && status.calibrated === false) {
             current.calibrated = false;
             delete current.calibrationAt;
           }
           current.reason =
             result.status === "rejected"
               ? "Node disconnected. Reconnect, inspect and explicitly resume."
-              : (result.value.status.reason ??
-                "Node is not ready. Owner inspection and explicit resume required.");
+              : !known
+                ? "Node status could not be confirmed. Check the configured device, inspect and explicitly resume."
+                : typeof status.reason === "string"
+                  ? status.reason
+                  : "Node is not ready. Owner inspection and explicit resume required.";
         });
     }
   }

@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 const at = "2026-10-23T10:30:00.000Z";
 const calibration = (suffix = "one") => ({
   id: `calibration_${suffix}`,
+  machineId: "calibration_recovery_fixture",
+  checkoutKey: undefined as string | undefined,
   attemptId: `calibration_attempt_${suffix}`,
   productionState: "produced",
   evidence: {
@@ -14,6 +16,30 @@ const calibration = (suffix = "one") => ({
     jobId: `calibration_${suffix}`,
   },
 });
+function lookupRecord(
+  saved: ReturnType<typeof calibration> | null,
+  execution = "completed",
+) {
+  const active =
+    saved &&
+    ["running", "dispatched", "needs_review"].includes(saved.productionState)
+      ? saved.id
+      : null;
+  return {
+    calibration: saved,
+    status: saved ? { execution_status: execution } : null,
+    lifecycle: {
+      activeJobId: active,
+      calibrationActive: Boolean(active),
+      canRequestNew: !active,
+      context: "c".repeat(64),
+      contextMatch: null,
+      reasonCode: active ? "ACTIVE_CALIBRATION" : "AVAILABLE_TO_REQUEST",
+      reason:
+        "Offline fixture store permission; no hardware readiness is asserted.",
+    },
+  };
+}
 async function fixture(
   page: Page,
   existing = true,
@@ -55,6 +81,7 @@ async function fixture(
     hours: { start: 0, end: 24 },
     maxJobSeconds: 120,
     collectionPoint: "Isolated fixture desk",
+    activeJobId: undefined as string | undefined,
   };
   const bytes = await readFile(resolve("tests/fixtures/makers.png"));
   await page.routeWebSocket(/.*/, (socket) => socket.close());
@@ -106,6 +133,30 @@ async function fixture(
       body = {
         calibration: state.calibration,
         status: state.statusValue,
+        lifecycle: {
+          activeJobId: machine.activeJobId || null,
+          calibrationActive: Boolean(
+            state.calibration && machine.activeJobId === state.calibration.id,
+          ),
+          canRequestNew:
+            !machine.activeJobId && machine.paired && machine.configured,
+          context: "c".repeat(64),
+          contextMatch: null,
+          reasonCode: machine.activeJobId
+            ? "ACTIVE_CALIBRATION"
+            : "AVAILABLE_TO_REQUEST",
+          reason:
+            "Offline fixture store permission; no hardware readiness is asserted.",
+        },
+        ...(new URL(route.request().url()).searchParams.has("requestKey")
+          ? {
+              requestedCalibration:
+                state.calibration?.checkoutKey ===
+                new URL(route.request().url()).searchParams.get("requestKey")
+                  ? state.calibration
+                  : null,
+            }
+          : {}),
       };
     } else if (path === "/api/uploads" && method === "POST")
       body = {
@@ -120,6 +171,8 @@ async function fixture(
     else if (path.endsWith("/calibration/start") && method === "POST") {
       state.starts.push(route.request().postDataJSON());
       state.calibration = calibration();
+      state.calibration.checkoutKey = state.starts.at(-1)!.idempotencyKey;
+      machine.activeJobId = state.calibration.id;
       body = { calibration: state.calibration };
     } else if (path === "/api/events")
       return route.fulfill({
@@ -285,7 +338,7 @@ test("an unknown saved calibration stays gated until a held lookup confirms expl
   state.holdLookup = false;
   await state.heldLookups[0].fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ calibration: null, status: null }),
+    body: JSON.stringify(lookupRecord(null)),
   });
   await expect(
     page.getByLabel("Calibration artwork", { exact: true }),
@@ -362,9 +415,19 @@ test("physical start supervision must be reconfirmed after adapter and pairing c
   await page.clock.fastForward(3001);
   await expect(ready).not.toBeChecked();
   await expect(start).toBeDisabled();
+  await expect(page.getByAltText("Calibration original artwork")).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByLabel("Calibration artwork", { exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByLabel("Calibration artwork", { exact: true })
+    .setInputFiles(resolve("tests/fixtures/makers.png"));
+  await expect(page.getByAltText("Calibration original artwork")).toBeVisible();
   await ready.check();
   await expect(start).toBeEnabled();
-  expect(state.mutations).toEqual(["/api/uploads"]);
+  expect(state.mutations).toEqual(["/api/uploads", "/api/uploads"]);
   expect(state.starts).toEqual([]);
 });
 
@@ -380,10 +443,7 @@ test("slow calibration reads serialize, apply meaningful replies and release exp
     if (setup)
       return route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({
-          calibration: running,
-          status: { execution_status: "running" },
-        }),
+        body: JSON.stringify(lookupRecord(running, "running")),
       });
     pending.push(route);
   });
@@ -402,10 +462,7 @@ test("slow calibration reads serialize, apply meaningful replies and release exp
   const first = { ...calibration("slow-first"), productionState: "running" };
   await pending[0].fulfill({
     contentType: "application/json",
-    body: JSON.stringify({
-      calibration: first,
-      status: { execution_status: "running" },
-    }),
+    body: JSON.stringify(lookupRecord(first, "running")),
   });
   await expect(
     page.getByText(/Attempt calibration_attempt_slow-first/),
@@ -416,10 +473,7 @@ test("slow calibration reads serialize, apply meaningful replies and release exp
   const second = { ...calibration("slow-second"), productionState: "running" };
   await pending[1].fulfill({
     contentType: "application/json",
-    body: JSON.stringify({
-      calibration: second,
-      status: { execution_status: "running" },
-    }),
+    body: JSON.stringify(lookupRecord(second, "running")),
   });
   await expect(
     page.getByText(/Attempt calibration_attempt_slow-second/),
@@ -446,10 +500,7 @@ test("a device change fences a pending old calibration reply before the queued c
     }
     return route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        calibration: latest,
-        status: { execution_status: "completed" },
-      }),
+      body: JSON.stringify(lookupRecord(latest)),
     });
   });
   const refresh = page.getByRole("button", {
@@ -474,10 +525,7 @@ test("a device change fences a pending old calibration reply before the queued c
   });
   await held!.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({
-      calibration: calibration("stale-device"),
-      status: { execution_status: "completed" },
-    }),
+    body: JSON.stringify(lookupRecord(calibration("stale-device"))),
   });
   await expect(
     page.getByText(/Attempt calibration_attempt_fresh-device/),
@@ -615,7 +663,7 @@ test("a recovered calibration lookup respects a newer owner focus choice while i
   state.holdLookup = false;
   await state.heldLookups[0].fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ calibration: null, status: null }),
+    body: JSON.stringify(lookupRecord(null)),
   });
   await expect(
     page.getByLabel("Calibration artwork", { exact: true }),

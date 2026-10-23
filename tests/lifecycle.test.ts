@@ -49,7 +49,14 @@ class Device implements NodeBoundary {
       return { status: "accepted", execution_status: "running" };
     }
     if (tool === "get_status")
-      return { execution_status: this.status, completion_credible: true };
+      return {
+        machine_id: input.machine_id,
+        mode: "simulation",
+        ready: true,
+        calibrated: true,
+        execution_status: this.status,
+        completion_credible: true,
+      };
     if (tool === "abort")
       return { status: "unsupported", reason: "Test boundary cannot stop." };
     return { calibrated: true };
@@ -1251,7 +1258,9 @@ test("authenticated calibration revocation clears stale inspection provenance an
       await mutate(f.store, (s) => {
         s.machines.phomemo_01.calibrationAt = inspectionAt;
       });
-      f.service.node.call = async () => ({
+      f.service.node.call = async (_tool, input) => ({
+        machine_id: input.machine_id,
+        mode: "simulation",
         ready: false,
         ...(calibrated === undefined ? {} : { calibrated }),
         reason:

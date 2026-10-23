@@ -173,7 +173,23 @@ async function fixture(page: Page) {
         jobs: [],
         ledger: state.ledger,
       };
-    } else if (path.endsWith("/calibration")) body = { calibration: null };
+    } else if (path.endsWith("/calibration"))
+      body = {
+        calibration: null,
+        lifecycle: {
+          activeJobId: machine.activeJobId || null,
+          calibrationActive: false,
+          canRequestNew:
+            !machine.activeJobId &&
+            machine.paired &&
+            machine.configured &&
+            !machine.policyReconciliationRequired,
+          context: "c".repeat(64),
+          contextMatch: null,
+          reasonCode: "FIXTURE_PERMISSION",
+          reason: "Offline fixture store permission only.",
+        },
+      };
     else
       return route.fulfill({
         status: 405,
@@ -435,6 +451,8 @@ test("clearance confirmation binds physical and execution contexts while unrelat
   await f.refresh();
   await expect(f.clearance).toBeChecked();
   for (const patch of [
+    { registrationId: "fresh-identical-device-registration" },
+    { calibrationConfirmationId: "fresh-owner-calibration-confirmation" },
     { adapterVersion: "fixture-v2" },
     { mode: "hardware" },
     { material: "photo-film" },

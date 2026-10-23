@@ -1,11 +1,29 @@
 {
-  "at": "2026-10-23T11:44:46.779Z",
+  "at": "2026-10-23T12:20:18.556Z",
   "status": "PASS",
   "mode": "simulation",
+  "paymentMode": "mock",
   "store": "spacetimedb",
   "machineId": "phomemo_01",
-  "calibrationId": "calibration_81bb7f72-5284-4071-9de0-0c11424fb78b",
-  "attemptId": "calibration_attempt_1c0f2c20-4eb7-4313-aa75-01cb5beb0f46",
-  "scope": "Actual owner upload, prepare, signed calibration attempt, durable duplicate, status/evidence, inspection and explicit resume",
+  "calibrationIds": [
+    "calibration_2301c833-4f43-45de-badb-dc821d3c88c4",
+    "calibration_232f886d-916b-49f9-8db6-49f0a6a830e2"
+  ],
+  "attemptIds": [
+    "calibration_attempt_3026c1b9-a757-45fe-ae50-e2defd5ce29e",
+    "calibration_attempt_41c8b945-7855-4701-b6a2-97743d088a5f"
+  ],
+  "scope": "Actual owner upload/preparation, expected device context, two explicitly authorized finite signed simulation attempts, same-key replay, exact bound frames, inspection, authoritative inactive/active lifecycle, archived request-key lookup beside another active/latest record, and explicit resume",
+  "checks": [
+    "Each authorization uses fresh UUID and saved expectedContext",
+    "Same-key replays retain existing attempt; archived replay starts no replacement",
+    "Active lifecycle blocks replacement; confirmed inactive lifecycle permits an explicit fresh request",
+    "Exact requestedCalibration lookup finds the archived request while latest/active remains separate",
+    "Bound evidence URLs and matching pixels load before inspection",
+    "Finalized machine stays paused/unready until explicit resume"
+  ],
+  "explicitSimulationCalibrations": 2,
+  "physicalJobs": 0,
+  "paymentOperations": 0,
   "physicalCalibration": "NOT_RUN"
 }

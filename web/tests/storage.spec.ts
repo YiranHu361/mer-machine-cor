@@ -373,7 +373,18 @@ test("denied session storage leaves owner calibration visible and blocks a new p
         body: ": offline storage fixture\n\n",
       });
     if (path.endsWith("/calibration"))
-      return json(route, { calibration: null });
+      return json(route, {
+        calibration: null,
+        lifecycle: {
+          activeJobId: null,
+          calibrationActive: false,
+          canRequestNew: true,
+          context: "c".repeat(64),
+          contextMatch: null,
+          reasonCode: "AVAILABLE_TO_REQUEST",
+          reason: "Offline fixture store permission only.",
+        },
+      });
     if (path === "/api/uploads")
       return json(route, {
         assets: [{ id: "fixture_art", url: pixel, sha256: "fixture_art_hash" }],

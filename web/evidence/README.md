@@ -1,10 +1,10 @@
 # Browser verification evidence
 
-Current overnight checkpoint: 2026-10-23, 04:57 Pacific. **163 scenarios passed in each of Chromium, Firefox and WebKit**, with 42 automated A/AA scans and no detected violations. 29 API/storage/wallet unit cases passed. Current per-engine reports are `overnight-seventh-{chromium,firefox,webkit}-browser.json`; [source/counts/scope](../../docs/evidence/overnight-seventh-qa.json), [ongoing log](../../docs/overnight-qa.md).
+Current checkpoint: 2026-10-23 05:35 Pacific. **182 scenarios passed in each of Chromium, Firefox and WebKit**, with 45 automated A/AA scans and no detected violations. 29 API/storage/wallet units passed. Final reports: `overnight-eighth-{chromium,firefox,webkit}-browser.json`; [source/counts/scope](../../docs/evidence/overnight-eighth-qa.json), [ongoing log](../../docs/overnight-qa.md).
 
-New isolated UI evidence covers private requester new/edit drafts, exact interrupted-creation matching, mismatched successful replies, startup draft preservation and stale bound-frame recovery. [Drafts at 320px](overnight-requester-drafts-320.png) and [desktop](overnight-requester-drafts-desktop.png) show simulation fixtures. Session-memory drafts cannot survive forced termination.
+[Fresh calibration preparation at 320px](overnight-calibration-retry-320.png) shows intercepted APIs, fresh unchecked readiness and distinct retained inactive history. New cases cover exact checkpoint recovery, stale/unknown permissions, same-history draft retention, generation/busy ordering and mobile keyboard recovery. No physical job was started.
 
-The [reconnected dashboard](overnight-seventh-sse-reconnected.png) uses actual local SpacetimeDB/simulation/mock with polling disabled. Native iOS, full accessibility conformance, hardware output, funded payments and live model calls remain unverified.
+The [actual reconnected owner view](overnight-eighth-sse-reconnected.png) used retained SpacetimeDB/simulation/mock with polling disabled. [Requester drafts](overnight-requester-drafts-320.png) remain in private session memory; forced termination can lose unsaved data. Native iOS, full accessibility conformance, hardware output, funded payments and live model calls remain unverified.
 
 The following entries are historical implementation baselines.
 

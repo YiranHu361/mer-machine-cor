@@ -51,6 +51,8 @@ type Price = {
 };
 type Machine = {
   id: string;
+  registrationId?: string;
+  calibrationConfirmationId?: string;
   name: string;
   model: string;
   outputType: Output;
@@ -3595,6 +3597,7 @@ function OwnerMachine({
   const inspectionContext = JSON.stringify([
     m.id,
     m.adapterVersion,
+    m.registrationId,
     m.mode,
     m.outputType,
     m.material,
@@ -3602,6 +3605,7 @@ function OwnerMachine({
     m.configured,
     m.calibrated,
     m.calibrationAt,
+    m.calibrationConfirmationId,
     m.activeJobId,
     m.reservation?.jobId,
     m.reservation?.expiresAt,
@@ -3973,6 +3977,9 @@ function OwnerMachine({
 
 type Calibration = {
   id: string;
+  machineId?: string;
+  checkoutKey?: string;
+  calibrationDeviceContext?: string;
   attemptId: string;
   productionState?: string;
   reason?: string;
@@ -3990,6 +3997,59 @@ function PhysicalCalibration({
   machine: Machine;
   finalize: (body: unknown) => Promise<boolean>;
 }) {
+  type Lifecycle = {
+    activeJobId: string | null;
+    calibrationActive: boolean;
+    canRequestNew: boolean;
+    context: string;
+    reasonCode: string;
+    reason: string;
+    contextMatch: boolean | null;
+  };
+  type Checkpoint = { key: string | null; pending: boolean; legacy?: boolean };
+  const slot = `fabrary-calibration-${m.id}`;
+  const validKey = (value: unknown): value is string =>
+    typeof value === "string" && /^[A-Za-z0-9._:-]{8,200}$/.test(value);
+  const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(() => {
+    const stored = readStoredValue("session", slot);
+    if (stored === null) return null;
+    if (validKey(stored)) return { key: stored, pending: true, legacy: true };
+    try {
+      const value = JSON.parse(stored);
+      if (
+        value?.v === 2 &&
+        validKey(value.key) &&
+        typeof value.pending === "boolean"
+      )
+        return { key: value.key, pending: value.pending };
+    } catch {
+      /* A damaged checkpoint cannot establish that no job was sent. */
+    }
+    return { key: null, pending: true };
+  });
+  const checkpointRef = useRef(checkpoint);
+  const key = useRef(crypto.randomUUID());
+  const storeCheckpoint = (requestKey: string, pending: boolean) => {
+    const saved = writeStoredValue(
+      "session",
+      slot,
+      JSON.stringify({ v: 2, key: requestKey, pending }),
+    );
+    if (saved || !pending) {
+      const next = { key: requestKey, pending };
+      checkpointRef.current = next;
+      setCheckpoint(next);
+    }
+    return saved;
+  };
+  const unresolvedStart = checkpoint?.pending === true;
+  const [lifecycle, setLifecycle] = useState<Lifecycle | null>(null);
+  const [preparation, setPreparation] = useState<{
+    context: string;
+    historicalId: string;
+    key: string;
+  } | null>(null);
+  const [authorizationNotice, setAuthorizationNotice] = useState("");
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [nodeState, setNodeState] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -4005,7 +4065,16 @@ function PhysicalCalibration({
   const [error, setError] = useState("");
   const [lookupKnown, setLookupKnown] = useState(false);
   const [lookupBusy, setLookupBusy] = useState(false);
+  const permissionContext = JSON.stringify([
+    m.activeJobId,
+    m.reservation,
+    m.policyReconciliationRequired,
+  ]);
+  const livePermissionContext = useRef(permissionContext);
+  livePermissionContext.current = permissionContext;
+  const knownPermissionContext = useRef<string | null>(null);
   const recoveryControl = useRef<HTMLElement | null>(null);
+  const prepareButton = useRef<HTMLButtonElement>(null);
   const pendingRecoveryFocus = useRef<{
     initiator: HTMLButtonElement;
     recovered: boolean;
@@ -4023,6 +4092,8 @@ function PhysicalCalibration({
   }>({ generation: 0, inFlight: null, queued: null });
   const inspectionContext = JSON.stringify([
     m.id,
+    m.registrationId,
+    m.calibrationConfirmationId,
     m.mode,
     m.outputType,
     m.adapterVersion,
@@ -4045,10 +4116,6 @@ function PhysicalCalibration({
     setReason("");
     setResolution("completed");
   }, [inspectionContext]);
-  const key = useRef(
-    readStoredValue("session", `fabrary-calibration-${m.id}`) ||
-      crypto.randomUUID(),
-  );
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -4058,6 +4125,19 @@ function PhysicalCalibration({
       readGate.current.queued = null;
     };
   }, []);
+  const validCalibration = (value: unknown): value is Calibration => {
+    const saved = value as Calibration | null;
+    return Boolean(
+      saved &&
+      typeof saved === "object" &&
+      !Array.isArray(saved) &&
+      saved.machineId === m.id &&
+      [saved.id, saved.attemptId, saved.productionState].every(
+        (field) => typeof field === "string" && field.trim().length > 0,
+      ) &&
+      (saved.checkoutKey === undefined || validKey(saved.checkoutKey)),
+    );
+  };
   const refresh = useCallback((): Promise<boolean> => {
     if (!mounted.current) return Promise.resolve(false);
     const gate = readGate.current;
@@ -4066,26 +4146,59 @@ function PhysicalCalibration({
       setLookupBusy(true);
       const current = (async () => {
         try {
+          const observedPermission = livePermissionContext.current;
+          const requestKey = checkpointRef.current?.key;
           const value = await api<{
             calibration: Calibration | null;
+            requestedCalibration?: Calibration | null;
+            lifecycle: Lifecycle;
             status?: {
               execution_status?: string;
               state?: string;
               reason?: string;
             };
-          }>(`/owner/machines/${m.id}/calibration`);
+          }>(
+            `/owner/machines/${m.id}/calibration${requestKey ? `?requestKey=${encodeURIComponent(requestKey)}` : ""}`,
+          );
           if (!mounted.current || generation !== gate.generation) return false;
           const saved = value.calibration;
           const status = value.status;
+          const life = value.lifecycle;
           if (
             !Object.prototype.hasOwnProperty.call(value, "calibration") ||
-            (saved !== null &&
-              (!saved ||
-                typeof saved !== "object" ||
-                ![saved.id, saved.attemptId, saved.productionState].every(
-                  (field) =>
-                    typeof field === "string" && field.trim().length > 0,
-                ))) ||
+            (saved !== null && !validCalibration(saved)) ||
+            !life ||
+            typeof life !== "object" ||
+            Array.isArray(life) ||
+            !(
+              life.activeJobId === null ||
+              (typeof life.activeJobId === "string" &&
+                life.activeJobId.trim().length > 0)
+            ) ||
+            typeof life.calibrationActive !== "boolean" ||
+            typeof life.canRequestNew !== "boolean" ||
+            typeof life.context !== "string" ||
+            !/^[a-f0-9]{64}$/i.test(life.context) ||
+            ![life.reasonCode, life.reason].every(
+              (field) => typeof field === "string" && field.trim().length > 0,
+            ) ||
+            !(
+              life.contextMatch === null ||
+              typeof life.contextMatch === "boolean"
+            ) ||
+            life.calibrationActive !==
+              Boolean(saved && life.activeJobId === saved.id) ||
+            (life.canRequestNew &&
+              (life.activeJobId !== null || life.calibrationActive)) ||
+            (!saved && life.contextMatch !== null) ||
+            (requestKey &&
+              (!Object.prototype.hasOwnProperty.call(
+                value,
+                "requestedCalibration",
+              ) ||
+                (value.requestedCalibration !== null &&
+                  (!validCalibration(value.requestedCalibration) ||
+                    value.requestedCalibration.checkoutKey !== requestKey)))) ||
             (status != null &&
               (typeof status !== "object" ||
                 Array.isArray(status) ||
@@ -4101,6 +4214,14 @@ function PhysicalCalibration({
               "The saved calibration response could not be confirmed. Refresh its status before starting or confirming a physical job.",
             );
           setCalibration(saved);
+          setLifecycle(life);
+          knownPermissionContext.current = observedPermission;
+          if (
+            requestKey &&
+            value.requestedCalibration?.checkoutKey === requestKey &&
+            (checkpointRef.current?.pending || checkpointRef.current?.legacy)
+          )
+            storeCheckpoint(requestKey, false);
           setNodeState(
             value.status?.execution_status ||
               value.status?.state ||
@@ -4146,6 +4267,7 @@ function PhysicalCalibration({
   }, [m.id]);
   const deviceContext = JSON.stringify([
     m.id,
+    m.registrationId,
     m.mode,
     m.outputType,
     m.adapterVersion,
@@ -4153,9 +4275,29 @@ function PhysicalCalibration({
     m.paired,
     m.configured,
   ]);
+  const liveDeviceContext = useRef(deviceContext);
+  liveDeviceContext.current = deviceContext;
+  const lastDeviceContext = useRef<string | null>(null);
+  const clearPreparationFields = () => {
+    setAssets([]);
+    setModelId("");
+    setWidth(m.outputType === "instax" ? "54" : "53");
+    setHeight(m.outputType === "instax" ? "86" : "50");
+    setOwnerReady(false);
+    setInspected(false);
+    setReason("");
+    setResolution("completed");
+  };
   useEffect(() => {
     const generation = ++readGate.current.generation;
     setLookupKnown(false);
+    if (lastDeviceContext.current !== deviceContext) {
+      setLifecycle(null);
+      setPreparation(null);
+      clearPreparationFields();
+      lastDeviceContext.current = deviceContext;
+    } else setOwnerReady(false);
+    setBusy("");
     void refresh();
     if (m.outputType === "3d")
       api<{ models: CatalogItem[] }>("/catalog")
@@ -4167,18 +4309,89 @@ function PhysicalCalibration({
           if (mounted.current && generation === readGate.current.generation)
             setError(e.message);
         });
-  }, [refresh, deviceContext]);
+  }, [refresh, deviceContext, permissionContext]);
+  useEffect(() => {
+    if (!preparation || !lookupKnown || !lifecycle) return;
+    if (
+      lifecycle.context !== preparation.context ||
+      lifecycle.activeJobId !== null ||
+      calibration?.id !== preparation.historicalId
+    ) {
+      readGate.current.generation++;
+      setPreparation(null);
+      clearPreparationFields();
+      setBusy("");
+    }
+  }, [
+    preparation,
+    lookupKnown,
+    lifecycle?.context,
+    lifecycle?.activeJobId,
+    calibration?.id,
+  ]);
+  useEffect(() => {
+    setOwnerReady(false);
+  }, [
+    lookupKnown,
+    lifecycle?.canRequestNew,
+    lifecycle?.activeJobId,
+    lifecycle?.context,
+    unresolvedStart,
+  ]);
+  const reservationBlocked = Boolean(
+    m.reservation &&
+    (!Number.isFinite(Date.parse(m.reservation.expiresAt)) ||
+      Date.parse(m.reservation.expiresAt) > Date.now()),
+  );
+  const dashboardBlocked =
+    knownPermissionContext.current !== permissionContext &&
+    Boolean(
+      m.activeJobId || m.policyReconciliationRequired || reservationBlocked,
+    );
+  const canRequestNew = Boolean(
+    lookupKnown &&
+    lifecycle?.canRequestNew &&
+    !dashboardBlocked &&
+    !unresolvedStart &&
+    (!calibration ||
+      ["produced", "failed"].includes(calibration.productionState || "")),
+  );
+  const showStartForm = Boolean(
+    preparation || (!calibration && lookupKnown && !unresolvedStart),
+  );
+  const canStart =
+    canRequestNew &&
+    (!preparation || preparation.context === lifecycle?.context) &&
+    (!preparation || preparation.historicalId === calibration?.id);
+  const canInspect =
+    lookupKnown &&
+    lifecycle?.contextMatch !== false &&
+    (!unresolvedStart || lifecycle?.calibrationActive === true) &&
+    !dashboardBlocked &&
+    !reservationBlocked &&
+    !m.policyReconciliationRequired &&
+    m.paired &&
+    m.configured &&
+    Boolean(lifecycle?.calibrationActive || lifecycle?.canRequestNew);
   useEffect(() => {
     if (
-      !calibration ||
-      ["produced", "failed", "needs_review"].includes(
-        calibration.productionState || "",
-      )
+      !preparation &&
+      !unresolvedStart &&
+      (!calibration ||
+        ["produced", "failed", "needs_review"].includes(
+          calibration.productionState || "",
+        ))
     )
       return;
     const timer = setInterval(refresh, 3000);
     return () => clearInterval(timer);
-  }, [calibration?.id, calibration?.productionState, refresh]);
+  }, [
+    calibration?.id,
+    calibration?.productionState,
+    preparation,
+    unresolvedStart,
+    refresh,
+  ]);
   const run = async (
     name: string,
     fn: (isCurrent: () => boolean) => Promise<unknown>,
@@ -4198,13 +4411,15 @@ function PhysicalCalibration({
     } catch (e) {
       if (isCurrent()) setError((e as Error).message);
     } finally {
-      if (mounted.current) setBusy("");
+      if (isCurrent()) setBusy("");
     }
   };
   const recoverLookup = (initiator: HTMLButtonElement) => {
-    void run("refresh", async (isCurrent) => {
+    const requestedDevice = liveDeviceContext.current;
+    void run("refresh", async () => {
       const recovered = await refresh();
-      if (!isCurrent()) return;
+      if (!mounted.current || requestedDevice !== liveDeviceContext.current)
+        return;
       pendingRecoveryFocus.current = {
         initiator,
         recovered,
@@ -4216,10 +4431,13 @@ function PhysicalCalibration({
   useEffect(() => {
     const request = pendingRecoveryFocus.current;
     if (!request || busy) return;
-    const target = request.recovered
-      ? recoveryControl.current
-      : request.initiator;
-    if (target?.matches(":disabled")) return;
+    const recoveredControl = recoveryControl.current;
+    const target =
+      request.recovered &&
+      recoveredControl?.isConnected &&
+      !recoveredControl.matches(":disabled")
+        ? recoveredControl
+        : request.initiator;
     pendingRecoveryFocus.current = null;
     // Focus after the pending controls have re-enabled in the committed DOM.
     requestAnimationFrame(() => {
@@ -4238,11 +4456,32 @@ function PhysicalCalibration({
         return;
       target.focus({ preventScroll: true });
       (target.closest(".field, .check") || target).scrollIntoView({
-        block: "nearest",
+        // Leave room for the bounded evidence image above an inspection check
+        // to finish loading without pushing the focused label below the fold.
+        block: target.matches('input[type="checkbox"]') ? "center" : "nearest",
         behavior: "instant",
       });
     });
   }, [recoverySequence, busy, lookupBusy]);
+  const beginPreparation = (initiator: HTMLButtonElement) => {
+    if (!canRequestNew || !lifecycle || !calibration || busy || lookupBusy)
+      return;
+    key.current = crypto.randomUUID();
+    clearPreparationFields();
+    setPreparation({
+      context: lifecycle.context,
+      historicalId: calibration.id,
+      key: key.current,
+    });
+    setError("");
+    setAuthorizationNotice("");
+    pendingRecoveryFocus.current = {
+      initiator,
+      recovered: true,
+      generation: readGate.current.generation,
+    };
+    setRecoverySequence((value) => value + 1);
+  };
   return (
     <details className="physical-calibration">
       <summary>Physical calibration job & inspection</summary>
@@ -4252,7 +4491,8 @@ function PhysicalCalibration({
         does not establish a calibration pass.
       </Notice>
       {error && <Notice kind="error">{error}</Notice>}
-      {!calibration && !lookupKnown && (
+      {authorizationNotice && <Notice>{authorizationNotice}</Notice>}
+      {!lookupKnown && (
         <Notice>
           {busy
             ? "The calibration request is in progress. Wait for its saved result."
@@ -4271,37 +4511,89 @@ function PhysicalCalibration({
           </button>
         </Notice>
       )}
-      {(lookupKnown || calibration) &&
-        (!calibration ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run("start", async (isCurrent) => {
-                const model = catalog.find((x) => x.id === modelId);
-                if (model && !completePreparedModel(model))
-                  throw new Error(
-                    "The prepared model is missing inspected dimensions, color or an estimated time. Ask the owner to complete its catalog record.",
-                  );
-                const selectedIds = model
-                  ? [model.artifactId]
-                  : assets.map((a) => a.id);
-                if (!selectedIds.length)
-                  throw new Error(
-                    m.outputType === "3d"
-                      ? "Choose an inspected prepared model."
-                      : "Upload calibration artwork before starting.",
-                  );
-                if (
-                  !writeStoredValue(
-                    "session",
-                    `fabrary-calibration-${m.id}`,
-                    key.current,
-                  )
-                )
-                  throw new Error(
-                    "Browser storage is unavailable, so calibration retry details cannot be saved. Allow session storage before starting physical calibration. No job was started.",
-                  );
-                const result = await api<{ calibration: Calibration }>(
+      {unresolvedStart && (
+        <Notice>
+          {checkpoint?.key
+            ? "An earlier calibration request has not been matched to its saved attempt. Its result is unknown. Keep checking this request before preparing another calibration; no new job is sent by refresh."
+            : "The saved calibration retry details could not be read. A new physical request is blocked because the earlier result cannot be established."}
+          <button
+            type="button"
+            className="text-button"
+            disabled={lookupBusy || Boolean(busy)}
+            onClick={(event) => recoverLookup(event.currentTarget)}
+          >
+            Check saved calibration request
+          </button>
+        </Notice>
+      )}
+      {lookupKnown && lifecycle && !lifecycle.canRequestNew && !calibration && (
+        <Notice>
+          {lifecycle.reason}
+          <button
+            type="button"
+            className="text-button"
+            disabled={lookupBusy || Boolean(busy)}
+            onClick={(event) => recoverLookup(event.currentTarget)}
+          >
+            Refresh calibration status
+          </button>
+        </Notice>
+      )}
+      {calibration && canRequestNew && !preparation && (
+        <div className="calibration-new-intent">
+          <p>
+            The previous calibration is inactive. A new preparation needs fresh
+            artwork or a model and a new supervised readiness check.
+          </p>
+          <button
+            type="button"
+            className="secondary"
+            ref={(node) => {
+              prepareButton.current = node;
+              if (node && !canInspect) recoveryControl.current = node;
+            }}
+            disabled={Boolean(busy) || lookupBusy}
+            onClick={(event) => beginPreparation(event.currentTarget)}
+          >
+            Prepare a new supervised calibration
+          </button>
+        </div>
+      )}
+      {showStartForm && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!canStart || !ownerReady || !lifecycle || busy || lookupBusy)
+              return;
+            const expectedContext = lifecycle.context;
+            const requestKey = key.current;
+            setAuthorizationNotice("");
+            void run("start", async (isCurrent) => {
+              const model = catalog.find((x) => x.id === modelId);
+              if (model && !completePreparedModel(model))
+                throw new Error(
+                  "The prepared model is missing inspected dimensions, color or an estimated time. Ask the owner to complete its catalog record.",
+                );
+              const selectedIds = model
+                ? [model.artifactId]
+                : assets.map((a) => a.id);
+              if (!selectedIds.length)
+                throw new Error(
+                  m.outputType === "3d"
+                    ? "Choose an inspected prepared model."
+                    : "Upload calibration artwork before starting.",
+                );
+              if (!storeCheckpoint(requestKey, true)) {
+                removeStoredValue("session", slot);
+                checkpointRef.current = null;
+                setCheckpoint(null);
+                throw new Error(
+                  "Browser storage is unavailable, so calibration retry details cannot be saved. Allow session storage before starting physical calibration. No job was started.",
+                );
+              }
+              let result: { calibration: Calibration };
+              try {
+                result = await api<{ calibration: Calibration }>(
                   `/owner/machines/${m.id}/calibration/start`,
                   {
                     spec: {
@@ -4324,282 +4616,371 @@ function PhysicalCalibration({
                         : {}),
                     },
                     ownerReady: true,
-                    idempotencyKey: key.current,
+                    idempotencyKey: requestKey,
+                    expectedContext,
                   },
                 );
-                if (!isCurrent()) return;
-                setCalibration(result.calibration);
-                setLookupKnown(true);
-                await refresh();
-              });
-            }}
-          >
-            {m.outputType === "3d" ? (
-              <>
-                {modelId && (
-                  <PreparedModelFacts
-                    details={
-                      catalog.find((model) => model.id === modelId) || {}
-                    }
-                  />
-                )}
-                <Field label="Calibration prepared model">
-                  <select
-                    ref={(node) => {
-                      recoveryControl.current = node;
-                    }}
-                    required
-                    disabled={Boolean(busy)}
-                    value={modelId}
-                    onChange={(e) => setModelId(e.target.value)}
-                  >
-                    <option value="">Choose an inspected model</option>
-                    {catalog.map((model) => (
-                      <option value={model.id} key={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </>
-            ) : (
-              <Field
-                label="Calibration artwork"
-                hint="One PNG, JPEG or WebP. Use artwork whose output you can inspect."
-              >
-                <input
+                if (
+                  !validCalibration(result?.calibration) ||
+                  result.calibration.checkoutKey !== requestKey
+                )
+                  throw new ApiError(
+                    "The calibration response could not be matched to this request. Its result is unknown; check the saved calibration request before starting another.",
+                    "invalid_response",
+                    0,
+                    true,
+                  );
+              } catch (error) {
+                if (
+                  isCurrent() &&
+                  error instanceof ApiError &&
+                  error.status >= 400 &&
+                  error.status < 500 &&
+                  !error.outcomeUnknown
+                ) {
+                  storeCheckpoint(requestKey, false);
+                  key.current = crypto.randomUUID();
+                  setOwnerReady(false);
+                  setAuthorizationNotice(
+                    `${error.message} No new calibration was accepted for this request. Review the saved status and check readiness again before a deliberate retry.`,
+                  );
+                  void refresh();
+                }
+                throw error;
+              }
+              if (!isCurrent()) return;
+              storeCheckpoint(requestKey, false);
+              setPreparation(null);
+              clearPreparationFields();
+              setCalibration(result.calibration);
+              await refresh();
+            });
+          }}
+        >
+          {preparation && (
+            <Notice>
+              New supervised calibration preparation. The previous saved attempt
+              remains below. Nothing is started until you check readiness and
+              choose Start physical calibration.
+            </Notice>
+          )}
+          {m.outputType === "3d" ? (
+            <>
+              {modelId && (
+                <PreparedModelFacts
+                  details={catalog.find((model) => model.id === modelId) || {}}
+                />
+              )}
+              <Field label="Calibration prepared model">
+                <select
                   ref={(node) => {
                     recoveryControl.current = node;
                   }}
-                  required={!assets.length}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  disabled={Boolean(busy)}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file)
-                      void run("upload", async (isCurrent) => {
-                        const form = new FormData();
-                        form.append("images", file);
-                        const result = await api<{ assets: Asset[] }>(
-                          "/uploads",
-                          form,
-                        );
-                        if (isCurrent()) setAssets(result.assets);
-                      });
-                  }}
+                  required
+                  disabled={Boolean(busy) || !canStart}
+                  value={modelId}
+                  onChange={(e) => setModelId(e.target.value)}
+                >
+                  <option value="">Choose an inspected model</option>
+                  {catalog.map((model) => (
+                    <option value={model.id} key={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          ) : (
+            <Field
+              label="Calibration artwork"
+              hint="One PNG, JPEG or WebP. Use artwork whose output you can inspect."
+            >
+              <input
+                key={`${deviceContext}:${preparation?.key || "initial"}`}
+                ref={(node) => {
+                  recoveryControl.current = node;
+                }}
+                required={!assets.length}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={Boolean(busy) || !canStart}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file)
+                    void run("upload", async (isCurrent) => {
+                      const form = new FormData();
+                      form.append("images", file);
+                      const result = await api<{ assets: Asset[] }>(
+                        "/uploads",
+                        form,
+                      );
+                      if (isCurrent()) setAssets(result.assets);
+                    });
+                }}
+              />
+            </Field>
+          )}
+          {assets.length > 0 && (
+            <img
+              className="calibration-original"
+              src={assets[0].url}
+              alt="Calibration original artwork"
+            />
+          )}
+          {m.outputType !== "3d" && (
+            <div className="form-grid">
+              <Field label="Calibration width (mm)">
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  disabled={
+                    Boolean(busy) || !canStart || m.outputType === "instax"
+                  }
+                  value={width}
+                  onChange={(e) => setWidth(e.target.value)}
                 />
               </Field>
-            )}
-            {assets.length > 0 && (
-              <img
-                className="calibration-original"
-                src={assets[0].url}
-                alt="Calibration original artwork"
-              />
-            )}
-            {m.outputType !== "3d" && (
-              <div className="form-grid">
-                <Field label="Calibration width (mm)">
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    disabled={Boolean(busy) || m.outputType === "instax"}
-                    value={width}
-                    onChange={(e) => setWidth(e.target.value)}
-                  />
-                </Field>
-                <Field label="Calibration height (mm)">
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    disabled={Boolean(busy) || m.outputType === "instax"}
-                    value={height}
-                    onChange={(e) => setHeight(e.target.value)}
-                  />
-                </Field>
-              </div>
-            )}
-            <label className="check">
-              <input
-                required
-                type="checkbox"
-                disabled={Boolean(busy) || lookupBusy || !lookupKnown}
-                checked={ownerReady}
-                onChange={(e) => setOwnerReady(e.target.checked)}
-              />
-              <span>
-                The device is supervised, the output area is clear and I am
-                ready to start this physical calibration.
-              </span>
-            </label>
-            <Button
-              className="primary"
-              type="submit"
-              busy={busy === "start"}
-              disabled={
-                Boolean(busy) ||
-                lookupBusy ||
-                !lookupKnown ||
-                !ownerReady ||
-                !m.paired ||
-                !m.configured ||
-                (m.outputType === "3d" ? !modelId : !assets.length)
-              }
-            >
-              Start physical calibration
-            </Button>
-          </form>
-        ) : (
-          <>
-            <div className="calibration-status">
-              <Badge>
-                {human(nodeState || calibration.productionState || "unknown")}
-              </Badge>
-              <p>
-                Attempt {calibration.attemptId}. Reconciliation checks this
-                saved attempt and never silently starts another calibration job.
-              </p>
-              <button
-                className="text-button"
-                onClick={() => {
-                  void run("refresh", refresh);
-                }}
-                disabled={Boolean(busy)}
-              >
-                Refresh calibration status
-              </button>
-            </div>
-            {calibration.evidence?.url && (
-              <figure className="calibration-evidence">
-                <ResultImage
-                  src={calibration.evidence.url}
-                  frameKey={JSON.stringify([
-                    m.id,
-                    m.adapterVersion,
-                    calibration.id,
-                    calibration.attemptId,
-                    calibration.evidence.jobId,
-                    calibration.evidence.machineId,
-                    calibration.evidence.capturedAt,
-                  ])}
-                  alt={`Fresh calibration evidence for ${m.name}`}
-                  owner
+              <Field label="Calibration height (mm)">
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  disabled={
+                    Boolean(busy) || !canStart || m.outputType === "instax"
+                  }
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
                 />
-                <figcaption>
-                  Calibration evidence · {date(calibration.evidence.capturedAt)}{" "}
-                  · {calibration.evidence.machineId}
-                </figcaption>
-              </figure>
-            )}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run("finalize", async (isCurrent) => {
+              </Field>
+            </div>
+          )}
+          <label className="check">
+            <input
+              required
+              type="checkbox"
+              disabled={Boolean(busy) || lookupBusy || !canStart}
+              checked={ownerReady}
+              onChange={(e) => setOwnerReady(e.target.checked)}
+            />
+            <span>
+              The device is supervised, the output area is clear and I am ready
+              to start this physical calibration.
+            </span>
+          </label>
+          <Button
+            className="primary"
+            type="submit"
+            busy={busy === "start"}
+            disabled={
+              Boolean(busy) ||
+              lookupBusy ||
+              !canStart ||
+              !ownerReady ||
+              !m.paired ||
+              !m.configured ||
+              (m.outputType === "3d" ? !modelId : !assets.length)
+            }
+          >
+            Start physical calibration
+          </Button>
+          {preparation && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={Boolean(busy) || lookupBusy || unresolvedStart}
+              onClick={() => {
+                const initiator = document.activeElement;
+                setPreparation(null);
+                clearPreparationFields();
+                key.current = crypto.randomUUID();
+                pendingRecoveryFocus.current = null;
+                requestAnimationFrame(() => {
                   if (
-                    await finalize({
-                      inspected: true,
-                      attemptId: calibration.attemptId,
-                      reason,
-                    })
+                    mounted.current &&
+                    (document.activeElement === initiator ||
+                      document.activeElement === document.body)
                   ) {
-                    if (!isCurrent()) return;
-                    setInspected(false);
-                    setReason("");
-                    setResolution("completed");
-                    await refresh();
+                    prepareButton.current?.focus({ preventScroll: true });
+                    prepareButton.current?.scrollIntoView({
+                      block: "nearest",
+                      behavior: "instant",
+                    });
                   }
                 });
               }}
             >
-              <label className="check">
-                <input
-                  ref={(node) => {
-                    recoveryControl.current = node;
-                  }}
-                  required
-                  type="checkbox"
-                  disabled={Boolean(busy) || !lookupKnown}
-                  checked={inspected}
-                  onChange={(e) => setInspected(e.target.checked)}
-                />
-                <span>
-                  I inspected the physical output and fresh result evidence
-                  after this attempt completed.
-                </span>
-              </label>
-              <Field label="Calibration inspection reason">
-                <input
-                  required
-                  minLength={10}
-                  disabled={Boolean(busy) || !lookupKnown}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Describe the observed output and inspection"
-                />
-              </Field>
-              <Button
-                className="secondary"
-                type="submit"
-                busy={busy === "finalize"}
-                disabled={
-                  Boolean(busy) || lookupBusy || !lookupKnown || !inspected
-                }
-              >
-                Confirm inspected calibration
-              </Button>
-            </form>
-            <details className="calibration-resolution">
-              <summary>Resolve an uncertain calibration attempt</summary>
-              <p>
-                Record an observed outcome only after inspecting the device.
-                This does not rerun the physical job.
-              </p>
-              <Field label="Observed calibration outcome">
-                <select
-                  disabled={Boolean(busy) || !lookupKnown}
-                  value={resolution}
-                  onChange={(e) => setResolution(e.target.value)}
-                >
-                  <option value="completed">Completed · output observed</option>
-                  <option value="failed">
-                    Failed · output missing or unusable
-                  </option>
-                </select>
-              </Field>
-              <Button
-                className="secondary"
-                disabled={
-                  Boolean(busy) ||
-                  lookupBusy ||
-                  !lookupKnown ||
-                  !inspected ||
-                  reason.trim().length < 10
-                }
-                busy={busy === "resolve"}
-                onClick={() => {
-                  void run("resolve", async (isCurrent) => {
-                    await api(`/owner/machines/${m.id}/calibration/resolve`, {
-                      attemptId: calibration.attemptId,
-                      result: resolution,
-                      inspected: true,
-                      reason,
-                    });
-                    if (!isCurrent()) return;
-                    setInspected(false);
-                    setReason("");
-                    setResolution("completed");
-                    await refresh();
+              Keep previous calibration record
+            </button>
+          )}
+        </form>
+      )}
+      {calibration && (
+        <>
+          <div className="calibration-status">
+            <strong>
+              {lifecycle?.calibrationActive
+                ? "Current calibration attempt"
+                : "Saved inactive calibration"}
+            </strong>
+            <Badge>
+              {human(nodeState || calibration.productionState || "unknown")}
+            </Badge>
+            <p>
+              Attempt {calibration.attemptId}. Reconciliation checks this saved
+              attempt and never silently starts another calibration job.
+            </p>
+            <button
+              className="text-button"
+              onClick={() => {
+                void run("refresh", refresh);
+              }}
+              disabled={Boolean(busy)}
+            >
+              Refresh calibration status
+            </button>
+          </div>
+          {lifecycle?.contextMatch === false && (
+            <Notice>
+              This saved attempt belongs to an earlier device setup. Its
+              inspection cannot confirm calibration for the current setup.
+            </Notice>
+          )}
+          {calibration.evidence?.url && (
+            <figure className="calibration-evidence">
+              <ResultImage
+                src={calibration.evidence.url}
+                frameKey={JSON.stringify([
+                  m.id,
+                  m.adapterVersion,
+                  calibration.id,
+                  calibration.attemptId,
+                  calibration.evidence.jobId,
+                  calibration.evidence.machineId,
+                  calibration.evidence.capturedAt,
+                ])}
+                alt={`Fresh calibration evidence for ${m.name}`}
+                owner
+              />
+              <figcaption>
+                Calibration evidence · {date(calibration.evidence.capturedAt)} ·{" "}
+                {calibration.evidence.machineId}
+              </figcaption>
+            </figure>
+          )}
+          {!preparation && (
+            <>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run("finalize", async (isCurrent) => {
+                    if (
+                      await finalize({
+                        inspected: true,
+                        attemptId: calibration.attemptId,
+                        reason,
+                      })
+                    ) {
+                      if (!isCurrent()) return;
+                      setInspected(false);
+                      setReason("");
+                      setResolution("completed");
+                      await refresh();
+                    }
                   });
                 }}
               >
-                Record observed outcome
-              </Button>
-            </details>
-          </>
-        ))}
+                <label className="check">
+                  <input
+                    ref={(node) => {
+                      recoveryControl.current = node;
+                    }}
+                    required
+                    type="checkbox"
+                    disabled={Boolean(busy) || !canInspect}
+                    checked={inspected}
+                    onChange={(e) => setInspected(e.target.checked)}
+                  />
+                  <span>
+                    I inspected the physical output and fresh result evidence
+                    after this attempt completed.
+                  </span>
+                </label>
+                <Field label="Calibration inspection reason">
+                  <input
+                    required
+                    minLength={10}
+                    disabled={Boolean(busy) || !canInspect}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Describe the observed output and inspection"
+                  />
+                </Field>
+                <Button
+                  className="secondary"
+                  type="submit"
+                  busy={busy === "finalize"}
+                  disabled={
+                    Boolean(busy) || lookupBusy || !canInspect || !inspected
+                  }
+                >
+                  Confirm inspected calibration
+                </Button>
+              </form>
+              <details className="calibration-resolution">
+                <summary>Resolve an uncertain calibration attempt</summary>
+                <p>
+                  Record an observed outcome only after inspecting the device.
+                  This does not rerun the physical job.
+                </p>
+                <Field label="Observed calibration outcome">
+                  <select
+                    disabled={Boolean(busy) || !canInspect}
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value)}
+                  >
+                    <option value="completed">
+                      Completed · output observed
+                    </option>
+                    <option value="failed">
+                      Failed · output missing or unusable
+                    </option>
+                  </select>
+                </Field>
+                <Button
+                  className="secondary"
+                  disabled={
+                    Boolean(busy) ||
+                    lookupBusy ||
+                    !canInspect ||
+                    !inspected ||
+                    reason.trim().length < 10
+                  }
+                  busy={busy === "resolve"}
+                  onClick={() => {
+                    void run("resolve", async (isCurrent) => {
+                      await api(`/owner/machines/${m.id}/calibration/resolve`, {
+                        attemptId: calibration.attemptId,
+                        result: resolution,
+                        inspected: true,
+                        reason,
+                      });
+                      if (!isCurrent()) return;
+                      setInspected(false);
+                      setReason("");
+                      setResolution("completed");
+                      await refresh();
+                    });
+                  }}
+                >
+                  Record observed outcome
+                </Button>
+              </details>
+            </>
+          )}
+        </>
+      )}
     </details>
   );
 }
