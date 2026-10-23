@@ -180,15 +180,45 @@ That is 277 unique software cases or 455 executions including the three browser 
 
 [Current machine-readable checkpoint](evidence/overnight-fourth-qa.json), [full report](test-report.md), [mobile result-image recovery](../web/evidence/overnight-evidence-recovery-320.png), [current reconnect](evidence/overnight-fourth-sse-reconnect.json), [reconnected owner view](../web/evidence/overnight-fourth-sse-reconnected.png). Earlier failed/affected-only diagnostic reports remain private under `.data/`; final reports are `web/evidence/overnight-fourth-*-browser.json`.
 
+## Verified fifth checkpoint, 03:58 Pacific
+
+Continuation from commit `93387b8` completed HTTP failure boundaries, owner action drafts, request/image deadlines, calibration status ordering, fresh evidence and delayed specification preparation. The overnight task remains active through 9:00 a.m. Pacific. Source fingerprint:
+
+`e0d6515862ff043a1e4b7d80df5dd8638b7401353a802dcd7213c6579164e586`
+
+- Owner preparation checklists, pickup codes, review decisions and failed-output inspections survive queue paging, searches and filters in private session memory. Their scopes bind the saved order, specification, approval, attempt, evidence and collection metadata. New scope, explicit discard, accepted action and session expiry clear the relevant confirmation; unrelated payment refreshes preserve it. Inputs lock while saving, and native leave warnings cover hidden dirty drafts. This memory cannot survive forced browser termination.
+- Browser API requests now bound both response headers and JSON bodies: 30 seconds for ordinary reads, 90 for calibration status and 180 for mutations. These are recovery budgets, not completion targets. A timed-out or unreadable write is reported as uncertain; no automatic write retry occurs. An interrupted creation blocks a replacement submission until the saved order is opened or the requester explicitly discards it. Wallet HTTP has bounded recovery while the user's signature prompt has no artificial timeout; durable signature and unknown-submission guards remain intact.
+- Result evidence binds each decoded image to the exact saved frame/attempt. A changed frame removes the previous image and requests a fresh same-origin URL; unchanged frames do not reload. Native preview and evidence images that never finish recover after 30 seconds, discard expired callbacks and offer explicit image-only retry. Preview approval still waits for the actual valid replacement image. Focus remains usable during retry.
+- Physical-calibration numeric fields retain editable text, unavailable evidence has retry, and inspection/readiness confirmations reset for a different attempt, frame or device configuration. Status reads serialize, stale responses cannot replace newer attempts, and unmounted/device-changed callbacks cannot update the form. Unknown, failed or malformed lookups block starting/confirming until a valid saved record is recovered. Eleven isolated browser cases cover these paths; no physical job was started.
+- Eight HTTP boundary regressions cover malformed/oversized JSON and multipart, decompressed limits, unsupported body types, safe unknown-route responses and masking private submitted values/paths. Validation/security headers precede parsing. Generic uncertain failures instruct reconciliation without exposing raw internal errors.
+- Four concurrency regressions reproduce and prevent an older preview preparation overwriting a newer edit or approval/quote. The saved order/specification versions captured before preparation are checked inside each atomic update, including retries. A conflict preserves the newer artifact, approval, quote, reservation and registered preview files.
+- Actual local backend/node activation retained Spacetime data, assets and attempt journals. The already-open owner view natively disconnected/reconnected and received independent pause/resume mutations with polling disabled. [Current reconnect proof](evidence/overnight-fifth-sse-reconnect.json).
+
+| Check                                | Result                                        |
+| ------------------------------------ | --------------------------------------------- |
+| Backend/application/process/realtime | 83 passed                                     |
+| Python node                          | 67 passed in 5.69s                            |
+| Payment/Claude and Fetch fixtures    | 25+5 passed                                   |
+| API/storage/wallet unit              | 28 passed (7+6+15)                            |
+| Built-application browser scenarios  | 130 passed in each of Chromium/Firefox/WebKit |
+| Automated accessibility              | 39 A/AA scans, no detected violations         |
+| Build/strict types/secret scan       | Passed                                        |
+| Actual local restart/SSE reconnect   | Passed; polling disabled                      |
+
+That is 338 unique software cases or 598 canonical executions including the three browser engines, with no final failed/skipped/flaky cases. Full software checks and build followed frozen application changes; the final browser suites used that built origin. New tests use isolated stores/files and intercepted browser APIs. Actual retained runtime was restarted, not fault-injected. Earlier unchanged finite simulation, database restart/CAS and dependency evidence remains historical. No physical/live acceptance is substituted.
+
+Calibration diagnostics initially assumed enabled upload controls before upload completion and matched an unrelated fixture SSE alert; explicit readiness waits and scoped assertions corrected those tests. A WebKit virtual-time diagnostic now waits until the request actually starts. The pickup baseline initially used a filter still including the order; the corrected excluded-order diagnostic against the previous committed OwnerJob implementation reproduced lost input. These earlier diagnostic/affected-only reports remain private; unique cases are counted once in final reports.
+
+[Current machine-readable checkpoint](evidence/overnight-fifth-qa.json), [full report](test-report.md), [owner action drafts at 320px](../web/evidence/overnight-owner-action-drafts-320.png), [mobile image recovery](../web/evidence/overnight-evidence-recovery-320.png), [reconnected owner view](../web/evidence/overnight-fifth-sse-reconnected.png). Final browser reports are `web/evidence/overnight-fifth-*-browser.json`.
+
 ## Next useful audits
 
-Completed: the earlier touch/storage/navigation/refresh/preview/queue work plus requester/owner numeric editing, machine settings, per-order trial/payment draft recovery, asset-registration fault boundaries and media retry. Continue only with a new boundary, reproduced failure or unresolved diagnostic:
+Continue with a reproduced boundary or unresolved diagnostic rather than unchanged suite reruns:
 
-1. Owner pickup-code, handling and operator-review forms still use component-local draft state. The new cache intentionally covers trial/payment only. Probe explicit queue paging/filtering/search or live state changes for loss of these other drafts; preserve privacy and explicit operator confirmations. Use isolated API fixtures.
-2. Bounded recovery for a request that never finishes (as distinct from an explicit HTTP error): upload/prepare, owner saves and checkout/dispatch. Inspect actual timeout/cancellation behavior and distinguish an uncertain commit from a safe retry. No live wallet, model provider, hardware or retained-store fault injection.
-3. Confirm responsive/keyboard clarity for any newly fixed boundary, including pending-save focus and unavailable calibration media where a useful next action may still be missing. Reproduce a specific issue before changing it. Native device/browser acceptance remains blocked.
-4. Review new fixes independently, rerun affected checks and update this log. Avoid unchanged suite/finite-job reruns for volume. If useful independent work is exhausted or externally blocked, stay quiet until a meaningful change or the cutoff.
-5. At 9:00 a.m. Pacific, perform final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Keep physical/live prerequisites honest and leave this chat unarchived.
+1. Independently inspect two-tab stale requester edits and owner settings. The new server fence protects changes while preparation is running; determine whether an editor opened before another session's save can still silently overwrite newer state. Use isolated data and preserve newer work if conflict handling is needed.
+2. Fix a newly reproduced malformed calibration status boundary: an object-valued execution_status reaches the display formatter and crashes rendering. Validate optional status strings, keep unknown status recoverable, and add a regression. Also repair explicit calibration-retry focus dropping to the document and saved-order recovery leaving its result far below the mobile viewport; both have isolated keyboard diagnostics. Continue reviewing bounded recovery for concrete stale callback/busy-state defects; no physical job, signer retry or live provider calls.
+3. Verify responsive/keyboard clarity for any newly reproduced issue, update affected checks and evidence, and commit the reviewed result. Keep external blockers and simulation/mock labels visible.
+4. At 9:00 a.m. Pacific perform the final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Do not archive this chat.
 
 ## Morning handoff requirements
 

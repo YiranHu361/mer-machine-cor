@@ -10,6 +10,7 @@ import {
   type Hex,
 } from "viem";
 import { baseSepolia } from "viem/chains";
+import { ApiError, requestJson } from "./api.ts";
 import {
   beginWalletAuthorization,
   cancelUnsubmittedWalletAuthorization,
@@ -97,21 +98,24 @@ export async function checkoutWithWallet<T>(
   const fetcher = options.fetcher || fetch;
   const path = `/api/jobs/${encodeURIComponent(context.jobId)}/checkout`;
   const request = (headers?: Record<string, string>) =>
-    fetcher(path, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ idempotencyKey: context.idempotencyKey }),
-    });
-  let response: Response;
+    requestJson(
+      path,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify({ idempotencyKey: context.idempotencyKey }),
+      },
+      { fetcher },
+    );
+  let response: Response, value: any;
   try {
-    response = await request();
+    ({ response, value } = await request());
   } catch {
     throw new Error(
       "The workshop disconnected before checkout returned. Retry this order to reconcile the same checkout.",
     );
   }
-  const value = await response.json().catch(() => ({}));
   if (response.status !== 402) {
     if (!response.ok)
       throw new Error(
@@ -188,10 +192,9 @@ export async function checkoutWithWallet<T>(
     );
     const payload = await client.createPaymentPayload(challenge);
     // The server verifies and settles this authorization. A signature is not collection.
-    const signedResponse = await request({
+    const { response: signedResponse, value: signedValue } = await request({
       "PAYMENT-SIGNATURE": encodePaymentSignatureHeader(payload),
     });
-    const signedValue = await signedResponse.json().catch(() => ({}));
     if (!signedResponse.ok)
       throw new Error(
         signedValue.error?.message ||
@@ -206,6 +209,10 @@ export async function checkoutWithWallet<T>(
     if (error instanceof TypeError)
       throw new Error(
         "The connection was lost after wallet approval. Retry this same order to reconcile the saved checkout before signing another payment.",
+      );
+    if (error instanceof ApiError)
+      throw new Error(
+        "The signed payment response is unavailable. Payment may still complete. Retry this same order to reconcile the saved checkout before signing another payment.",
       );
     throw error;
   }

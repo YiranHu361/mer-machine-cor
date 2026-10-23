@@ -42,6 +42,19 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024, files: 4, fields: 4 },
 });
+const parseUpload = upload.array("images", 4);
+const acceptUpload = (req: Request, res: Response, next: NextFunction) =>
+  parseUpload(req, res, (error) =>
+    next(
+      !error || error instanceof multer.MulterError
+        ? error
+        : new Problem(
+            "INVALID_MULTIPART",
+            "The artwork upload could not be read. Choose the images and upload them again.",
+            400,
+          ),
+    ),
+  );
 const machineSchema = z
   .object({
     listed: z.boolean().optional(),
@@ -91,9 +104,7 @@ export function createApp(
     "/assets",
     express.static(join(webDirectory, "assets"), { index: false }),
   );
-  app.use(express.json({ limit: "100kb" }));
   app.use((req, res, next) => {
-    req.body ??= {};
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
     res.setHeader("Cache-Control", "no-store");
@@ -104,16 +115,74 @@ export function createApp(
       try {
         const origin = new URL(req.headers.origin);
         requireThat(
-          ["127.0.0.1", "localhost"].includes(origin.hostname) &&
+          ["http:", "https:"].includes(origin.protocol) &&
+            ["127.0.0.1", "localhost"].includes(origin.hostname) &&
             [4317, 4318].includes(Number(origin.port)),
           "ORIGIN_REJECTED",
           "This local application only accepts requests from its own interface.",
           403,
         );
       } catch (e) {
-        return next(e);
+        return next(
+          e instanceof Problem
+            ? e
+            : new Problem(
+                "ORIGIN_REJECTED",
+                "This local application only accepts requests from its own interface.",
+                403,
+              ),
+        );
       }
     }
+    const hasBody =
+      Number(req.headers["content-length"] ?? 0) > 0 ||
+      req.headers["transfer-encoding"] !== undefined;
+    if (hasBody && /^\/api(?:\/|$)/i.test(req.path)) {
+      const isUpload =
+        req.method === "POST" && /^\/api\/uploads\/?$/i.test(req.path);
+      if (!req.is(isUpload ? "multipart/form-data" : "application/json"))
+        return next(
+          new Problem(
+            "UNSUPPORTED_CONTENT_TYPE",
+            isUpload
+              ? "Upload artwork as a multipart image upload."
+              : "Send this request as application/json, or omit its body when no input is needed.",
+            415,
+          ),
+        );
+    }
+    next();
+  });
+  const parseJson = express.json({ limit: "100kb" });
+  app.use((req, res, next) => {
+    parseJson(req, res, (error) => {
+      if (!error) return next();
+      const status = [400, 413, 415].includes(error.status)
+        ? error.status
+        : 500;
+      next(
+        new Problem(
+          status === 413
+            ? "REQUEST_TOO_LARGE"
+            : status === 415
+              ? "UNSUPPORTED_ENCODING"
+              : status === 400
+                ? "INVALID_JSON"
+                : "SERVICE_ERROR",
+          status === 413
+            ? "This request is too large. Keep JSON requests under 100 KiB and upload images separately."
+            : status === 415
+              ? "This JSON encoding is unsupported. Send UTF JSON with a supported content encoding."
+              : status === 400
+                ? "The JSON request could not be read. Check its format and send it again."
+                : "The service could not read this request. Try again or ask the owner to inspect the service.",
+          status,
+        ),
+      );
+    });
+  });
+  app.use((req, res, next) => {
+    req.body ??= {};
     next();
   });
   const actor = async (req: Request) => {
@@ -330,7 +399,7 @@ export function createApp(
       clearInterval(timer);
     });
   });
-  app.post("/api/uploads", upload.array("images", 4), async (req, res) => {
+  app.post("/api/uploads", acceptUpload, async (req, res) => {
     const a = await actor(req);
     requireThat(
       ["requester", "owner"].includes(a.role),
@@ -539,12 +608,14 @@ export function createApp(
       "LOCKED",
       "Cancelled, paid or dispatched orders cannot change.",
     );
+    const observed = { version: old.version, specVersion: old.specVersion };
     res.json({
       job: view(
         await service.revise(
           old.id,
           req.body,
           await prepare(req, old.requesterId, old.specVersion + 1),
+          observed,
         ),
       ),
     });
@@ -1069,6 +1140,14 @@ export function createApp(
     );
     res.json(result);
   });
+  app.use("/api", (req, res) =>
+    res.status(404).json({
+      error: {
+        code: "NOT_FOUND",
+        message: "This API route or method is unavailable.",
+      },
+    }),
+  );
   app.use(express.static(webDirectory, { index: "index.html" }));
   app.get("/owner", (req, res) =>
     res.sendFile("index.html", { root: webDirectory }),
@@ -1081,23 +1160,49 @@ export function createApp(
       return res.status(402).json(err.challenge.body);
     }
     const isValidation = err instanceof z.ZodError;
-    const status =
-      err.status ??
-      (isValidation ? 422 : err instanceof multer.MulterError ? 422 : 500);
+    const isUploadError = err instanceof multer.MulterError;
+    const isUrlError = err.status === 400 && err instanceof URIError;
+    const status = isValidation
+      ? 422
+      : isUploadError
+        ? err.code === "LIMIT_FILE_SIZE"
+          ? 413
+          : 422
+        : Number.isInteger(err.status) && err.status >= 400 && err.status <= 599
+          ? err.status
+          : 500;
     const message =
       err instanceof Problem
         ? err.message
         : isValidation
           ? err.issues.map((i: any) => i.message).join(" ")
-          : status === 500
-            ? "The service could not complete this action. Try again or ask the owner to inspect the order."
-            : err.message;
-    res.status(status).json({
-      error: {
-        code: err.code ?? (isValidation ? "INVALID_INPUT" : "SERVICE_ERROR"),
-        message,
-      },
-    });
+          : isUploadError
+            ? err.code === "LIMIT_FILE_SIZE"
+              ? "Each artwork image must be 12 MiB or smaller. Choose a smaller PNG, JPEG or WebP."
+              : err.message
+            : isUrlError
+              ? "This URL could not be read. Open the order again from the interface."
+              : status === 404
+                ? "The requested file or page could not be found."
+                : "The service could not confirm this action. Refresh the saved order or workshop state before retrying, or ask the owner to inspect it.";
+    res
+      .status(status)
+      .type("json")
+      .json({
+        error: {
+          code:
+            err instanceof Problem || isUploadError
+              ? err.code
+              : isValidation
+                ? "INVALID_INPUT"
+                : isUrlError
+                  ? "INVALID_URL"
+                  : status === 404
+                    ? "NOT_FOUND"
+                    : "SERVICE_ERROR",
+          message,
+        },
+      });
   });
   return app;
 }

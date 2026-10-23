@@ -405,9 +405,15 @@ export class Service {
       422,
     );
   }
-  async revise(jobId: string, input: unknown, artifact: Job["artifact"]) {
+  async revise(
+    jobId: string,
+    input: unknown,
+    artifact: Job["artifact"],
+    observed?: Pick<Job, "version" | "specVersion">,
+  ) {
     const spec = specSchema.parse(input);
     if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+    const expected = observed ?? (await this.job(jobId));
     return mutate(this.store, (s) => {
       const j = s.jobs[jobId];
       requireThat(
@@ -416,6 +422,13 @@ export class Service {
           j.productionState !== "cancelled",
         "LOCKED",
         "A cancelled, paid or dispatched specification cannot be edited.",
+      );
+      requireThat(
+        j.version === expected.version &&
+          j.specVersion === expected.specVersion,
+        "STALE_SPECIFICATION",
+        "This order changed while its preview was being prepared. Refresh the existing order before editing again.",
+        409,
       );
       for (const a of spec.assetIds)
         requireThat(

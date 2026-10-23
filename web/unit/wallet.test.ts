@@ -241,6 +241,50 @@ test("lost response after a signature directs reconciliation of the same checkou
   );
   assert.equal(requests, 2);
 });
+test("a signed response body timeout retains its authorization and cannot request another signature", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let signedPosts = 0,
+    signatures = 0;
+  let entered!: () => void;
+  const signedStarted = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const actual = provider();
+  const observed: WalletProvider = {
+    request: async (args) => {
+      if (args.method === "eth_signTypedData_v4") signatures++;
+      return actual.request(args);
+    },
+  };
+  const fetcher = (async (_path, init) => {
+    if (!(init?.headers as Record<string, string>)["PAYMENT-SIGNATURE"])
+      return response(challenge(), 402);
+    signedPosts++;
+    entered();
+    return {
+      json: () => new Promise(() => {}),
+      ok: true,
+      status: 200,
+    } as Response;
+  }) as typeof fetch;
+  const pending = checkoutWithWallet(context(), {
+    provider: observed,
+    fetcher,
+  });
+  const failed = assert.rejects(
+    pending,
+    /Retry this same order.*saved checkout/,
+  );
+  await signedStarted;
+  t.mock.timers.tick(180_001);
+  await failed;
+  await assert.rejects(
+    checkoutWithWallet(context(), { provider: observed, fetcher }),
+    /authorization.*already|reconcile|reconciliation/i,
+  );
+  assert.equal(signatures, 1);
+  assert.equal(signedPosts, 1);
+});
 test("unconfirmed settlement remains pending after wallet authorization", async () => {
   let requests = 0;
   const result = await checkoutWithWallet<{

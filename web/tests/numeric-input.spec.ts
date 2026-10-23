@@ -226,8 +226,8 @@ test("failed numeric saves preserve the visible draft and retry the same values 
   await replace(page.getByLabel("Budget cap (USD)", { exact: true }), "12.34");
   await save(page);
   await expect(
-    page.getByText("Numeric fixture save unavailable; retry these changes.", {
-      exact: true,
+    page.getByRole("alert").filter({
+      hasText: "Numeric fixture save unavailable; retry these changes.",
     }),
   ).toBeVisible();
   for (const [label, value] of [

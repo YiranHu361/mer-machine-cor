@@ -17,8 +17,13 @@ import {
   type TrialEconomics,
 } from "./OwnerRecords";
 import { useOwnerFormGuard } from "./owner-form-guard";
-import { ResultImage, retryImageSource } from "./ResultImage";
-import { OwnerDraftProvider } from "./owner-drafts";
+import { ResultImage, retryImageSource, useImageAttempt } from "./ResultImage";
+import {
+  OwnerDraftProvider,
+  ownerActionDraftKey,
+  useOwnerDraft,
+} from "./owner-drafts";
+import { api, ApiError } from "./api";
 import {
   readStoredValue,
   writeStoredValue,
@@ -215,15 +220,6 @@ const needsOwnerAction = (job: Job) =>
     job.paymentState,
   );
 
-class ApiError extends Error {
-  constructor(
-    message: string,
-    public code: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
 type SnapshotGate = {
   issued: number;
   applied: number;
@@ -259,50 +255,7 @@ function acceptSnapshot(
 }
 const currentSnapshotError = (gate: SnapshotGate, request: number) =>
   request >= gate.floor && request >= gate.applied;
-async function api<T>(
-  path: string,
-  body?: unknown,
-  method?: string,
-): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`/api${path}`, {
-      method: method || (body === undefined ? "GET" : "POST"),
-      credentials: "same-origin",
-      headers:
-        body instanceof FormData
-          ? undefined
-          : { "Content-Type": "application/json" },
-      body:
-        body === undefined
-          ? undefined
-          : body instanceof FormData
-            ? body
-            : JSON.stringify(body),
-    });
-  } catch {
-    throw new ApiError(
-      "The workshop is disconnected. Check the local service and try again.",
-      "disconnected",
-      0,
-    );
-  }
-  const value = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const details = value.error?.details || value.details || value.errors;
-    const extra = Array.isArray(details)
-      ? details
-          .map((x: unknown) => (typeof x === "string" ? x : JSON.stringify(x)))
-          .join(" ")
-      : "";
-    throw new ApiError(
-      `${value.error?.message || value.message || `The request could not be completed (${response.status}).`}${extra ? " " + extra : ""}`,
-      value.error?.code || "request_failed",
-      response.status,
-    );
-  }
-  return value as T;
-}
+
 function Notice({
   children,
   kind = "info",
@@ -629,6 +582,7 @@ function RequesterApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [unresolvedCreation, setUnresolvedCreation] = useState(false);
   // Keep empty and incomplete native number input text until submission.
   // Converting every keystroke turns a cleared field (or "5e") into zero.
   type SpecDraft = Omit<Spec, "widthMm" | "heightMm" | "quantity"> & {
@@ -835,6 +789,7 @@ function RequesterApp({
     setIntakeError("");
     setEditing(false);
     setError("");
+    setUnresolvedCreation(false);
   };
   const act = async (name: string, fn: () => Promise<void>) => {
     invalidateSnapshots(jobsGate.current);
@@ -985,6 +940,7 @@ function RequesterApp({
   };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (unresolvedCreation) return;
     if (spec.outputType !== "3d" && !spec.assetIds.length) {
       setError("Add at least one image before making a production preview.");
       return;
@@ -1023,17 +979,58 @@ function RequesterApp({
         : undefined,
     };
     await act("create", async () => {
-      const result = await api<{ job: Job }>(
-        editing && current ? `/jobs/${current.id}/spec` : "/jobs",
-        value,
-        editing ? "PATCH" : undefined,
-      );
+      let result: { job: Job };
+      try {
+        result = await api<{ job: Job }>(
+          editing && current ? `/jobs/${current.id}/spec` : "/jobs",
+          value,
+          editing ? "PATCH" : undefined,
+        );
+        const returned = result?.job;
+        if (
+          !returned ||
+          typeof returned.id !== "string" ||
+          !returned.id ||
+          !Number.isInteger(returned.version) ||
+          !Number.isInteger(returned.specVersion) ||
+          !returned.spec ||
+          !Array.isArray(returned.spec.assetIds) ||
+          !returned.spec.assetIds.every((id) => typeof id === "string") ||
+          typeof returned.spec.intent !== "string" ||
+          !Object.hasOwn(outputLabels, returned.spec.outputType) ||
+          ![
+            returned.spec.widthMm,
+            returned.spec.heightMm,
+            returned.spec.quantity,
+          ].every((value) => Number.isFinite(value) && value > 0) ||
+          ![
+            returned.productionState,
+            returned.paymentState,
+            returned.fulfillmentState,
+            returned.createdAt,
+            returned.updatedAt,
+          ].every((value) => typeof value === "string")
+        )
+          throw new ApiError(
+            "The order response could not be read. Its result is unknown; check saved orders before trying again.",
+            "invalid_response",
+            0,
+            true,
+          );
+      } catch (error) {
+        if (!editing && error instanceof ApiError && error.outcomeUnknown) {
+          setUnresolvedCreation(true);
+          void refresh();
+        }
+        throw error;
+      }
       select(result.job);
       setEditing(false);
       focusProduction();
     });
   };
   const newOrder = () => {
+    setUnresolvedCreation(false);
     selectedId.current = null;
     removeStoredValue("local", "fabrary-current-job");
     setCurrent(null);
@@ -1149,6 +1146,27 @@ function RequesterApp({
       {error && (
         <Notice kind="error" focusOnShow>
           {error}
+        </Notice>
+      )}
+      {unresolvedCreation && (
+        <Notice>
+          The earlier order request may still finish. Check your saved orders
+          below and open the existing order before continuing. This draft will
+          not be submitted again automatically.
+          <div className="button-row">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                void refresh();
+              }}
+            >
+              Check saved orders
+            </button>
+            <button type="button" className="text-button" onClick={newOrder}>
+              Discard interrupted draft
+            </button>
+          </div>
         </Notice>
       )}
       <div className="workbench">
@@ -1555,6 +1573,7 @@ function RequesterApp({
                   busy={busy === "create"}
                   disabled={
                     Boolean(busy) ||
+                    unresolvedCreation ||
                     (spec.outputType === "3d" && !catalog.length)
                   }
                 >
@@ -1812,14 +1831,21 @@ function ProductionPreview({
   onReady: (ready: boolean) => void;
 }) {
   const source = job.artifact?.previewUrl || job.artifact?.url;
-  const [loadedSource, setLoadedSource] = useState<string | null>(null);
-  const [failedSource, setFailedSource] = useState<string | null>(null);
-  const [retry, setRetry] = useState(0);
-  const [retryKey, setRetryKey] = useState("");
+  const {
+    status,
+    attempt,
+    retryKey,
+    loaded,
+    failed: failImage,
+    retry,
+  } = useImageAttempt({
+    enabled: Boolean(source),
+    onTimeout: () => onReady(false),
+  });
   const retryButton = useRef<HTMLButtonElement>(null);
   const previewImage = useRef<HTMLImageElement>(null);
-  const failed = Boolean(source && failedSource === source);
-  const loading = Boolean(source && loadedSource !== source && !failed);
+  const failed = status === "failed" || status === "timed-out";
+  const loading = Boolean(source && status === "loading");
   return (
     <div
       className={`preview-surface output-${job.spec.outputType}`}
@@ -1831,27 +1857,28 @@ function ProductionPreview({
           <img
             ref={previewImage}
             tabIndex={-1}
-            key={`${source}-${retry}`}
+            key={`${source}-${attempt}`}
             src={retryImageSource(source, retryKey)}
             alt={`Actual production preview: ${outputLabels[job.spec.outputType]}, ${job.spec.widthMm} by ${job.spec.heightMm} millimeters`}
             onLoad={() => {
+              if (!loaded()) return;
               const restoreFocus =
                 document.activeElement === retryButton.current;
-              setLoadedSource(source);
               onReady(true);
               if (restoreFocus) previewImage.current?.focus();
             }}
             onError={() => {
-              setFailedSource(source);
-              onReady(false);
+              if (failImage()) onReady(false);
             }}
           />
         </div>
       )}
-      {(!source || failed || (loading && retry > 0)) && (
+      {(!source || failed || (loading && attempt > 0)) && (
         <Notice kind={!source || failed ? "error" : "info"}>
           {!source || failed
-            ? "The production preview is unavailable. Load it before approving."
+            ? status === "timed-out"
+              ? "The production preview did not finish loading. Retry the image before approving."
+              : "The production preview is unavailable. Load it before approving."
             : "Retrying the production preview. Approval waits for the image to load."}
           {source && (
             <button
@@ -1859,13 +1886,7 @@ function ProductionPreview({
               className="text-button"
               type="button"
               aria-disabled={loading}
-              onClick={() => {
-                if (loading) return;
-                setFailedSource(null);
-                setLoadedSource(null);
-                setRetryKey(crypto.randomUUID());
-                setRetry((attempt) => attempt + 1);
-              }}
+              onClick={retry}
             >
               Retry production preview
             </button>
@@ -2197,6 +2218,14 @@ function OrderDetail({
           {job.evidence.url ? (
             <ResultImage
               src={job.evidence.url}
+              frameKey={JSON.stringify([
+                job.id,
+                job.attemptId,
+                job.evidence.jobId,
+                job.evidence.machineId,
+                job.evidence.capturedAt,
+                job.evidence.source,
+              ])}
               alt={`Result evidence for order ${shortId(job.id)}`}
             />
           ) : (
@@ -2627,6 +2656,7 @@ function OwnerApp({
   return (
     <OwnerDraftProvider
       pendingWork={Boolean(busy)}
+      actionJobs={jobs}
       jobIds={jobs
         .filter(
           (job) =>
@@ -3447,42 +3477,161 @@ function PhysicalCalibration({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [modelId, setModelId] = useState("");
-  const [width, setWidth] = useState(m.outputType === "instax" ? 54 : 53);
-  const [height, setHeight] = useState(m.outputType === "instax" ? 86 : 50);
+  const [width, setWidth] = useState(m.outputType === "instax" ? "54" : "53");
+  const [height, setHeight] = useState(m.outputType === "instax" ? "86" : "50");
   const [ownerReady, setOwnerReady] = useState(false);
   const [inspected, setInspected] = useState(false);
   const [reason, setReason] = useState("");
   const [resolution, setResolution] = useState("completed");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [lookupKnown, setLookupKnown] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const mounted = useRef(true);
+  const readGate = useRef<{
+    generation: number;
+    inFlight: Promise<boolean> | null;
+    queued: {
+      promise: Promise<boolean>;
+      resolve: (value: boolean) => void;
+    } | null;
+  }>({ generation: 0, inFlight: null, queued: null });
+  const inspectionContext = JSON.stringify([
+    m.id,
+    m.mode,
+    m.outputType,
+    m.adapterVersion,
+    m.material,
+    m.paired,
+    m.configured,
+    calibration?.id,
+    calibration?.attemptId,
+    calibration?.productionState,
+    calibration?.evidence?.url,
+    calibration?.evidence?.capturedAt,
+    calibration?.evidence?.machineId,
+    calibration?.evidence?.jobId,
+  ]);
+  useEffect(() => {
+    // An inspection is a fresh confirmation of this exact attempt and frame.
+    // A newer saved attempt must not inherit an earlier checked confirmation.
+    setInspected(false);
+    setOwnerReady(false);
+    setReason("");
+    setResolution("completed");
+  }, [inspectionContext]);
   const key = useRef(
     readStoredValue("session", `fabrary-calibration-${m.id}`) ||
       crypto.randomUUID(),
   );
-  const refresh = useCallback(async () => {
-    try {
-      const value = await api<{
-        calibration: Calibration | null;
-        status?: { execution_status?: string; state?: string; reason?: string };
-      }>(`/owner/machines/${m.id}/calibration`);
-      setCalibration(value.calibration);
-      setNodeState(
-        value.status?.execution_status ||
-          value.status?.state ||
-          value.calibration?.productionState ||
-          "unknown",
-      );
-    } catch (e) {
-      if ((e as ApiError).status !== 404) setError((e as Error).message);
-    }
-  }, [m.id]);
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      readGate.current.generation++;
+      readGate.current.queued?.resolve(false);
+      readGate.current.queued = null;
+    };
+  }, []);
+  const refresh = useCallback((): Promise<boolean> => {
+    if (!mounted.current) return Promise.resolve(false);
+    const gate = readGate.current;
+    const read = (): Promise<boolean> => {
+      const generation = gate.generation;
+      setLookupBusy(true);
+      const current = (async () => {
+        try {
+          const value = await api<{
+            calibration: Calibration | null;
+            status?: {
+              execution_status?: string;
+              state?: string;
+              reason?: string;
+            };
+          }>(`/owner/machines/${m.id}/calibration`);
+          if (!mounted.current || generation !== gate.generation) return false;
+          const saved = value.calibration;
+          if (
+            !Object.prototype.hasOwnProperty.call(value, "calibration") ||
+            (saved !== null &&
+              (!saved ||
+                typeof saved !== "object" ||
+                ![saved.id, saved.attemptId, saved.productionState].every(
+                  (field) =>
+                    typeof field === "string" && field.trim().length > 0,
+                )))
+          )
+            throw new Error(
+              "The saved calibration response could not be confirmed. Refresh its status before starting or confirming a physical job.",
+            );
+          setCalibration(saved);
+          setNodeState(
+            value.status?.execution_status ||
+              value.status?.state ||
+              saved?.productionState ||
+              "unknown",
+          );
+          setLookupKnown(true);
+          setError("");
+          return true;
+        } catch (e) {
+          if (mounted.current && generation === gate.generation) {
+            setLookupKnown(false);
+            setError((e as Error).message);
+          }
+          return false;
+        }
+      })();
+      gate.inFlight = current;
+      void current.then(() => {
+        if (gate.inFlight !== current) return;
+        gate.inFlight = null;
+        const queued = gate.queued;
+        gate.queued = null;
+        if (queued && mounted.current) void read().then(queued.resolve);
+        else {
+          queued?.resolve(false);
+          if (mounted.current) setLookupBusy(false);
+        }
+      });
+      return current;
+    };
+    if (gate.inFlight) {
+      if (!gate.queued) {
+        let resolve!: (value: boolean) => void;
+        const promise = new Promise<boolean>((done) => {
+          resolve = done;
+        });
+        gate.queued = { promise, resolve };
+      }
+      return gate.queued.promise;
+    }
+    return read();
+  }, [m.id]);
+  const deviceContext = JSON.stringify([
+    m.id,
+    m.mode,
+    m.outputType,
+    m.adapterVersion,
+    m.material,
+    m.paired,
+    m.configured,
+  ]);
+  useEffect(() => {
+    const generation = ++readGate.current.generation;
+    setLookupKnown(false);
     void refresh();
     if (m.outputType === "3d")
       api<{ models: CatalogItem[] }>("/catalog")
-        .then((x) => setCatalog(x.models))
-        .catch((e) => setError(e.message));
-  }, [refresh, m.outputType]);
+        .then((x) => {
+          if (mounted.current && generation === readGate.current.generation)
+            setCatalog(x.models);
+        })
+        .catch((e) => {
+          if (mounted.current && generation === readGate.current.generation)
+            setError(e.message);
+        });
+  }, [refresh, deviceContext]);
   useEffect(() => {
     if (
       !calibration ||
@@ -3494,15 +3643,26 @@ function PhysicalCalibration({
     const timer = setInterval(refresh, 3000);
     return () => clearInterval(timer);
   }, [calibration?.id, calibration?.productionState, refresh]);
-  const run = async (name: string, fn: () => Promise<void>) => {
+  const run = async (
+    name: string,
+    fn: (isCurrent: () => boolean) => Promise<unknown>,
+  ) => {
+    if (!mounted.current) return;
+    if (["start", "finalize", "resolve"].includes(name)) {
+      readGate.current.generation++;
+      setLookupKnown(false);
+    }
+    const generation = readGate.current.generation;
+    const isCurrent = () =>
+      mounted.current && generation === readGate.current.generation;
     setBusy(name);
     setError("");
     try {
-      await fn();
+      await fn(isCurrent);
     } catch (e) {
-      setError((e as Error).message);
+      if (isCurrent()) setError((e as Error).message);
     } finally {
-      setBusy("");
+      if (mounted.current) setBusy("");
     }
   };
   return (
@@ -3514,288 +3674,345 @@ function PhysicalCalibration({
         does not establish a calibration pass.
       </Notice>
       {error && <Notice kind="error">{error}</Notice>}
-      {!calibration ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run("start", async () => {
-              const model = catalog.find((x) => x.id === modelId);
-              if (model && !completePreparedModel(model))
-                throw new Error(
-                  "The prepared model is missing inspected dimensions, color or an estimated time. Ask the owner to complete its catalog record.",
-                );
-              const selectedIds = model
-                ? [model.artifactId]
-                : assets.map((a) => a.id);
-              if (!selectedIds.length)
-                throw new Error(
-                  m.outputType === "3d"
-                    ? "Choose an inspected prepared model."
-                    : "Upload calibration artwork before starting.",
-                );
-              if (
-                !writeStoredValue(
-                  "session",
-                  `fabrary-calibration-${m.id}`,
-                  key.current,
-                )
-              )
-                throw new Error(
-                  "Browser storage is unavailable, so calibration retry details cannot be saved. Allow session storage before starting physical calibration. No job was started.",
-                );
-              const result = await api<{ calibration: Calibration }>(
-                `/owner/machines/${m.id}/calibration/start`,
-                {
-                  spec: {
-                    assetIds: selectedIds,
-                    intent: `Owner-supervised ${m.model} calibration`,
-                    outputType: m.outputType,
-                    widthMm: model?.widthMm || width,
-                    heightMm: model?.heightMm || height,
-                    quantity: 1,
-                    material: m.material,
-                    permission: "authorized",
-                    crop: "contain",
-                    ...(model
-                      ? {
-                          preparedModelId: model.id,
-                          depthMm: model.depthMm,
-                          color: model.color,
-                          estimatedSeconds: model.estimatedSeconds,
-                        }
-                      : {}),
-                  },
-                  ownerReady: true,
-                  idempotencyKey: key.current,
-                },
-              );
-              setCalibration(result.calibration);
-              await refresh();
-            });
-          }}
-        >
-          {m.outputType === "3d" ? (
-            <>
-              {modelId && (
-                <PreparedModelFacts
-                  details={catalog.find((model) => model.id === modelId) || {}}
-                />
-              )}
-              <Field label="Calibration prepared model">
-                <select
-                  required
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value)}
-                >
-                  <option value="">Choose an inspected model</option>
-                  {catalog.map((model) => (
-                    <option value={model.id} key={model.id}>
-                      {model.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </>
-          ) : (
-            <Field
-              label="Calibration artwork"
-              hint="One PNG, JPEG or WebP. Use artwork whose output you can inspect."
-            >
-              <input
-                required
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                disabled={Boolean(busy)}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file)
-                    void run("upload", async () => {
-                      const form = new FormData();
-                      form.append("images", file);
-                      setAssets(
-                        (await api<{ assets: Asset[] }>("/uploads", form))
-                          .assets,
-                      );
-                    });
-                }}
-              />
-            </Field>
-          )}
-          {assets.length > 0 && (
-            <img
-              className="calibration-original"
-              src={assets[0].url}
-              alt="Calibration original artwork"
-            />
-          )}
-          {m.outputType !== "3d" && (
-            <div className="form-grid">
-              <Field label="Calibration width (mm)">
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  disabled={m.outputType === "instax"}
-                  value={width}
-                  onChange={(e) => setWidth(Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Calibration height (mm)">
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  disabled={m.outputType === "instax"}
-                  value={height}
-                  onChange={(e) => setHeight(Number(e.target.value))}
-                />
-              </Field>
-            </div>
-          )}
-          <label className="check">
-            <input
-              required
-              type="checkbox"
-              checked={ownerReady}
-              onChange={(e) => setOwnerReady(e.target.checked)}
-            />
-            <span>
-              The device is supervised, the output area is clear and I am ready
-              to start this physical calibration.
-            </span>
-          </label>
-          <Button
-            className="primary"
-            type="submit"
-            busy={busy === "start"}
-            disabled={
-              Boolean(busy) ||
-              !ownerReady ||
-              !m.paired ||
-              !m.configured ||
-              (m.outputType === "3d" ? !modelId : !assets.length)
-            }
+      {!calibration && !lookupKnown && (
+        <Notice>
+          {busy
+            ? "The calibration request is in progress. Wait for its saved result."
+            : lookupBusy
+              ? "Checking the saved calibration record…"
+              : "The saved calibration has not been confirmed. Check it before starting a physical job."}
+          <button
+            className="text-button"
+            type="button"
+            disabled={lookupBusy || Boolean(busy)}
+            onClick={() => {
+              void run("refresh", refresh);
+            }}
           >
-            Start physical calibration
-          </Button>
-        </form>
-      ) : (
-        <>
-          <div className="calibration-status">
-            <Badge>
-              {human(nodeState || calibration.productionState || "unknown")}
-            </Badge>
-            <p>
-              Attempt {calibration.attemptId}. Reconciliation checks this saved
-              attempt and never silently starts another calibration job.
-            </p>
-            <button
-              className="text-button"
-              onClick={() => {
-                void run("refresh", refresh);
-              }}
-              disabled={Boolean(busy)}
-            >
-              Refresh calibration status
-            </button>
-          </div>
-          {calibration.evidence?.url && (
-            <figure className="calibration-evidence">
-              <img
-                src={calibration.evidence.url}
-                alt={`Fresh calibration evidence for ${m.name}`}
-              />
-              <figcaption>
-                Calibration evidence · {date(calibration.evidence.capturedAt)} ·{" "}
-                {calibration.evidence.machineId}
-              </figcaption>
-            </figure>
-          )}
+            Refresh saved calibration status
+          </button>
+        </Notice>
+      )}
+      {(lookupKnown || calibration) &&
+        (!calibration ? (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void run("finalize", async () => {
+              void run("start", async (isCurrent) => {
+                const model = catalog.find((x) => x.id === modelId);
+                if (model && !completePreparedModel(model))
+                  throw new Error(
+                    "The prepared model is missing inspected dimensions, color or an estimated time. Ask the owner to complete its catalog record.",
+                  );
+                const selectedIds = model
+                  ? [model.artifactId]
+                  : assets.map((a) => a.id);
+                if (!selectedIds.length)
+                  throw new Error(
+                    m.outputType === "3d"
+                      ? "Choose an inspected prepared model."
+                      : "Upload calibration artwork before starting.",
+                  );
                 if (
-                  await finalize({
-                    inspected: true,
-                    attemptId: calibration.attemptId,
-                    reason,
-                  })
+                  !writeStoredValue(
+                    "session",
+                    `fabrary-calibration-${m.id}`,
+                    key.current,
+                  )
                 )
-                  await refresh();
+                  throw new Error(
+                    "Browser storage is unavailable, so calibration retry details cannot be saved. Allow session storage before starting physical calibration. No job was started.",
+                  );
+                const result = await api<{ calibration: Calibration }>(
+                  `/owner/machines/${m.id}/calibration/start`,
+                  {
+                    spec: {
+                      assetIds: selectedIds,
+                      intent: `Owner-supervised ${m.model} calibration`,
+                      outputType: m.outputType,
+                      widthMm: Number(model?.widthMm ?? width),
+                      heightMm: Number(model?.heightMm ?? height),
+                      quantity: 1,
+                      material: m.material,
+                      permission: "authorized",
+                      crop: "contain",
+                      ...(model
+                        ? {
+                            preparedModelId: model.id,
+                            depthMm: model.depthMm,
+                            color: model.color,
+                            estimatedSeconds: model.estimatedSeconds,
+                          }
+                        : {}),
+                    },
+                    ownerReady: true,
+                    idempotencyKey: key.current,
+                  },
+                );
+                if (!isCurrent()) return;
+                setCalibration(result.calibration);
+                setLookupKnown(true);
+                await refresh();
               });
             }}
           >
+            {m.outputType === "3d" ? (
+              <>
+                {modelId && (
+                  <PreparedModelFacts
+                    details={
+                      catalog.find((model) => model.id === modelId) || {}
+                    }
+                  />
+                )}
+                <Field label="Calibration prepared model">
+                  <select
+                    required
+                    disabled={Boolean(busy)}
+                    value={modelId}
+                    onChange={(e) => setModelId(e.target.value)}
+                  >
+                    <option value="">Choose an inspected model</option>
+                    {catalog.map((model) => (
+                      <option value={model.id} key={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </>
+            ) : (
+              <Field
+                label="Calibration artwork"
+                hint="One PNG, JPEG or WebP. Use artwork whose output you can inspect."
+              >
+                <input
+                  required={!assets.length}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={Boolean(busy)}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file)
+                      void run("upload", async (isCurrent) => {
+                        const form = new FormData();
+                        form.append("images", file);
+                        const result = await api<{ assets: Asset[] }>(
+                          "/uploads",
+                          form,
+                        );
+                        if (isCurrent()) setAssets(result.assets);
+                      });
+                  }}
+                />
+              </Field>
+            )}
+            {assets.length > 0 && (
+              <img
+                className="calibration-original"
+                src={assets[0].url}
+                alt="Calibration original artwork"
+              />
+            )}
+            {m.outputType !== "3d" && (
+              <div className="form-grid">
+                <Field label="Calibration width (mm)">
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    disabled={Boolean(busy) || m.outputType === "instax"}
+                    value={width}
+                    onChange={(e) => setWidth(e.target.value)}
+                  />
+                </Field>
+                <Field label="Calibration height (mm)">
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    disabled={Boolean(busy) || m.outputType === "instax"}
+                    value={height}
+                    onChange={(e) => setHeight(e.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
             <label className="check">
               <input
                 required
                 type="checkbox"
-                checked={inspected}
-                onChange={(e) => setInspected(e.target.checked)}
+                disabled={Boolean(busy) || lookupBusy || !lookupKnown}
+                checked={ownerReady}
+                onChange={(e) => setOwnerReady(e.target.checked)}
               />
               <span>
-                I inspected the physical output and fresh result evidence after
-                this attempt completed.
+                The device is supervised, the output area is clear and I am
+                ready to start this physical calibration.
               </span>
             </label>
-            <Field label="Calibration inspection reason">
-              <input
-                required
-                minLength={10}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Describe the observed output and inspection"
-              />
-            </Field>
             <Button
-              className="secondary"
+              className="primary"
               type="submit"
-              busy={busy === "finalize"}
-              disabled={Boolean(busy) || !inspected}
+              busy={busy === "start"}
+              disabled={
+                Boolean(busy) ||
+                lookupBusy ||
+                !lookupKnown ||
+                !ownerReady ||
+                !m.paired ||
+                !m.configured ||
+                (m.outputType === "3d" ? !modelId : !assets.length)
+              }
             >
-              Confirm inspected calibration
+              Start physical calibration
             </Button>
           </form>
-          <details className="calibration-resolution">
-            <summary>Resolve an uncertain calibration attempt</summary>
-            <p>
-              Record an observed outcome only after inspecting the device. This
-              does not rerun the physical job.
-            </p>
-            <Field label="Observed calibration outcome">
-              <select
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
+        ) : (
+          <>
+            <div className="calibration-status">
+              <Badge>
+                {human(nodeState || calibration.productionState || "unknown")}
+              </Badge>
+              <p>
+                Attempt {calibration.attemptId}. Reconciliation checks this
+                saved attempt and never silently starts another calibration job.
+              </p>
+              <button
+                className="text-button"
+                onClick={() => {
+                  void run("refresh", refresh);
+                }}
+                disabled={Boolean(busy)}
               >
-                <option value="completed">Completed · output observed</option>
-                <option value="failed">
-                  Failed · output missing or unusable
-                </option>
-              </select>
-            </Field>
-            <Button
-              className="secondary"
-              disabled={
-                Boolean(busy) || !inspected || reason.trim().length < 10
-              }
-              busy={busy === "resolve"}
-              onClick={() => {
-                void run("resolve", async () => {
-                  await api(`/owner/machines/${m.id}/calibration/resolve`, {
-                    attemptId: calibration.attemptId,
-                    result: resolution,
-                    inspected: true,
-                    reason,
-                  });
-                  await refresh();
+                Refresh calibration status
+              </button>
+            </div>
+            {calibration.evidence?.url && (
+              <figure className="calibration-evidence">
+                <ResultImage
+                  src={calibration.evidence.url}
+                  frameKey={JSON.stringify([
+                    m.id,
+                    m.adapterVersion,
+                    calibration.id,
+                    calibration.attemptId,
+                    calibration.evidence.jobId,
+                    calibration.evidence.machineId,
+                    calibration.evidence.capturedAt,
+                  ])}
+                  alt={`Fresh calibration evidence for ${m.name}`}
+                  owner
+                />
+                <figcaption>
+                  Calibration evidence · {date(calibration.evidence.capturedAt)}{" "}
+                  · {calibration.evidence.machineId}
+                </figcaption>
+              </figure>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run("finalize", async (isCurrent) => {
+                  if (
+                    await finalize({
+                      inspected: true,
+                      attemptId: calibration.attemptId,
+                      reason,
+                    })
+                  ) {
+                    if (!isCurrent()) return;
+                    setInspected(false);
+                    setReason("");
+                    setResolution("completed");
+                    await refresh();
+                  }
                 });
               }}
             >
-              Record observed outcome
-            </Button>
-          </details>
-        </>
-      )}
+              <label className="check">
+                <input
+                  required
+                  type="checkbox"
+                  disabled={Boolean(busy) || !lookupKnown}
+                  checked={inspected}
+                  onChange={(e) => setInspected(e.target.checked)}
+                />
+                <span>
+                  I inspected the physical output and fresh result evidence
+                  after this attempt completed.
+                </span>
+              </label>
+              <Field label="Calibration inspection reason">
+                <input
+                  required
+                  minLength={10}
+                  disabled={Boolean(busy) || !lookupKnown}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Describe the observed output and inspection"
+                />
+              </Field>
+              <Button
+                className="secondary"
+                type="submit"
+                busy={busy === "finalize"}
+                disabled={
+                  Boolean(busy) || lookupBusy || !lookupKnown || !inspected
+                }
+              >
+                Confirm inspected calibration
+              </Button>
+            </form>
+            <details className="calibration-resolution">
+              <summary>Resolve an uncertain calibration attempt</summary>
+              <p>
+                Record an observed outcome only after inspecting the device.
+                This does not rerun the physical job.
+              </p>
+              <Field label="Observed calibration outcome">
+                <select
+                  disabled={Boolean(busy) || !lookupKnown}
+                  value={resolution}
+                  onChange={(e) => setResolution(e.target.value)}
+                >
+                  <option value="completed">Completed · output observed</option>
+                  <option value="failed">
+                    Failed · output missing or unusable
+                  </option>
+                </select>
+              </Field>
+              <Button
+                className="secondary"
+                disabled={
+                  Boolean(busy) ||
+                  lookupBusy ||
+                  !lookupKnown ||
+                  !inspected ||
+                  reason.trim().length < 10
+                }
+                busy={busy === "resolve"}
+                onClick={() => {
+                  void run("resolve", async (isCurrent) => {
+                    await api(`/owner/machines/${m.id}/calibration/resolve`, {
+                      attemptId: calibration.attemptId,
+                      result: resolution,
+                      inspected: true,
+                      reason,
+                    });
+                    if (!isCurrent()) return;
+                    setInspected(false);
+                    setReason("");
+                    setResolution("completed");
+                    await refresh();
+                  });
+                }}
+              >
+                Record observed outcome
+              </Button>
+            </details>
+          </>
+        ))}
     </details>
   );
 }
@@ -3815,19 +4032,44 @@ function OwnerJob({
   action: (name: string, body?: unknown) => Promise<boolean>;
   simulation: (outcome: string) => Promise<boolean>;
 }) {
-  const [prepared, setPrepared] = useState({
+  const emptyPreparation = () => ({
     removed: false,
     labeled: false,
     stored: false,
     cleared: false,
   });
-  const [code, setCode] = useState("");
-  const [review, setReview] = useState("pass");
-  const [reason, setReason] = useState("");
+  const [prepared, setPrepared] = useOwnerDraft(
+    ownerActionDraftKey("handling", j),
+    emptyPreparation,
+    (value) => Object.values(value).some(Boolean),
+  );
+  const [code, setCode] = useOwnerDraft(
+    ownerActionDraftKey("pickup", j),
+    () => "",
+    Boolean,
+  );
+  const [reviewDraft, setReviewDraft] = useOwnerDraft(
+    ownerActionDraftKey("review", j),
+    () => ({ result: "pass", reason: "" }),
+    (value) => value.result !== "pass" || Boolean(value.reason),
+  );
+  const { result: review, reason } = reviewDraft;
+  const setReview = (result: string) =>
+    setReviewDraft((current) => ({ ...current, result }));
+  const setReason = (reason: string) =>
+    setReviewDraft((current) => ({ ...current, reason }));
   const [outcome, setOutcome] = useState("pass");
   const [abortConfirm, setAbortConfirm] = useState(false);
-  const [clearInspected, setClearInspected] = useState(false);
-  const [clearReason, setClearReason] = useState("");
+  const [clearDraft, setClearDraft] = useOwnerDraft(
+    ownerActionDraftKey("clear", j),
+    () => ({ inspected: false, reason: "" }),
+    (value) => value.inspected || Boolean(value.reason),
+  );
+  const { inspected: clearInspected, reason: clearReason } = clearDraft;
+  const setClearInspected = (inspected: boolean) =>
+    setClearDraft((current) => ({ ...current, inspected }));
+  const setClearReason = (reason: string) =>
+    setClearDraft((current) => ({ ...current, reason }));
   const needsHandling =
     j.productionState === "produced" && j.fulfillmentState === "awaiting_owner";
   const needsReview = ["needs_review", "failed"].includes(j.productionState);
@@ -3878,9 +4120,10 @@ function OwnerJob({
       {needsHandling && (
         <form
           className="preparation"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void action("prepare", prepared);
+            if (await action("prepare", prepared))
+              setPrepared(emptyPreparation());
           }}
         >
           <h4>Prepare this item for collection</h4>
@@ -3902,6 +4145,7 @@ function OwnerJob({
                 <input
                   type="checkbox"
                   required
+                  disabled={Boolean(busy)}
                   checked={prepared[key]}
                   onChange={(e) => {
                     const checked = e.currentTarget.checked;
@@ -3912,22 +4156,36 @@ function OwnerJob({
               </label>
             ))}
           </div>
-          <Button
-            className="primary"
-            busy={busy === `${j.id}-prepare`}
-            disabled={Boolean(busy) || !Object.values(prepared).every(Boolean)}
-            type="submit"
-          >
-            Mark ready for pickup
-          </Button>
+          <div className="button-row">
+            <Button
+              className="primary"
+              busy={busy === `${j.id}-prepare`}
+              disabled={
+                Boolean(busy) || !Object.values(prepared).every(Boolean)
+              }
+              type="submit"
+            >
+              Mark ready for pickup
+            </Button>
+            {Object.values(prepared).some(Boolean) && (
+              <Button
+                className="secondary"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => setPrepared(emptyPreparation())}
+              >
+                Reset preparation checks
+              </Button>
+            )}
+          </div>
         </form>
       )}
       {j.fulfillmentState === "ready_for_pickup" && (
         <form
           className="redeem-form"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void action("redeem", { code });
+            if (await action("redeem", { code })) setCode("");
           }}
         >
           <div>
@@ -3940,20 +4198,33 @@ function OwnerJob({
           <Field label="Pickup code">
             <input
               required
+              disabled={Boolean(busy)}
               autoComplete="off"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="Requester’s code"
             />
           </Field>
-          <Button
-            className="primary"
-            busy={busy === `${j.id}-redeem`}
-            disabled={Boolean(busy)}
-            type="submit"
-          >
-            Redeem & record collection
-          </Button>
+          <div className="button-row">
+            <Button
+              className="primary"
+              busy={busy === `${j.id}-redeem`}
+              disabled={Boolean(busy)}
+              type="submit"
+            >
+              Redeem & record collection
+            </Button>
+            {code && (
+              <Button
+                className="secondary"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => setCode("")}
+              >
+                Discard pickup code
+              </Button>
+            )}
+          </div>
         </form>
       )}
       {j.evidence && (
@@ -3966,6 +4237,14 @@ function OwnerJob({
             {j.evidence.url ? (
               <ResultImage
                 src={j.evidence.url}
+                frameKey={JSON.stringify([
+                  j.id,
+                  j.attemptId,
+                  j.evidence.jobId,
+                  j.evidence.machineId,
+                  j.evidence.capturedAt,
+                  j.evidence.source,
+                ])}
                 alt={`Evidence for order ${shortId(j.id)}`}
                 owner
               />
@@ -3996,9 +4275,10 @@ function OwnerJob({
       {j.productionState === "needs_review" && (
         <form
           className="review-form"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            void action("review", { result: review, reason });
+            if (await action("review", { result: review, reason }))
+              setReviewDraft({ result: "pass", reason: "" });
           }}
         >
           <h4>
@@ -4014,6 +4294,7 @@ function OwnerJob({
           <div className="form-grid">
             <Field label="Reviewed result">
               <select
+                disabled={Boolean(busy)}
                 value={review}
                 onChange={(e) => setReview(e.target.value)}
               >
@@ -4032,6 +4313,7 @@ function OwnerJob({
             <Field label="Reason for decision">
               <input
                 required
+                disabled={Boolean(busy)}
                 minLength={8}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -4039,27 +4321,42 @@ function OwnerJob({
               />
             </Field>
           </div>
-          <Button
-            className="primary"
-            type="submit"
-            busy={busy === `${j.id}-review`}
-            disabled={Boolean(busy)}
-          >
-            Record reviewed result
-          </Button>
+          <div className="button-row">
+            <Button
+              className="primary"
+              type="submit"
+              busy={busy === `${j.id}-review`}
+              disabled={Boolean(busy)}
+            >
+              Record reviewed result
+            </Button>
+            {(review !== "pass" || reason) && (
+              <Button
+                className="secondary"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => setReviewDraft({ result: "pass", reason: "" })}
+              >
+                Discard review draft
+              </Button>
+            )}
+          </div>
         </form>
       )}
       {j.productionState === "failed" &&
         !j.history?.some((event) => event.event === "owner_recovery") && (
           <form
             className="review-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              void action("clear", {
-                inspected: true,
-                cleared: true,
-                reason: clearReason,
-              });
+              if (
+                await action("clear", {
+                  inspected: true,
+                  cleared: true,
+                  reason: clearReason,
+                })
+              )
+                setClearDraft({ inspected: false, reason: "" });
             }}
           >
             <h4>Clear the failed execution</h4>
@@ -4072,6 +4369,7 @@ function OwnerJob({
               <input
                 type="checkbox"
                 required
+                disabled={Boolean(busy)}
                 checked={clearInspected}
                 onChange={(e) => setClearInspected(e.target.checked)}
               />
@@ -4080,20 +4378,35 @@ function OwnerJob({
             <Field label="Clearance reason">
               <input
                 required
+                disabled={Boolean(busy)}
                 minLength={8}
                 value={clearReason}
                 onChange={(e) => setClearReason(e.target.value)}
                 placeholder="Describe the inspection and clearance"
               />
             </Field>
-            <Button
-              className="secondary"
-              type="submit"
-              busy={busy === `${j.id}-clear`}
-              disabled={Boolean(busy) || !clearInspected}
-            >
-              Clear execution & keep paused
-            </Button>
+            <div className="button-row">
+              <Button
+                className="secondary"
+                type="submit"
+                busy={busy === `${j.id}-clear`}
+                disabled={Boolean(busy) || !clearInspected}
+              >
+                Clear execution & keep paused
+              </Button>
+              {(clearInspected || clearReason) && (
+                <Button
+                  className="secondary"
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() =>
+                    setClearDraft({ inspected: false, reason: "" })
+                  }
+                >
+                  Discard clearance draft
+                </Button>
+              )}
+            </div>
           </form>
         )}
       <PaymentReferenceForm

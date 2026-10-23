@@ -1,0 +1,329 @@
+{
+  "recordedAt": "2026-10-23T10:58:28.035Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "e0d6515862ff043a1e4b7d80df5dd8638b7401353a802dcd7213c6579164e586",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 83,
+    "node": 67,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserStorageAndWallet": 28,
+    "browserScenarios": 130,
+    "uniqueCases": 338,
+    "checksIncludingThreeBrowserEngines": 598,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 130,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T10:53:19.812Z",
+      "durationMs": 89284.964,
+      "report": "web/evidence/overnight-fifth-chromium-browser.json",
+      "reportSha256": "2b14d7ed11768a2faa363a92b32d5958e0425adf8aac713404bf4ee39839800b",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 130,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T10:54:49.486Z",
+      "durationMs": 107812.49100000001,
+      "report": "web/evidence/overnight-fifth-firefox-browser.json",
+      "reportSha256": "9ad38b91740bfcfd74bbcb2aa88a2f3fb9be3193e21999c534f88779ce08fb52",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 130,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T10:56:37.701Z",
+      "durationMs": 95791.203,
+      "report": "web/evidence/overnight-fifth-webkit-browser.json",
+      "reportSha256": "59904a37b45b28726de57bbb0c316ca4f77e1b887588ff2b0105e5794a5d3019",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "actualLocalChecks": {
+    "backendRestartSseReconnect": {
+      "at": "2026-10-23T10:52:16.199Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 2785,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "earlierAcceptance": "First-checkpoint Spacetime CAS/access/subscriptions, 10 sticker + 3 Instax simulation jobs, failure/review/lost-ack, signed simulation calibration API and actual local FastMCP application loop remain retained; unchanged finite loops were not rerun this pass."
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 216,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-fifth-software-final.log": "f738234b0888e0087ed50f0d0aa45e2565170de6e6cf76750697438ace5a27f3",
+    ".data/overnight-fifth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-fifth-chromium-browser.log": "7f1455ac677f09c8d499f078613773e387c86138674465fd160c723063027e54",
+    ".data/overnight-fifth-firefox-browser.log": "cc68bda0f804b82ce0f5e81c192c659829df381513137f07abb97a139656a9b2",
+    ".data/overnight-fifth-webkit-browser.log": "4a9c3d00fd2ec4fb7260ce64d721514562f664e0a342afa96ab89bf633b6f76d"
+  },
+  "finalBuild": {
+    "indexSha256": "6259d21298d0bdb1b9783cb83fec4548a67485a285de507c685bd857a40775ae",
+    "script": "/assets/index-Hj6o9xqD.js",
+    "stylesheet": "/assets/index-B26mZzWc.css"
+  },
+  "notes": "The complete shared software check and production build follow the final fifth-pass application changes. New coverage includes safe HTTP parsing/errors, bounded JSON/wallet/image recovery, interrupted request reconciliation, evidence-frame freshness, session-scoped owner action drafts and explicit calibration readiness/inspection boundaries. All new browser cases intercept APIs; HTTP faults use isolated stores and files. No automatic mutation/signature/physical retries are added. Actual local backend/node activation preserves data/journals and checks native SSE reconnection with polling disabled. Earlier finite simulation/database/dependency acceptance remains historical. Physical and live-service acceptance remains blocked."
+}
