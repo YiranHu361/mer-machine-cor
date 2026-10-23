@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -196,6 +197,7 @@ async function fixture(
   return state;
 }
 async function upload(page: Page) {
+  await useManualSettings(page);
   await page.getByLabel("Upload artwork", { exact: true }).setInputFiles({
     name: "deadline.png",
     mimeType: "image/png",
@@ -219,6 +221,7 @@ test("an interrupted creation stops spinning, recovers its late committed order 
     .fill("Recover a stalled creation");
   await upload(page);
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   const submit = page.getByRole("button", {
     name: "Make production preview",
     exact: true,
@@ -259,6 +262,7 @@ test("an interrupted creation stops spinning, recovers its late committed order 
     .fill("Recover a stalled creation");
   await upload(page);
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await submit.click();
   await expect
     .poll(() => state.posts.filter((item) => item.path === "/api/jobs").length)
@@ -454,6 +458,7 @@ test("a stalled successful JSON body is bounded and late creation recovers witho
     .fill("Recover the stalled response body");
   await upload(page);
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();
@@ -522,6 +527,7 @@ for (const missingJob of [false, true])
       .fill("Recover the ambiguous committed response");
     await upload(page);
     await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+    await authorizePictures(page);
     state.failureStatus = missingJob ? 0 : 500;
     state.missingJob = missingJob;
     const submit = page.getByRole("button", {

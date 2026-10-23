@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import { test, expect } from "@playwright/test";
 
 test("owner recovery forms validate references and submit measured trial records (UI fixture)", async ({
@@ -323,6 +324,7 @@ test("requester specification suggestions preserve approval and manual fallback 
     });
   });
   await page.goto("/");
+  await useManualSettings(page);
   await page.setViewportSize({ width: 320, height: 844 });
   await page
     .getByLabel("What is it for?", { exact: true })
@@ -402,6 +404,15 @@ test("requester specification suggestions preserve approval and manual fallback 
       { exact: false },
     ),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Make production preview", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", {
+      name: "Request artwork permission review",
+      exact: true,
+    })
+    .click();
   await expect(
     page.getByRole("button", { name: "Make production preview", exact: true }),
   ).toBeEnabled();
@@ -744,10 +755,12 @@ test("requester identity changes discard private artwork, drafts and saved order
     });
   });
   await page.goto("/");
+  await useManualSettings(page);
   await page
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles("tests/fixtures/makers.png");
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Private requester A workshop artwork");
@@ -887,6 +900,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
       });
     });
     await page.goto("/");
+    await useManualSettings(page);
     await page
       .getByLabel("What is it for?", { exact: true })
       .fill("Private work belonging only to requester A");
@@ -897,6 +911,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
       await expect(
         page.getByAltText("Uploaded original artwork"),
       ).toBeVisible();
+      await authorizePictures(page);
       await page
         .getByRole("button", { name: "Make production preview", exact: true })
         .click();

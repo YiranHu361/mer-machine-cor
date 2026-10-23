@@ -387,3 +387,15 @@ The requested cutoff was 09:00. Control resumed at 09:41 after a recorded wall-c
 - One small copy issue observed late in the final screenshot remains: the requester availability note uses “1 machines available.” It was not changed after the requested cutoff; no functional failure was reproduced.
 
 Use [the full report](test-report.md) and [progress/prerequisites](progress.md) for resumption. Do not restart the overnight heartbeat or claim the whole PRD complete without new user direction and the required external acceptance.
+
+## Later product follow-up, October 23
+
+After the overnight handoff, the user clarified the requester vision: upload pictures and let the agent choose a suitable machine from the database. That new request is implemented separately from the ended overnight task; the heartbeat remains paused. Source `6b29d6df56b4e921afb5a5da441d11cea0c9d5ba5c627d4fc5f2a5d71403d944`.
+
+- Fresh intake now uploads pictures before any output/settings selection, automatically analyzes them and presents the output, saved machine and explanation. Notes and advanced settings are optional, including blank/short notes on edits.
+- Recommendations are read-only and use current saved capability/material/mode/policy/hours/media/readiness/reservation facts. The exact machine is approval-bound and revalidated for quote/checkout. Unknown/malformed replies and held analysis cannot silently lose this binding or overwrite newer input.
+- Actual retained simulation/mock/Spacetime flow passed upload→recommendation→explicit rights→production preview→approval→same-machine quote. The unpaid test order was cancelled and reservation release checked. No physical output, payment or live model call occurred.
+- Verification: 249 backend, 147 Python node, 31 payment/Claude fixtures, 5 Fetch and 29 web units pass; 237 full browser cases pass in each of Chromium/Firefox/WebKit, with 54 automated accessibility scans and 0 detected violations. That is 698 unique cases/1172 canonical executions. Backend/node/provider checks precede only the documented frontend recovery/optional-note changes; final frontend types/build, units and all full browser suites follow every change. Earlier diagnostics are not additional unique cases.
+- Current local analysis is explicitly limited color/tonal statistics. The configured Claude recommendation path is covered with injected HTTP fixtures, not a paid/live call. Required physical/live/customer/rules acceptance and the earlier uninterrupted endurance observation remain incomplete. The old singular-machine copy issue is fixed in this later UI update.
+
+[Current report](test-report.md), [checkpoint](evidence/picture-first-qa.json), [actual native proof](evidence/picture-first-native.json), [320px upload](../web/evidence/picture-first-empty-320.png), [actual mobile recommendation](../web/evidence/picture-first-native-recommended-mobile.png).

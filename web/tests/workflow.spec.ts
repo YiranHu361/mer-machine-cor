@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import { test, expect } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -96,6 +97,7 @@ test("requester and owner complete an honest simulated order, independent handli
     "Owner inspected and cleared",
   );
   await requestPage.goto("/");
+  await useManualSettings(requestPage);
   await expect(
     requestPage.getByRole("heading", { name: "What are we making?" }),
   ).toBeVisible();
@@ -112,6 +114,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await requestPage
     .getByLabel("What is it for?", { exact: true })
     .fill(artworkIntent);
+  await authorizePictures(requestPage);
   await requestPage
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();
@@ -188,6 +191,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await requestPage
     .getByRole("button", { name: "New order", exact: true })
     .click();
+  await useManualSettings(requestPage);
   await requestPage
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
@@ -197,6 +201,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await requestPage
     .getByLabel("What is it for?", { exact: true })
     .fill(cancellationIntent);
+  await authorizePictures(requestPage);
   await requestPage
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();
@@ -316,6 +321,7 @@ test("intake validates specifications, review returns to approval, and expired/o
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
   await page.goto("/");
+  await useManualSettings(page);
   await page.getByRole("radio", { name: /Prepared 3D print/ }).check();
   await expect(
     page.getByText("No prepared models are configured.", { exact: false }),
@@ -335,6 +341,7 @@ test("intake validates specifications, review returns to approval, and expired/o
     .getByLabel("Upload artwork", { exact: true })
     .setInputFiles(resolve("tests/fixtures/makers.png"));
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await page.getByLabel("Width (mm)", { exact: true }).fill("17");
   await page
     .getByRole("button", { name: "Make production preview", exact: true })

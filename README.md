@@ -1,6 +1,6 @@
 # Fabrary
 
-A local requester and owner application for stickers, instant photos and a prepared 3D model. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
+A local requester and owner application that starts with pictures. Upload images and Fabrary recommends a supported output and a suitable machine from the registered database. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
 
 Open the running application at **http://127.0.0.1:4318**. Requester sessions are private; owner access comes from ignored `.data/local-credentials.json` (`ownerCode`). Do not copy that file into reports.
 
@@ -33,7 +33,7 @@ This session has the installed SpacetimeDB 2.13.0 runtime and persistent data un
 
 ## Use
 
-Open Owner workshop, enter the local owner code, and register a supported **simulation** device. Confirm simulated calibration, list it, inspect/clear and resume. In a separate requester browser session, upload artwork, enter the supported specification, approve the actual production preview, quote, mock-pay and dispatch. Review result evidence. The owner removes/labels/stores/clears, marks ready and resumes independently of collection. Redeem the pickup code once at handoff.
+Open Owner workshop, enter the local owner code, and register a supported **simulation** device. Confirm simulated calibration, list it, inspect/clear and resume. In a separate requester browser session, upload pictures. Review the recommended output and machine, confirm artwork permission, then prepare and approve the production preview. A note and advanced production settings are optional. With no vision key, limited local image statistics are labeled clearly and uncertain pictures need clarification. The approved recommendation stays bound to the chosen machine; a newly unavailable device requires a fresh recommendation. Quoting, mock payment and dispatch remain deliberate actions. Review result evidence. The owner removes/labels/stores/clears, marks ready and resumes independently of collection. Redeem the pickup code once at handoff. Prepared 3D models remain a separate advanced workflow; pictures do not become printable 3D files.
 
 Testnet mode uses the browser's development wallet through EIP1193 and the official x402 client; there are no browser private keys or production payment rails. It requires a funded Base Sepolia payer/treasury, signer, RPC and owner payout address. A signature alone never counts as collected payment.
 

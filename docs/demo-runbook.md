@@ -2,8 +2,8 @@
 
 ## Current checkpoint
 
-The October 23 overnight interface review continues until 9:00 a.m. Pacific.
-See [overnight QA](overnight-qa.md) for the latest checkpoint and remaining audits.
+The October 23 overnight interface review has ended; its heartbeat is paused.
+See [overnight QA](overnight-qa.md) for the recorded checks and interrupted endurance observation.
 The owner queue now starts with orders needing action; use its view selector,
 search and page controls to reach collected/cancelled orders.
 
@@ -56,8 +56,8 @@ This starts the node and backend with matching local credentials. Run one backen
 
 1. Open `/owner` and enter `ownerCode` from the private local file. Use a separate browser profile/context for requester access; switching roles creates a new requester account.
 2. Register a supported simulation machine. Paired/configured/calibrated/listed/ready are separate facts. Run the visibly labeled simulated calibration; configure media estimate, price card, UTC hours, quantity/policy and collection point. List, inspect/clear and resume.
-3. Requester uploads1–4 PNG/JPEG/WebP images. The prepared preview contains all selected images; thermal output is the exact lossless monochrome raster used at the node. Enter dimensions/material/quantity and authorization. Unclear permission goes to owner review. Claude suggestions are available only with configured key; manual deterministic specification works independently.
-4. Approve the current production preview. Quote a briefly reserved machine. Prices are **unmeasured development estimates**. An enabled budget mandate may auto-accept only an approved specification within its integer-cent cap. Artwork/specification/price changes invalidate approval.
+3. Requester uploads 1–4 PNG/JPEG/WebP pictures; no description, output picker or technical fields are required first. Analysis recommends a supported format and an eligible saved machine, explains the choice and fills one output's settings. Confirm artwork permission, prepare and inspect the actual preview, then approve it. Without a vision key, local color/tonal analysis is labeled limited; ambiguous pictures need a short format clarification. Advanced settings and explicit owner permission review remain available. All pictures appear in the prepared composition; thermal output shows the actual monochrome raster used at the node.
+4. Approve the current production preview. Quote the recommended machine after current availability and policy are rechecked. If it is no longer suitable, request and approve a fresh recommendation; another device is not silently substituted. Prices are **unmeasured development estimates**. An enabled budget mandate may auto-accept only an approved specification within its integer-cent cap. Artwork/specification/price changes invalidate approval.
 5. Mock checkout is clearly labeled. Dispatch persists one attempt before contacting the node. Status, evidence, hold/release/refund and pickup are independent facts. In testnet mode the requester explicitly uses a configured Base Sepolia browser wallet. Missing wallet, wrong network or declined signature never becomes a paid order.
 6. Passing visible-output evidence permits release. An unusable frame is review; missing output fails/refunds. Owner inspection overrides are recorded with reasons. Neither verification nor a test payout means collection.
 7. Owner removes, labels, stores and clears before marking ready for pickup. Resume availability separately; another job can run while the older item awaits collection. Redeem the expiring pickup code once at actual handoff. If it expires, the owner selects **Renew expired pickup code** for the stored item; the new code appears in the requester’s order. Renewal does not make another item, move payment or change machine availability. If confirmation is uncertain, use **Check pickup status** before an explicit retry. Do not repeat production or preparation to replace a code.
@@ -102,7 +102,7 @@ Put all secrets in ignored `.env` or the environment; do not paste them into cha
 
 1. **x402:** funded Base Sepolia payer/treasury, matching test treasury signer, RPC, public app origin and owner recipient address (owner settings). Use the preconfigured browser wallet; only chain84532/test USDC is supported. Run finite collection, release and refund, retain transaction references and confirmations. `npm --prefix integrations run test:live` exits2 BLOCKED until its explicit opt-in and funded test credentials exist. No credits or funds are purchased by this project.
 2. **Fetch.ai:** dedicated requester session cookie, persistent Agentverse seed/mailbox, ASI key and signed sender allowlist. The bridge cannot approve previews or bypass checkout. Agent checkout requires an explicit budget mandate and accepted quote. The local FastMCP flow is proven, but actual ASI:One discovery and authorized invocation must still be observed. See integration commands; use the configured development account and existing access; no account permissions are changed.
-3. **Claude:** configure `ANTHROPIC_API_KEY` and supported model. Run actual image-intake and fresh-camera verification cases; preserve provider reason and pass/fail/review. Missing key leaves manual specification usable and hardware verification in review. The live suite needs real approved/result image paths, actual capture time and credible completion assertion.
+3. **Claude:** configure `ANTHROPIC_API_KEY` and supported model. Run actual image-intake and fresh-camera verification cases; preserve provider reason and pass/fail/review. Missing key leaves labeled limited local image analysis and optional manual settings usable; hardware verification stays in review. The live suite needs real approved/result image paths, actual capture time and credible completion assertion.
 4. **Rules/community:** obtain official event/track rules and consenting named club/owner interview evidence. No rules eligibility, interview, deadline verification or customer finding has been fabricated. No optional add-on is selected before the required stability gate.
 
 ## Software checks and evidence

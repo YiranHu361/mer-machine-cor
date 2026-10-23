@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -297,6 +298,7 @@ test("an unreadable saved-state recovery preserves the local draft and conflict 
 async function interruptedCreation(page: Page) {
   await page.setViewportSize({ width: 320, height: 664 });
   const state = await fixture(page, false);
+  await useManualSettings(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Find this recovered order on mobile");
@@ -306,6 +308,7 @@ async function interruptedCreation(page: Page) {
     buffer: await readFile(resolve("tests/fixtures/makers.png")),
   });
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();

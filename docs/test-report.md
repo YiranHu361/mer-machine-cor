@@ -1,38 +1,35 @@
 # Verification report
 
-Final handoff recorded 2026-10-23 09:45 Pacific. The requested cutoff was 09:00; control resumed at 09:41 after the recorded observation/clock gap. Overnight feature work has ended and the heartbeat is PAUSED. Current source `4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3`.
+Updated October 23, 2026, 10:37 AM Pacific for the picture-first requester update. Source `6b29d6df56b4e921afb5a5da441d11cea0c9d5ba5c627d4fc5f2a5d71403d944`. The earlier overnight task has ended and its heartbeat remains paused.
 
-**Partial completion.** Runnable local software passes the checks below. Required physical/live acceptance and the whole PRD remain incomplete. No physical output, funded transaction, live Claude call, remote discovery or consenting customer evidence is claimed.
+**Partial completion.** Current local software passes the checks below. Required physical/live acceptance and the whole PRD remain incomplete. No physical output, funded transaction, live Claude call, remote discovery or consenting customer evidence is claimed.
 
-Twelfth adds deliberate expired pickup renewal, durable exact replay and local keyboard/read recovery. It also fences actual hardware transport/cleanup through timeout and canceled shutdown, checks pinned Bambu upload/publish/stop acknowledgements and prevents missing Bluetooth from exiting Node. A configured local app port now passes origin validation without permitting other hosts or ports. Earlier media, cancellation, calibration, drafts and accessibility repairs remain verified.
+The requester now starts by uploading 1–4 pictures. Analysis recommends a suitable output and a current registered machine, explains the choice and supplies supported settings. A note and technical fields are optional. The selected machine is saved in the approved specification and rechecked for quoting/checkout; a newly unavailable device never silently changes to a different machine. Preview, artwork rights, price/payment and dispatch remain deliberate. Without a vision key, limited local color/tonal analysis is labeled honestly and ambiguous pictures require explicit format clarification. Prepared 3D remains separate.
 
-[Current checkpoint](evidence/overnight-twelfth-qa.json), [ongoing QA](overnight-qa.md), [SDK/transport evidence](evidence/overnight-twelfth-node-contracts.json). Runtime versions: Node 25.8.1, Python 3.12.11, SpacetimeDB 2.13.0, bambulabs-api 2.6.6, Chromium 156.0.8078.4, Firefox 157.0, WebKit 27.2. Dependency locks are unchanged.
-
-The passive check was interrupted: both sessions recorded `ERR_NETWORK_IO_SUSPENDED`, followed by a long unsampled interval and a disconnected authoritative store. No application changes were made after the requested cutoff. Final recovery restarted only the retained local services, preserved private data/journals/assets, restored HTTP200 and verified served bytes. Fresh [owner desktop](../web/evidence/overnight-final-owner-1440.png) and [requester mobile](../web/evidence/overnight-final-requester-390.png) sessions receive native SSE without page errors. These fresh checks cannot fill the missing continuous observation.
+[Current checkpoint](evidence/picture-first-qa.json), [actual native picture-only flow](evidence/picture-first-native.json), [320px initial upload](../web/evidence/picture-first-empty-320.png), [actual recommendation on mobile](../web/evidence/picture-first-native-recommended-mobile.png), [actual preview on desktop](../web/evidence/picture-first-native-preview-desktop.png).
 
 ## Checks actually executed
 
 | Check | Result | Boundary / evidence |
 | --- | --- | --- |
-| Backend/application/process/realtime | **237 passed** | Actual HTTP, temporary stores/processes, cross-language cancellation/media and concurrent renewal/origin cases |
-| Python node | **137 passed** | Includes 18 new transport and actual pinned-SDK controls; hardware/network boundaries are fakes |
-| Payment/Claude + Fetch fixtures | **25 +5 passed** | Offline signatures/receipts/provider parsing/bridge authorization; no funds or live model |
-| API/storage/wallet units | **29 passed** | Current unit checks; no live wallet prompt or funds |
-| Build/strict types | PASS | Current production bundle served on loopback 4318 |
-| Chromium 156 | **214 passed** | No failed/skipped/flaky cases; [report](../web/evidence/overnight-twelfth-chromium-browser.json) |
-| Firefox 157 | **214 passed** | No failed/skipped/flaky cases; [report](../web/evidence/overnight-twelfth-firefox-browser.json) |
-| WebKit 27.2 | **214 passed** | No failed/skipped/flaky cases; [report](../web/evidence/overnight-twelfth-webkit-browser.json) |
-| Automated accessibility | **51 scans, 0 violations** | Page/scoped A/AA checks; visual/keyboard review separate, not full conformance |
-| Actual retained restart/native SSE | PASS | Simulation/mock/SpacetimeDB; polling disabled, 2 opens/1 error/4 refreshes; [evidence](evidence/overnight-twelfth-sse-reconnect.json) |
-| New pickup API/UI/native SSE | PASS in all 3 engines | Seeded prepared simulation item in temporary SQLite; actual HTTP/built UI, no API interception; zero Node/payment calls |
-| Configured-secret/served-byte checks | PASS | Private files ignored/0600; HTML/JS/CSS byte match |
-| Long-session stability | **INCOMPLETE** | 24 healthy samples over 23 minutes, then 139m27s observation gap; network suspension, closed browsers and HTTP503. No 75-minute continuous pass; [evidence](evidence/overnight-passive-session-soak.json) |
-| Final runtime recovery | PASS | Explicit retained local restart restored Spacetime connectivity; fresh owner/requester native SSE and screenshots pass,0 output/payment calls; [recovery](evidence/overnight-final-recovery.json), [browser](evidence/overnight-final-browser.json) |
-| Required physical/live acceptance | BLOCKED / NOT RUN | Device/camera/readiness, funded wallets, Claude and Agentverse prerequisites remain missing |
+| Backend/application/process/realtime | **249 passed** | Includes 12 new image recommendations, strict ownership/read-only matching, current database races and exact machine quote binding |
+| Python node | **147 passed** | Includes 10 new bounded local image/CLI controls; physical/network transports remain fakes |
+| Payment/Claude + Fetch fixtures | **31 + 5 passed** | Includes 6 new image-first provider controls with injected HTTP; no live model or funds |
+| API/storage/wallet units | **29 passed** | Rechecked after final frontend changes |
+| Build/strict types | PASS | Final frontend built and served on loopback 4318; backend/provider types pass |
+| Chromium 156 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-chromium-browser.json) |
+| Firefox 157 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-firefox-browser.json) |
+| WebKit 27.2 | **237 passed** | No failed/skipped/flaky cases; [report](../web/evidence/picture-first-webkit-browser.json) |
+| Automated accessibility | **54 scans, 0 violations** | Page/scoped A/AA checks; visual/keyboard review separate, not full conformance |
+| Native picture-only flow | PASS | Actual built UI/HTTP/local analysis/retained SpacetimeDB. No note/technical entry; recommended machine survives preview/approval/quote. Unpaid test order canceled, reservation released; 0 device/payment/model calls |
+| Actual retained restart/native SSE | PASS | Simulation/mock/SpacetimeDB, polling disabled; 2 opens/1 error/4 refreshes; [evidence](evidence/picture-first-sse-reconnect.json) |
+| Configured-secret/served-byte checks | PASS | Private configuration ignored/0600; HTML/JS/CSS match build |
+| Earlier long-session stability | **INCOMPLETE** | Prior overnight 23-minute healthy sample span followed by 139m27s observation gap. Recovery did not complete the missing 75-minute continuous observation; [evidence](evidence/overnight-passive-session-soak.json) |
+| Required physical/live acceptance | BLOCKED / NOT RUN | Device/camera/readiness, funded wallets, Claude/Agentverse and customer/rules prerequisites remain missing |
 
-**647 unique software cases; 1075 canonical executions** counting all three browser engines. Five browser cases use the actual retained app, 208 intercept device/service APIs and one intercepts startup health failure before actual-app recovery. The separate new native pickup checks use actual HTTP/UI/temporary persistence with a seeded prepared item; they do not claim physical production or handoff.
+**698 unique software cases; 1172 canonical executions** counting all three engines. Five browser cases use the actual retained app, 231 intercept APIs and one intercepts startup health failure before actual-app recovery. The separate native picture-only proof uses actual retained persistence with one unpaid preview/quote; it does not claim physical fulfillment.
 
-The complete shared check and production build followed every twelfth application change. Three later browser-only corrections added the actual API’s future pickup expiry/code and collection timestamp to positive fixtures. Assertions, application, backend, node and bundle did not change; the final full browser suites use the corrected fixtures. Earlier diagnostic and affected reruns are not additional unique cases.
+The complete shared check precedes only frontend recovery fixes for WebKit invalid-field focus, explicit recommendation gating during edits, strict machine binding on mutation replies and optional-note normalization, plus their browser regressions and explicit manual/rights interactions in legacy scenarios. Backend/node/provider bytes are unchanged after their complete checks. Final frontend types/build, 29 units and full three-engine suites follow every application change. Diagnostic/affected reruns are not additional unique cases; exact source and log hashes are in the checkpoint.
 
 ## Functional evidence
 
@@ -40,7 +37,7 @@ The actual browser flow includes supported simulated-device registration, distin
 
 The live dashboard test disables all polling intervals>=2000ms, independently pauses/resumes a machine and observes the open dashboard update plus named SSE refresh events. It uses actual SpacetimeDB; polling cannot hide a disconnected subscription. Stable screenshots: [desktop requester](../web/evidence/requester-ready-desktop.png), [mobile requester](../web/evidence/requester-mobile.png), [owner](../web/evidence/owner-desktop.png), [SSE](../web/evidence/sse-live-dashboard.png).
 
-208 isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, Claude suggestion/manual fallback, artwork editing, reordered responses, session/store failures, real document navigation, focus, live queue behavior and touch layouts. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
+231 isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, Claude suggestion/manual fallback, artwork editing, reordered responses, session/store failures, real document navigation, focus, live queue behavior and touch layouts. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
 
 [Process-death evidence](evidence/process-recovery.json) records: node crash after a durable possible start→review/held with exactly1 attempt; orchestrator crash while accepted simulated work continues→reconciled completion/release with exactly1 attempt; unavailable node before acceptance→durable cancellation proof before audited failure/refund, 0 node attempts. No new physical request resolves uncertainty. This suite uses explicitly isolated SQLite development persistence; the separate real Spacetime restart and live-update tests establish the required store path.
 
@@ -62,6 +59,14 @@ The1.5195-second simulation measurement starts **after a shared artwork upload**
 Consumables, physical machine time, owner labor, failure rate, API cost, willingness to pay and actual owner earnings have not been measured. Price cards are unmeasured development estimates. The measured-trial form records inputs without defaulting blank values to zero, and keeps quoted allocations separate from confirmed income; failed/refunded jobs do not count quoted payout/fees as received.
 
 ## Failures found and repaired
+
+Picture-first follow-up repairs:
+
+- Upload starts analysis automatically; technical controls are secondary and the whole upload target fits initial 320px/390px screens.
+- Late image/note/order/session results cannot overwrite newer input. Missing-device and clarification responses preserve pictures without creating an order.
+- Rights confirmation cannot erase required review. Explicit manual settings and owner review stay available.
+- Invalid hidden fields open their disclosure and recover focus in all three browsers. Editing after an unavailable recommendation requires a new match or a deliberate manual choice.
+- Malformed create/edit/approval responses cannot drop the selected machine or seed an unbound replacement specification; exact saved-state recovery remains available.
 
 October 23 overnight repairs:
 

@@ -3,7 +3,7 @@ Oct 22, 2026 · @Yiran
 
 ## Summary
 
-Fabrary turns a picture and a short description into a physical item made by an available nearby machine. A requester approves a production preview and an itemized quote, then gets a photo of the result and a pickup code. An owner connects a supported machine to a node, sets prices and hours, and receives jobs through one common interface.
+Fabrary starts with pictures. The requester uploads images, and the agent recommends a suitable physical output and a machine from the registered database, using the pictures and each machine's capabilities, loaded material and current availability. The requester does not need to choose a machine, output type or production settings first. They review the recommendation, approve a production preview and an itemized quote, then get a photo of the result and a pickup code. An owner connects a supported machine to a node, sets prices and hours, and receives jobs through one common interface.
 The Cal Hacks build runs this loop on the team's three machines. Stickers on the Phomemo M02Pro are the main interactive demo, the Instax Mini Link 3 is the second output, and a short prepared print on the Bambu Lab A1 mini shows the same orchestration on a longer job. Known-device onboarding is shown live. Photo-to-3D and adapter generation for unfamiliar models stay visible stretch goals.
 The platform automates intake, preparation, matching, payment tracking, dispatch and visible-output checks. Owners still load media, clear machines, remove finished items and hand them off. The demo uses team-operated machines and test funds. Submission closes Sunday, October 25 at 9 AM PT, as the organizers' October 22 email states; the product name is still open.
 
@@ -44,9 +44,9 @@ Out of scope for the hackathon: real customer funds, real postage, a public owne
 
 ### Requester flow
 
-1. Upload 1 to 4 images and describe the item. Intake proposes output type, dimensions, quantity and material, asking one bundled question when something essential is missing; unresolved essentials block checkout.
+1. Upload 1 to 4 images. The agent recommends an output and a suitable registered machine, explains the choice and fills supported dimensions, material, crop and a default quantity of one. A description is optional. Ask a short bundled clarification only when the pictures leave an essential choice unresolved. Technical settings remain an optional refinement, rather than an intake requirement. If vision is unavailable, identify limited local analysis honestly; if no suitable machine is available, say so without silently choosing an unsuitable output.
 2. Approve a production preview with dimensions, crop, material, color limits and estimated turnaround. A thermal sticker preview shows the actual monochrome conversion.
-3. Fabrary matches an available machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. The demo uses one designated collection point.
+3. Fabrary rechecks the recommended machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. A different machine requires a fresh recommendation and approval instead of a silent switch. The demo uses one designated collection point.
 4. Accept and pay. With a configured budget mandate, the agent may accept a quote for an already approved specification within that mandate; any change to price or output needs new approval.
 5. The approved artifact is dispatched. The requester sees preparation, payment, machine progress, verification and any owner action needed.
 6. A passing output check releases the held test amount to the owner's payable balance. Ambiguous evidence pauses release for operator review.

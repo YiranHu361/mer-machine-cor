@@ -94,6 +94,16 @@ type Spec = {
   depthMm?: number;
   color?: string;
   estimatedSeconds?: number;
+  recommendedMachineId?: string;
+};
+type Recommendation = {
+  status: "recommended" | "unavailable" | "needs_clarification";
+  provider: "claude" | "local_analysis";
+  reason: string;
+  questions: string[];
+  spec: Spec | null;
+  machine: Machine | null;
+  notice?: string;
 };
 type Quote = {
   id: string;
@@ -596,6 +606,17 @@ function RequesterApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(
+    null,
+  );
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+  const [manualSettings, setManualSettings] = useState(false);
+  const [permissionReviewRequested, setPermissionReviewRequested] =
+    useState(false);
+  const analysisSequence = useRef(0);
+  const recommendationSection = useRef<HTMLElement>(null);
+  const analysisNotice = useRef<HTMLDivElement>(null);
   const [editingBaseline, setEditingBaseline] = useState<{
     id: string;
     version: number;
@@ -623,6 +644,10 @@ function RequesterApp({
     baseline: typeof editingBaseline;
     conflict: boolean;
     job: Job | null;
+    recommendation: Recommendation | null;
+    analysisError: string;
+    manualSettings: boolean;
+    permissionReviewRequested: boolean;
   };
   const cachedDrafts = useRef(new Map<string, RequesterDraft>());
   const [, setDraftRevision] = useState(0);
@@ -646,7 +671,7 @@ function RequesterApp({
     heightMm: 50,
     quantity: 1,
     material: "thermal-paper",
-    permission: "authorized",
+    permission: "unclear",
     crop: "contain",
   });
   const [budgetEnabled, setBudgetEnabled] = useState(false);
@@ -675,6 +700,7 @@ function RequesterApp({
       value.depthMm ?? null,
       value.color ?? null,
       value.estimatedSeconds ?? null,
+      value.recommendedMachineId ?? null,
     ]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [editing, setEditing] = useState(false);
@@ -686,6 +712,7 @@ function RequesterApp({
     cap: string,
     originals: Asset[] = [],
     intake: IntakeDraft | null = null,
+    reviewRequested = false,
   ) =>
     JSON.stringify([
       draftSignature(value),
@@ -693,6 +720,7 @@ function RequesterApp({
       cap === "" ? "" : Number(cap),
       originals,
       intake,
+      reviewRequested,
     ]);
   const activeDraftKey = !current ? "new" : editing ? current.id : null;
   const activeSignature = formSignature(
@@ -701,6 +729,7 @@ function RequesterApp({
     budget,
     assets,
     intakeDraft,
+    permissionReviewRequested,
   );
   const unsavedDraft =
     activeDraftKey !== null &&
@@ -750,6 +779,7 @@ function RequesterApp({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      analysisSequence.current++;
       invalidateSnapshots(jobsGate.current);
       invalidateSnapshots(machinesGate.current);
     };
@@ -873,6 +903,10 @@ function RequesterApp({
         baseline: editingBaseline,
         conflict: editConflict,
         job: editing ? current : null,
+        recommendation,
+        analysisError,
+        manualSettings,
+        permissionReviewRequested,
       });
       cacheChanged();
     } else if (cachedDrafts.current.delete(activeDraftKey)) cacheChanged();
@@ -889,6 +923,10 @@ function RequesterApp({
     setIntakeError(draft.intakeError);
     setEditingBaseline(draft.baseline);
     setEditConflict(draft.conflict);
+    setRecommendation(draft.recommendation);
+    setAnalysisError(draft.analysisError);
+    setManualSettings(draft.manualSettings);
+    setPermissionReviewRequested(draft.permissionReviewRequested);
     setEditing(draft.job !== null);
     setError("");
   };
@@ -907,12 +945,14 @@ function RequesterApp({
           newerDraft.budget,
           newerDraft.assets,
           newerDraft.intakeDraft,
+          newerDraft.permissionReviewRequested,
         ) === pendingCreation.signature
       )
         forgetDraft("new");
       setPendingCreation(null);
     }
     recoveryContext.current++;
+    resetAnalysis();
     setEditingBaseline(null);
     setEditConflict(false);
     setPreviewVisit((visit) => visit + 1);
@@ -979,6 +1019,8 @@ function RequesterApp({
   };
   const jobAction = (action: string, body: unknown = {}) => {
     if (!current) return;
+    const requestedJobId = current.id;
+    const requestedMachineId = current.spec.recommendedMachineId ?? null;
     void act(action, async () => {
       if (action === "checkout")
         body = { ...(body as object), idempotencyKey: checkoutKey(current) };
@@ -992,10 +1034,22 @@ function RequesterApp({
               idempotencyKey: checkoutKey(current),
             })
           : await api<{ job: Job }>(`/jobs/${current.id}/${action}`, body);
+      if (
+        !validSavedJob(job) ||
+        job.id !== requestedJobId ||
+        (job.spec.recommendedMachineId ?? null) !== requestedMachineId
+      )
+        throw new ApiError(
+          "The order update could not be matched to this saved order and machine. Its result is unknown; refresh saved orders before another action.",
+          "invalid_response",
+          0,
+          true,
+        );
       select(job);
     });
   };
   const changeOutput = (type: Output) => {
+    useManualSettings();
     setIntakeDraft(null);
     setIntakeError("");
     setSpec((s) => ({
@@ -1019,6 +1073,7 @@ function RequesterApp({
       depthMm: undefined,
       color: undefined,
       estimatedSeconds: undefined,
+      recommendedMachineId: undefined,
       assetIds:
         type === "3d"
           ? []
@@ -1034,6 +1089,12 @@ function RequesterApp({
   };
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
+    if (manualSettings && spec.outputType === "3d") {
+      setError(
+        "Pictures cannot be converted into a prepared 3D model. Choose an image output in advanced settings before replacing the artwork.",
+      );
+      return;
+    }
     if (files.length > 4) {
       setError("Choose up to four images for one order.");
       return;
@@ -1049,17 +1110,197 @@ function RequesterApp({
       );
       return;
     }
+    const context = recoveryContext.current;
+    const sequence = ++analysisSequence.current;
+    setAnalyzing(false);
+    setRecommendation(null);
+    setAnalysisError("");
+    let uploaded: Asset[] | null = null;
     await act("upload", async () => {
       const form = new FormData();
       list.forEach((file) => form.append("images", file));
       const result = await api<{ assets: Asset[] }>("/uploads", form);
+      if (
+        !mounted.current ||
+        sequence !== analysisSequence.current ||
+        context !== recoveryContext.current
+      )
+        return;
       setAssets(result.assets);
       setIntakeDraft(null);
       setIntakeError("");
-      setSpec((s) => ({ ...s, assetIds: result.assets.map((a) => a.id) }));
+      setManualSettings(manualSettings);
+      setPermissionReviewRequested(false);
+      setSpec((s) => ({
+        ...s,
+        assetIds: result.assets.map((a) => a.id),
+        permission: "unclear",
+        recommendedMachineId: undefined,
+      }));
+      uploaded = result.assets;
     });
+    if (
+      !manualSettings &&
+      uploaded &&
+      mounted.current &&
+      context === recoveryContext.current &&
+      sequence === analysisSequence.current
+    )
+      void analyzePictures(uploaded, spec.intent);
+  };
+  const resetAnalysis = () => {
+    analysisSequence.current++;
+    setAnalyzing(false);
+    setRecommendation(null);
+    setAnalysisError("");
+    setManualSettings(false);
+    setPermissionReviewRequested(false);
+  };
+  const useManualSettings = () => {
+    analysisSequence.current++;
+    setAnalyzing(false);
+    setRecommendation(null);
+    setAnalysisError("");
+    setManualSettings(true);
+    setSpec((value) => ({ ...value, recommendedMachineId: undefined }));
+  };
+  const analyzePictures = async (originals: Asset[], intent: string) => {
+    if (!originals.length) return;
+    const sequence = ++analysisSequence.current;
+    const context = recoveryContext.current;
+    const initiatingElement = document.activeElement;
+    const interaction = recoveryInteraction.current;
+    const assetIds = originals.map((asset) => asset.id);
+    setAnalyzing(true);
+    setAnalysisError("");
+    setRecommendation(null);
+    setManualSettings(false);
+    try {
+      const result = await api<Recommendation>("/recommendations", {
+        assetIds,
+        intent,
+      });
+      if (
+        !mounted.current ||
+        sequence !== analysisSequence.current ||
+        context !== recoveryContext.current
+      )
+        return;
+      const shapeValid =
+        result &&
+        ["recommended", "unavailable", "needs_clarification"].includes(
+          result.status,
+        ) &&
+        ["claude", "local_analysis"].includes(result.provider) &&
+        typeof result.reason === "string" &&
+        result.reason.trim() &&
+        Array.isArray(result.questions) &&
+        result.questions.every((question) => typeof question === "string") &&
+        (result.notice === undefined || typeof result.notice === "string");
+      const saved = result?.spec;
+      const machine = result?.machine;
+      const imageSpecValid =
+        saved &&
+        ["sticker", "instax"].includes(saved.outputType) &&
+        JSON.stringify(saved.assetIds) === JSON.stringify(assetIds) &&
+        typeof saved.intent === "string" &&
+        saved.intent.trim().length >= 3 &&
+        saved.intent.length <= 2000 &&
+        saved.quantity === 1 &&
+        saved.permission === "unclear" &&
+        [saved.widthMm, saved.heightMm].every(
+          (value) => Number.isSafeInteger(value) && value > 0 && value <= 300,
+        ) &&
+        ["contain", "cover"].includes(saved.crop) &&
+        saved.material ===
+          (saved.outputType === "instax" ? "photo-film" : "thermal-paper");
+      const recommendationValid =
+        result?.status !== "recommended"
+          ? result?.machine === null &&
+            (result?.status === "unavailable"
+              ? result?.spec === null || imageSpecValid
+              : result?.spec === null)
+          : imageSpecValid &&
+            saved &&
+            machine &&
+            machine.outputType === saved.outputType &&
+            typeof machine.id === "string" &&
+            machine.id &&
+            typeof machine.name === "string" &&
+            typeof machine.model === "string" &&
+            saved.recommendedMachineId === machine.id;
+      if (!shapeValid || !recommendationValid)
+        throw new Error(
+          "The recommendation could not be confirmed. Your pictures are kept. Try the analysis again or review advanced settings.",
+        );
+      setRecommendation(result);
+      if (result.status === "recommended" && saved) {
+        setSpec((previous) => ({
+          assetIds,
+          intent: saved.intent,
+          outputType: saved.outputType,
+          widthMm: saved.widthMm,
+          heightMm: saved.heightMm,
+          quantity: 1,
+          material: saved.material,
+          crop: saved.crop,
+          permission: previous.permission,
+          recommendedMachineId: saved.recommendedMachineId,
+        }));
+        setIntakeDraft(null);
+        setIntakeError("");
+      }
+      requestAnimationFrame(() => {
+        if (
+          !mounted.current ||
+          sequence !== analysisSequence.current ||
+          context !== recoveryContext.current ||
+          interaction !== recoveryInteraction.current ||
+          (document.activeElement !== initiatingElement &&
+            document.activeElement !== document.body)
+        )
+          return;
+        recommendationSection.current?.focus({ preventScroll: true });
+        recommendationSection.current?.scrollIntoView({
+          block: "nearest",
+          behavior: "instant",
+        });
+      });
+    } catch (error) {
+      if (
+        mounted.current &&
+        sequence === analysisSequence.current &&
+        context === recoveryContext.current
+      ) {
+        setAnalysisError((error as Error).message);
+        requestAnimationFrame(() => {
+          if (
+            !mounted.current ||
+            sequence !== analysisSequence.current ||
+            context !== recoveryContext.current ||
+            interaction !== recoveryInteraction.current ||
+            (document.activeElement !== initiatingElement &&
+              document.activeElement !== document.body)
+          )
+            return;
+          analysisNotice.current?.focus({ preventScroll: true });
+          analysisNotice.current?.scrollIntoView({
+            block: "nearest",
+            behavior: "instant",
+          });
+        });
+      }
+    } finally {
+      if (
+        mounted.current &&
+        sequence === analysisSequence.current &&
+        context === recoveryContext.current
+      )
+        setAnalyzing(false);
+    }
   };
   const suggestSpecification = async () => {
+    useManualSettings();
     setBusy("intake");
     setIntakeError("");
     setError("");
@@ -1179,6 +1420,21 @@ function RequesterApp({
       );
       return;
     }
+    if (!manualSettings && recommendation?.status !== "recommended") {
+      setError(
+        "Find a suitable machine for these pictures before making the production preview.",
+      );
+      return;
+    }
+    if (
+      spec.permission !== "authorized" &&
+      !(manualSettings && permissionReviewRequested)
+    ) {
+      setError(
+        "Confirm that you own these pictures or have permission to print them before continuing.",
+      );
+      return;
+    }
     if (
       [numericSpec.widthMm, numericSpec.heightMm, numericSpec.quantity].some(
         (value) => !Number.isInteger(value) || value <= 0,
@@ -1196,6 +1452,12 @@ function RequesterApp({
     }
     const value: Spec = {
       ...numericSpec,
+      intent:
+        numericSpec.intent.trim().length < 3
+          ? numericSpec.outputType === "3d"
+            ? "Owner-prepared workshop model"
+            : "Picture for a workshop print"
+          : numericSpec.intent,
       budgetMandate: budgetEnabled
         ? { enabled: true as const, capCents: Math.round(Number(budget) * 100) }
         : undefined,
@@ -1221,7 +1483,9 @@ function RequesterApp({
           !validSavedJob(result?.job) ||
           (editing
             ? result.job.id !== submittedJobId
-            : result.job.creationRequestId !== creationRequestId)
+            : result.job.creationRequestId !== creationRequestId) ||
+          (result.job.spec.recommendedMachineId ?? null) !==
+            (value.recommendedMachineId ?? null)
         )
           throw new ApiError(
             "The order response could not be matched to this request. Its result is unknown; check saved orders before trying again.",
@@ -1257,6 +1521,7 @@ function RequesterApp({
   const newOrder = () => {
     stashActiveDraft();
     recoveryContext.current++;
+    resetAnalysis();
     setEditingBaseline(null);
     setEditConflict(false);
     selectedId.current = null;
@@ -1282,6 +1547,7 @@ function RequesterApp({
       setPendingCreation(null);
       if (activeDraftKey === "new") {
         recoveryContext.current++;
+        resetAnalysis();
         setSpec(pristineDraft.current);
         setAssets([]);
         setBudgetEnabled(false);
@@ -1309,6 +1575,7 @@ function RequesterApp({
   const cancelEdit = () => {
     if (current) forgetDraft(current.id);
     recoveryContext.current++;
+    resetAnalysis();
     setEditingBaseline(null);
     setEditConflict(false);
     setAssets([]);
@@ -1321,6 +1588,8 @@ function RequesterApp({
   const beginEdit = (job: Job) => {
     if (!mounted.current) return;
     recoveryContext.current++;
+    resetAnalysis();
+    setManualSettings(true);
     const initialBudget = String(
       (job.spec.budgetMandate?.capCents || 300) / 100,
     );
@@ -1400,7 +1669,7 @@ function RequesterApp({
     );
   return (
     <div
-      className="requester"
+      className={`requester ${!current ? "picture-first" : ""}`}
       onFocusCapture={() => {
         recoveryInteraction.current++;
       }}
@@ -1432,9 +1701,8 @@ function RequesterApp({
             Made here.
           </h1>
           <p className="intro-description">
-            Turn an image into a monochrome sticker or an instant photo. Check
-            the production preview before you pay, then collect it from the
-            workshop.
+            Upload pictures. We’ll find a suitable machine and show you the
+            production preview before you decide.
           </p>
         </div>
         <div className="counter-note">
@@ -1442,7 +1710,7 @@ function RequesterApp({
             {refreshing ? "…" : readyCount}
           </span>
           <div>
-            machines available
+            {readyCount === 1 ? "machine" : "machines"} available
             <span>
               {health?.mode === "hardware"
                 ? "Connected hardware"
@@ -1650,346 +1918,646 @@ function RequesterApp({
               </small>
             </>
           ) : (
-            <form onSubmit={submit} aria-busy={Boolean(busy)}>
+            <form
+              onSubmit={submit}
+              aria-busy={Boolean(busy) || analyzing}
+              onInvalidCapture={(event) => {
+                if (event.target instanceof HTMLElement) {
+                  const disclosure = event.target.closest("details");
+                  if (disclosure instanceof HTMLDetailsElement) {
+                    disclosure.open = true;
+                    const field = event.target;
+                    if (
+                      event.currentTarget.querySelector(
+                        "input:invalid, select:invalid, textarea:invalid",
+                      ) !== field
+                    )
+                      return;
+                    const initiatingElement = document.activeElement;
+                    const interaction = recoveryInteraction.current;
+                    const context = recoveryContext.current;
+                    requestAnimationFrame(() => {
+                      if (
+                        !mounted.current ||
+                        context !== recoveryContext.current ||
+                        interaction !== recoveryInteraction.current ||
+                        (document.activeElement !== initiatingElement &&
+                          document.activeElement !== document.body)
+                      )
+                        return;
+                      field.focus({ preventScroll: true });
+                      field.scrollIntoView({
+                        block: "nearest",
+                        behavior: "instant",
+                      });
+                    });
+                  }
+                }
+              }}
+            >
               <fieldset disabled={Boolean(busy)} className="intake-fields">
-                <fieldset className="output-picker">
-                  <legend className="sr-only">Choose an output</legend>
-                  {(["sticker", "instax", "3d"] as Output[]).map((type) => (
-                    <label
-                      className={`output-choice ${spec.outputType === type ? "selected" : ""}`}
-                      key={type}
-                    >
-                      <input
-                        type="radio"
-                        name="output"
-                        value={type}
-                        checked={spec.outputType === type}
-                        onChange={() => changeOutput(type)}
-                      />
-                      <DeviceArt type={type} />
-                      <strong>{outputLabels[type]}</strong>
-                      <span>
-                        {type === "sticker"
-                          ? "Phomemo M02Pro"
-                          : type === "instax"
-                            ? "Instax Mini Link 3"
-                            : "Bambu A1 mini"}
-                      </span>
-                    </label>
-                  ))}
-                </fieldset>
-                {spec.outputType === "3d" ? (
-                  <div className="prepared-model">
-                    <Notice>
-                      Prepared decorative files only. Photo-to-3D and functional
-                      parts are not supported. This hardware path is unverified.
-                    </Notice>
-                    {spec.preparedModelId && (
-                      <PreparedModelFacts details={numericSpec} />
-                    )}
-                    {catalog.length ? (
-                      <Field label="Owner-prepared model">
-                        <select
-                          required
-                          value={spec.preparedModelId || ""}
-                          onChange={(e) => {
-                            const item = catalog.find(
-                              (x) => x.id === e.target.value,
-                            );
-                            setSpec((s) => ({
-                              ...s,
-                              preparedModelId: item?.id,
-                              assetIds: item ? [item.artifactId] : [],
-                              widthMm: item?.widthMm || 0,
-                              heightMm: item?.heightMm || 0,
-                              depthMm: item?.depthMm,
-                              color: item?.color,
-                              estimatedSeconds: item?.estimatedSeconds,
-                              material: item?.material || "pla",
-                            }));
-                          }}
-                        >
-                          <option value="">Choose a prepared model</option>
-                          {catalog.map((item) => (
-                            <option value={item.id} key={item.id}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                    ) : (
+                <p className="picture-intro">
+                  Add your pictures. We’ll find a suitable machine in this
+                  workshop and explain what it can make.
+                </p>
+                <label
+                  className={`upload-zone picture-upload ${busy === "upload" ? "uploading" : ""}`}
+                >
+                  <input
+                    aria-label="Upload artwork"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    multiple
+                    onChange={(event) => {
+                      void upload(event.target.files);
+                      event.target.value = "";
+                    }}
+                    disabled={Boolean(busy)}
+                  />
+                  <span className="upload-symbol" aria-hidden="true">
+                    ＋
+                  </span>
+                  <strong>
+                    {busy === "upload"
+                      ? "Uploading pictures…"
+                      : assets.length
+                        ? "Replace pictures"
+                        : "Add your pictures"}
+                  </strong>
+                  <span>PNG, JPEG or WebP · up to 4 pictures</span>
+                  <small>
+                    The agent checks the picture and the available machines.
+                  </small>
+                </label>
+                {(assets.length > 0 || editing) && (
+                  <div className="originals">
+                    {assets.map((asset) => (
+                      <figure key={asset.id}>
+                        <img src={asset.url} alt="Uploaded original artwork" />
+                        <figcaption>
+                          Original · {asset.width} × {asset.height} px
+                        </figcaption>
+                      </figure>
+                    ))}
+                    {editing && !assets.length && (
                       <p>
-                        No prepared models are configured. Ask the owner to add
-                        a tested model before ordering a 3D print.
+                        The existing artwork stays selected. Upload pictures to
+                        replace it.
                       </p>
                     )}
                   </div>
-                ) : (
-                  <>
-                    <label
-                      className={`upload-zone ${busy === "upload" ? "uploading" : ""}`}
+                )}
+                <section
+                  className="picture-recommendation"
+                  ref={recommendationSection}
+                  tabIndex={-1}
+                  aria-label="Machine recommendation"
+                  aria-live="polite"
+                  aria-busy={analyzing}
+                >
+                  {analyzing ? (
+                    <div className="analysis-progress" role="status">
+                      <span className="spinner" aria-hidden="true" />
+                      <div>
+                        <strong>Finding the right machine…</strong>
+                        <p>
+                          Checking your pictures against this workshop’s
+                          supported devices. You can replace the pictures while
+                          this runs.
+                        </p>
+                      </div>
+                    </div>
+                  ) : recommendation ? (
+                    <>
+                      <div className="recommendation-top">
+                        <span className="eyebrow">
+                          {recommendation.provider === "claude"
+                            ? "Agent recommendation"
+                            : "Local picture analysis"}
+                        </span>
+                        <Badge
+                          tone={
+                            recommendation.status === "recommended"
+                              ? "green"
+                              : "amber"
+                          }
+                        >
+                          {recommendation.status === "recommended"
+                            ? "Suitable machine found"
+                            : "Needs your attention"}
+                        </Badge>
+                      </div>
+                      <h3>
+                        {recommendation.status === "recommended" &&
+                        recommendation.spec
+                          ? outputLabels[recommendation.spec.outputType]
+                          : recommendation.status === "needs_clarification"
+                            ? "A little more context would help"
+                            : "No suitable machine right now"}
+                      </h3>
+                      {recommendation.machine &&
+                        recommendation.status === "recommended" && (
+                          <div className="recommended-device">
+                            <DeviceArt
+                              type={recommendation.machine.outputType}
+                            />
+                            <div>
+                              <strong>{recommendation.machine.name}</strong>
+                              <span>
+                                {recommendation.machine.model} ·{" "}
+                                {recommendation.machine.mode === "simulation"
+                                  ? "Simulated device"
+                                  : "Hardware · owner readiness required"}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      <p>{recommendation.reason}</p>
+                      {recommendation.spec &&
+                        recommendation.status === "recommended" && (
+                          <div className="recommendation-facts">
+                            <span>
+                              {recommendation.spec.widthMm} ×{" "}
+                              {recommendation.spec.heightMm} mm
+                            </span>
+                            <span>1 item</span>
+                            <span>
+                              {recommendation.spec.outputType === "sticker"
+                                ? "Black and white"
+                                : "Fixed photo film"}
+                            </span>
+                          </div>
+                        )}
+                      {recommendation.questions.length > 0 && (
+                        <ul>
+                          {recommendation.questions.map((question, index) => (
+                            <li key={index}>{question}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <small>
+                        {recommendation.notice ||
+                          (recommendation.provider === "local_analysis"
+                            ? "Local analysis is being used. No AI service reviewed these pictures."
+                            : "Review the actual production file before approval. The recommendation does not approve artwork rights or payment.")}
+                      </small>
+                    </>
+                  ) : manualSettings ? (
+                    <>
+                      <h3>Manual settings are active</h3>
+                      <p>
+                        Your chosen specification will be checked against the
+                        workshop before quoting. Review the production file and
+                        artwork permission before approval.
+                      </p>
+                    </>
+                  ) : assets.length > 0 ? (
+                    <>
+                      <h3>Find a suitable machine</h3>
+                      <p>
+                        Your pictures are kept. Check the workshop again to get
+                        a recommendation before preparing the production file.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3>One picture, a useful starting point.</h3>
+                      <p>
+                        We’ll suggest a supported output and a real machine from
+                        the workshop. No order, payment or machine run happens
+                        during analysis.
+                      </p>
+                    </>
+                  )}
+                </section>
+                {analysisError && (
+                  <div
+                    className="notice error picture-analysis-error"
+                    ref={analysisNotice}
+                    tabIndex={-1}
+                    role="alert"
+                  >
+                    <strong>Analysis could not be completed.</strong>
+                    <p>{analysisError}</p>
+                    <p>
+                      Your pictures are kept. Try again or review advanced
+                      settings.
+                    </p>
+                  </div>
+                )}
+                <Field
+                  label="What is it for?"
+                  hint="Optional. Add a short note if the picture needs context, then refine the recommendation."
+                >
+                  <textarea
+                    rows={2}
+                    maxLength={600}
+                    value={spec.intent}
+                    onChange={(event) => {
+                      analysisSequence.current++;
+                      setAnalyzing(false);
+                      setRecommendation(null);
+                      setAnalysisError("");
+                      const intent = event.currentTarget.value;
+                      setIntakeDraft(null);
+                      setSpec((value) => ({
+                        ...value,
+                        intent,
+                        recommendedMachineId: undefined,
+                      }));
+                    }}
+                    placeholder="Optional — for example, a club sticker or a keepsake photo"
+                  />
+                </Field>
+                {spec.assetIds.length > 0 && (
+                  <div className="recommendation-action">
+                    <Button
+                      className="secondary"
+                      type="button"
+                      busy={analyzing}
+                      disabled={Boolean(busy) || analyzing}
+                      onClick={() =>
+                        void analyzePictures(
+                          assets.length
+                            ? assets
+                            : spec.assetIds.map((id) => ({
+                                id,
+                                url: "",
+                                sha256: "",
+                              })),
+                          spec.intent,
+                        )
+                      }
                     >
+                      {recommendation?.status === "unavailable"
+                        ? "Check workshop again"
+                        : recommendation
+                          ? "Refine recommendation"
+                          : analysisError
+                            ? "Retry picture analysis"
+                            : "Find suitable machine"}
+                    </Button>
+                    <small>
+                      Recommendations never place an order or start a machine.
+                    </small>
+                  </div>
+                )}
+                {spec.assetIds.length > 0 && (
+                  <div className="picture-permission">
+                    <label className="check">
                       <input
-                        aria-label="Upload artwork"
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        multiple
-                        onChange={(e) => {
-                          void upload(e.target.files);
-                          e.target.value = "";
+                        type="checkbox"
+                        checked={spec.permission === "authorized"}
+                        disabled={intakeDraft?.contentReview === "review"}
+                        onChange={(event) => {
+                          setPermissionReviewRequested(false);
+                          const permission = event.target.checked
+                            ? "authorized"
+                            : "unclear";
+                          setSpec((value) => ({ ...value, permission }));
                         }}
-                        disabled={Boolean(busy)}
                       />
-                      <span className="upload-symbol">＋</span>
-                      <strong>
-                        {busy === "upload"
-                          ? "Uploading artwork…"
-                          : assets.length
-                            ? "Replace artwork"
-                            : "Add your artwork"}
-                      </strong>
-                      <span>PNG, JPEG or WebP · up to 4 images</span>
+                      <span>
+                        I own these pictures or have permission to print them
+                      </span>
                     </label>
-                    {(assets.length > 0 || editing) && (
-                      <div className="originals">
-                        {assets.map((a) => (
-                          <figure key={a.id}>
-                            <img src={a.url} alt="Uploaded original artwork" />
-                            <figcaption>
-                              Original · {a.width} × {a.height} px
-                            </figcaption>
-                          </figure>
-                        ))}
-                        {editing && !assets.length && (
+                    <small>
+                      {intakeDraft?.contentReview === "review"
+                        ? "The artwork was flagged for owner review. Confirming ownership does not resolve that review; use the explicit review request in advanced settings."
+                        : spec.permission === "authorized"
+                          ? "You will still review the production file and approve payment separately."
+                          : permissionReviewRequested
+                            ? "You explicitly requested owner permission review. This draft cannot proceed to approval or payment until the owner confirms permission."
+                            : "Confirm permission before continuing. If you are unsure, request an owner review in advanced settings."}
+                    </small>
+                  </div>
+                )}
+                <details
+                  className="advanced-specification"
+                  open={editing || undefined}
+                >
+                  <summary>Advanced settings</summary>
+                  <p>
+                    Only change these if you need a specific output or want to
+                    request artwork permission review. Manual changes replace
+                    the machine recommendation.
+                  </p>
+                  {!manualSettings && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      onClick={useManualSettings}
+                    >
+                      Use manual settings
+                    </button>
+                  )}
+                  <div
+                    className="manual-specification-fields"
+                    onChangeCapture={useManualSettings}
+                  >
+                    <fieldset className="output-picker">
+                      <legend className="sr-only">Choose an output</legend>
+                      {(["sticker", "instax", "3d"] as Output[]).map((type) => (
+                        <label
+                          className={`output-choice ${spec.outputType === type ? "selected" : ""}`}
+                          key={type}
+                        >
+                          <input
+                            type="radio"
+                            name="output"
+                            value={type}
+                            checked={spec.outputType === type}
+                            onChange={() => changeOutput(type)}
+                          />
+                          <DeviceArt type={type} />
+                          <strong>{outputLabels[type]}</strong>
+                          <span>
+                            {type === "sticker"
+                              ? "Phomemo M02Pro"
+                              : type === "instax"
+                                ? "Instax Mini Link 3"
+                                : "Bambu A1 mini"}
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    {spec.outputType === "3d" && (
+                      <div className="prepared-model">
+                        <Notice>
+                          Prepared decorative files only. Photo-to-3D and
+                          functional parts are not supported. This hardware path
+                          is unverified.
+                        </Notice>
+                        {spec.preparedModelId && (
+                          <PreparedModelFacts details={numericSpec} />
+                        )}
+                        {catalog.length ? (
+                          <Field label="Owner-prepared model">
+                            <select
+                              required
+                              value={spec.preparedModelId || ""}
+                              onChange={(e) => {
+                                const item = catalog.find(
+                                  (x) => x.id === e.target.value,
+                                );
+                                setSpec((s) => ({
+                                  ...s,
+                                  preparedModelId: item?.id,
+                                  assetIds: item ? [item.artifactId] : [],
+                                  widthMm: item?.widthMm || 0,
+                                  heightMm: item?.heightMm || 0,
+                                  depthMm: item?.depthMm,
+                                  color: item?.color,
+                                  estimatedSeconds: item?.estimatedSeconds,
+                                  material: item?.material || "pla",
+                                }));
+                              }}
+                            >
+                              <option value="">Choose a prepared model</option>
+                              {catalog.map((item) => (
+                                <option value={item.id} key={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        ) : (
                           <p>
-                            The existing artwork stays selected. Upload images
-                            to replace it.
+                            No prepared models are configured. Ask the owner to
+                            add a tested model before ordering a 3D print.
                           </p>
                         )}
                       </div>
                     )}
-                    <p className="context-note">
-                      {spec.outputType === "sticker"
-                        ? "Thermal paper prints in black and white. The next step shows the exact prepared file."
-                        : "Instax uses fixed 54 × 86 mm film. Hardware compatibility and film development remain unverified."}
-                    </p>
-                  </>
-                )}
-                <Field label="What is it for?">
-                  <textarea
-                    required
-                    rows={2}
-                    maxLength={600}
-                    value={spec.intent}
-                    onChange={(e) => {
-                      const intent = e.currentTarget.value;
-                      setIntakeDraft(null);
-                      setSpec((s) => ({ ...s, intent }));
-                    }}
-                    placeholder="A club sticker for our next tabling event"
-                  />
-                </Field>
-                {spec.outputType !== "3d" && (
-                  <section
-                    className="intake-suggestion"
-                    aria-label="Specification suggestions"
-                  >
-                    <div className="suggestion-action">
-                      <Button
-                        className="secondary"
-                        type="button"
-                        busy={busy === "intake"}
-                        disabled={
-                          Boolean(busy) ||
-                          !spec.assetIds.length ||
-                          spec.intent.trim().length < 3
-                        }
-                        onClick={() => {
-                          void suggestSpecification();
+                    {spec.outputType !== "3d" && (
+                      <section
+                        className="intake-suggestion"
+                        aria-label="Specification suggestions"
+                      >
+                        <div className="suggestion-action">
+                          <Button
+                            className="secondary"
+                            type="button"
+                            busy={busy === "intake"}
+                            disabled={
+                              Boolean(busy) ||
+                              !spec.assetIds.length ||
+                              spec.intent.trim().length < 3
+                            }
+                            onClick={() => {
+                              void suggestSpecification();
+                            }}
+                          >
+                            Suggest specification
+                          </Button>
+                          <small>
+                            Upload artwork and describe it first. You can also
+                            enter every field manually.
+                          </small>
+                        </div>
+                        {intakeError && <Notice>{intakeError}</Notice>}
+                        {intakeDraft && (
+                          <div className="suggested-draft">
+                            <h3>Suggested specification</h3>
+                            <p>{intakeDraft.reason}</p>
+                            {intakeDraft.questions.length > 0 && (
+                              <>
+                                <h4>Clarify these together</h4>
+                                <ul>
+                                  {intakeDraft.questions.map(
+                                    (question, index) => (
+                                      <li key={index}>{question}</li>
+                                    ),
+                                  )}
+                                </ul>
+                              </>
+                            )}
+                            <small>
+                              Review the suggested values below. Suggestions do
+                              not authorize artwork or approve a production
+                              file; machine validation still applies.
+                            </small>
+                          </div>
+                        )}
+                      </section>
+                    )}
+                    <div className="form-grid">
+                      <Field label="Width (mm)">
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="300"
+                          disabled={spec.outputType !== "sticker"}
+                          value={spec.widthMm}
+                          onChange={(e) => {
+                            const widthMm = e.currentTarget.value;
+                            setSpec((s) => ({
+                              ...s,
+                              widthMm,
+                            }));
+                          }}
+                        />
+                      </Field>
+                      <Field label="Height (mm)">
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="300"
+                          disabled={spec.outputType !== "sticker"}
+                          value={spec.heightMm}
+                          onChange={(e) => {
+                            const heightMm = e.currentTarget.value;
+                            setSpec((s) => ({
+                              ...s,
+                              heightMm,
+                            }));
+                          }}
+                        />
+                      </Field>
+                      <Field label="Quantity">
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max={
+                            spec.outputType === "instax"
+                              ? 3
+                              : spec.outputType === "3d"
+                                ? 1
+                                : 10
+                          }
+                          step="1"
+                          value={spec.quantity}
+                          onChange={(e) => {
+                            const quantity = e.currentTarget.value;
+                            setSpec((s) => ({
+                              ...s,
+                              quantity,
+                            }));
+                          }}
+                        />
+                      </Field>
+                      <Field label="Image placement">
+                        <select
+                          value={spec.crop}
+                          onChange={(e) => {
+                            const crop = e.currentTarget.value as Spec["crop"];
+                            setSpec((s) => ({
+                              ...s,
+                              crop,
+                            }));
+                          }}
+                          disabled={spec.outputType === "3d"}
+                        >
+                          <option value="contain">Fit whole image</option>
+                          <option value="cover">Fill and crop edges</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <Field label="Material">
+                      <select
+                        value={spec.material}
+                        onChange={(e) => {
+                          const material = e.currentTarget.value;
+                          setSpec((s) => ({ ...s, material }));
                         }}
                       >
-                        Suggest specification
-                      </Button>
-                      <small>
-                        Upload artwork and describe it first. You can also enter
-                        every field manually.
-                      </small>
-                    </div>
-                    {intakeError && <Notice>{intakeError}</Notice>}
-                    {intakeDraft && (
-                      <div className="suggested-draft">
-                        <h3>Suggested specification</h3>
-                        <p>{intakeDraft.reason}</p>
-                        {intakeDraft.questions.length > 0 && (
-                          <>
-                            <h4>Clarify these together</h4>
-                            <ul>
-                              {intakeDraft.questions.map((question, index) => (
-                                <li key={index}>{question}</li>
-                              ))}
-                            </ul>
-                          </>
-                        )}
-                        <small>
-                          Review the suggested values below. Suggestions do not
-                          authorize artwork or approve a production file;
-                          machine validation still applies.
-                        </small>
-                      </div>
-                    )}
-                  </section>
-                )}
-                <div className="form-grid">
-                  <Field label="Width (mm)">
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max="300"
-                      disabled={spec.outputType !== "sticker"}
-                      value={spec.widthMm}
-                      onChange={(e) => {
-                        const widthMm = e.currentTarget.value;
-                        setSpec((s) => ({
-                          ...s,
-                          widthMm,
-                        }));
-                      }}
-                    />
-                  </Field>
-                  <Field label="Height (mm)">
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max="300"
-                      disabled={spec.outputType !== "sticker"}
-                      value={spec.heightMm}
-                      onChange={(e) => {
-                        const heightMm = e.currentTarget.value;
-                        setSpec((s) => ({
-                          ...s,
-                          heightMm,
-                        }));
-                      }}
-                    />
-                  </Field>
-                  <Field label="Quantity">
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      max={
-                        spec.outputType === "instax"
-                          ? 3
-                          : spec.outputType === "3d"
-                            ? 1
-                            : 10
-                      }
-                      step="1"
-                      value={spec.quantity}
-                      onChange={(e) => {
-                        const quantity = e.currentTarget.value;
-                        setSpec((s) => ({
-                          ...s,
-                          quantity,
-                        }));
-                      }}
-                    />
-                  </Field>
-                  <Field label="Image placement">
-                    <select
-                      value={spec.crop}
-                      onChange={(e) => {
-                        const crop = e.currentTarget.value as Spec["crop"];
-                        setSpec((s) => ({
-                          ...s,
-                          crop,
-                        }));
-                      }}
-                      disabled={spec.outputType === "3d"}
-                    >
-                      <option value="contain">Fit whole image</option>
-                      <option value="cover">Fill and crop edges</option>
-                    </select>
-                  </Field>
-                </div>
-                <Field label="Material">
-                  <select
-                    value={spec.material}
-                    onChange={(e) => {
-                      const material = e.currentTarget.value;
-                      setSpec((s) => ({ ...s, material }));
-                    }}
-                  >
-                    <option
-                      value={
-                        spec.outputType === "sticker"
-                          ? "thermal-paper"
-                          : spec.outputType === "instax"
-                            ? "photo-film"
-                            : "pla"
-                      }
-                    >
-                      {spec.outputType === "sticker"
-                        ? "Thermal adhesive paper"
-                        : spec.outputType === "instax"
-                          ? "Instax mini photo film"
-                          : "PLA · prepared decorative print"}
-                    </option>
-                  </select>
-                </Field>
-                <Field label="Artwork permission">
-                  <select
-                    value={spec.permission}
-                    onChange={(e) => {
-                      const permission = e.currentTarget
-                        .value as Spec["permission"];
-                      setSpec((s) => ({
-                        ...s,
-                        permission,
-                      }));
-                    }}
-                  >
-                    <option value="authorized">
-                      I own this artwork or have permission to print it
-                    </option>
-                    <option value="unclear">
-                      I need the owner to review permission
-                    </option>
-                  </select>
-                </Field>
-                <div className="budget-option">
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      checked={budgetEnabled}
-                      onChange={(e) => setBudgetEnabled(e.target.checked)}
-                    />
-                    <span>Automatically accept a quote within my budget</span>
-                  </label>
-                  {budgetEnabled && (
-                    <Field
-                      label="Budget cap (USD)"
-                      hint="Applies only after you approve this specification. Payment still requires checkout."
-                    >
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        required
-                        value={budget}
-                        onChange={(e) => setBudget(e.target.value)}
-                      />
+                        <option
+                          value={
+                            spec.outputType === "sticker"
+                              ? "thermal-paper"
+                              : spec.outputType === "instax"
+                                ? "photo-film"
+                                : "pla"
+                          }
+                        >
+                          {spec.outputType === "sticker"
+                            ? "Thermal adhesive paper"
+                            : spec.outputType === "instax"
+                              ? "Instax mini photo film"
+                              : "PLA · prepared decorative print"}
+                        </option>
+                      </select>
                     </Field>
-                  )}
-                </div>
+                    <Field label="Artwork permission">
+                      <select
+                        value={spec.permission}
+                        onChange={(e) => {
+                          const permission =
+                            intakeDraft?.contentReview === "review"
+                              ? "unclear"
+                              : (e.currentTarget.value as Spec["permission"]);
+                          setPermissionReviewRequested(
+                            permission === "unclear",
+                          );
+                          setSpec((s) => ({ ...s, permission }));
+                        }}
+                      >
+                        <option
+                          value="authorized"
+                          disabled={intakeDraft?.contentReview === "review"}
+                        >
+                          I own this artwork or have permission to print it
+                        </option>
+                        <option value="unclear">
+                          I need the owner to review permission
+                        </option>
+                      </select>
+                    </Field>
+                    <div className="budget-option">
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={budgetEnabled}
+                          onChange={(e) => setBudgetEnabled(e.target.checked)}
+                        />
+                        <span>
+                          Automatically accept a quote within my budget
+                        </span>
+                      </label>
+                      {budgetEnabled && (
+                        <Field
+                          label="Budget cap (USD)"
+                          hint="Applies only after you approve this specification. Payment still requires checkout."
+                        >
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            required
+                            value={budget}
+                            onChange={(e) => setBudget(e.target.value)}
+                          />
+                        </Field>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => {
+                      useManualSettings();
+                      setPermissionReviewRequested(true);
+                      setSpec((value) => ({ ...value, permission: "unclear" }));
+                    }}
+                  >
+                    Request artwork permission review
+                  </button>
+                </details>
                 <Button
                   className="primary full"
                   type="submit"
                   busy={busy === "create"}
                   disabled={
                     Boolean(busy) ||
+                    analyzing ||
+                    (!manualSettings &&
+                      recommendation?.status !== "recommended") ||
+                    (spec.assetIds.length > 0 &&
+                      spec.permission !== "authorized" &&
+                      !(manualSettings && permissionReviewRequested)) ||
                     (!editing && unresolvedCreation) ||
                     editConflict ||
                     (spec.outputType === "3d" && !catalog.length)
@@ -2037,8 +2605,8 @@ function RequesterApp({
                 <span className="ticket-icon">✳</span>
                 <h2>A little more tangible.</h2>
                 <p>
-                  Start with your artwork. We’ll prepare a file for the selected
-                  machine and show you exactly what it will make.
+                  Start with a picture. The agent finds a suitable workshop
+                  machine, then shows you the production file before you decide.
                 </p>
               </div>
               <ol className="steps">
@@ -2472,7 +3040,12 @@ function OrderDetail({
           <Button
             className="primary full"
             busy={busy === "approve"}
-            disabled={Boolean(busy) || !job.artifact?.sha256 || !previewReady}
+            disabled={
+              Boolean(busy) ||
+              !job.artifact?.sha256 ||
+              !previewReady ||
+              job.spec.permission !== "authorized"
+            }
             onClick={() =>
               action("approve", {
                 artifactSha256: job.artifact?.sha256,

@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T16:45:19.994Z",
-  "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+  "recordedAt": "2026-10-23T17:37:34.545Z",
+  "sourceStateSha256": "6b29d6df56b4e921afb5a5da441d11cea0c9d5ba5c627d4fc5f2a5d71403d944",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 237,
-    "node": 137,
-    "paymentClaudeFixtures": 25,
+    "backendApplicationAndProcessRecovery": 249,
+    "node": 147,
+    "paymentClaudeFixtures": 31,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 214,
+    "browserScenarios": 237,
     "browserEngines": 3,
-    "uniqueTestCases": 647,
-    "testExecutionsIncludingThreeEngines": 1075,
+    "uniqueTestCases": 698,
+    "testExecutionsIncludingThreeEngines": 1172,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -91,11 +91,11 @@
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
     ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "Overnight feature work ended; heartbeat PAUSED. Twelfth software647/1075 remains passing with exact split provenance in overnight-twelfth-qa.json. Passive continuous stability is INCOMPLETE after network/observation gap; explicit retained-runtime recovery and fresh browser/SSE checks pass. Required physical/live acceptance remains blocked.",
+  "notes": "Picture-first requester update verified; exact current/retained source scope is in picture-first-qa.json. Overnight heartbeat remains paused; earlier endurance incomplete and required live acceptance remain blocked.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 324,
+    "candidateFiles": 344,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [
@@ -111,5 +111,7 @@
   },
   "overnightStatus": "ENDED_HEARTBEAT_PAUSED",
   "longSessionStability": "INCOMPLETE_OBSERVATION_GAP",
-  "finalEvidence": "docs/evidence/overnight-final-qa.json"
+  "finalEvidence": "docs/evidence/picture-first-qa.json",
+  "currentEvidence": "docs/evidence/picture-first-qa.json",
+  "overnightFinalEvidence": "docs/evidence/overnight-final-qa.json"
 }

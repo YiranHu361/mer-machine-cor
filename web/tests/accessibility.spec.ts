@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdir, readFile } from "node:fs/promises";
@@ -86,6 +87,7 @@ test("requester intake and production preview pass accessibility and 320px reflo
   await expect(page.locator("#main")).toBeFocused();
   await page.locator("#main").evaluate((element) => element.blur());
   await reflow(page, "requester-intake");
+  await useManualSettings(page);
 
   await page
     .getByLabel("Upload artwork", { exact: true })
@@ -94,6 +96,7 @@ test("requester intake and production preview pass accessibility and 320px reflo
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill(`Overnight accessible production preview ${Date.now()}`);
+  await authorizePictures(page);
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();

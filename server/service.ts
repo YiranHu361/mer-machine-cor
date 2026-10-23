@@ -28,6 +28,7 @@ import type { NodeBoundary } from "./node-client.ts";
 import type { PaymentBoundary, PaymentResult } from "./payments.ts";
 import { readFile } from "node:fs/promises";
 import { createClaudeProvider } from "../integrations/src/claude.ts";
+import { machineSupportsSpec } from "./recommendations.ts";
 import { parseJobCreation, findCreatedJob } from "./job-creation.ts";
 import { machineInspectionFingerprint } from "./machine-settings.ts";
 import {
@@ -937,6 +938,21 @@ export class Service {
         "ORDER_CLOSED",
         "Only an approved active order can be quoted.",
       );
+      if (j.spec.recommendedMachineId) {
+        const recommended = ownValue(s.machines, j.spec.recommendedMachineId);
+        requireThat(
+          recommended &&
+            machineSupportsSpec(
+              recommended,
+              j.spec,
+              this.config.mode,
+              Date.now(),
+              j.id,
+            ),
+          "RECOMMENDED_MACHINE_UNAVAILABLE",
+          "The recommended machine is no longer available for this artwork. Request and approve a fresh recommendation before quoting; another machine was not substituted.",
+        );
+      }
       if (
         j.quote &&
         Date.parse(j.quote.expiresAt) > Date.now() &&
@@ -962,24 +978,9 @@ export class Service {
       const machine = Object.values(s.machines)
         .filter(
           (m) =>
-            m.outputType === j.spec.outputType &&
-            m.mode === this.config.mode &&
-            m.paired &&
-            m.configured &&
-            m.calibrated &&
-            m.listed &&
-            m.ready &&
-            !m.paused &&
-            !m.activeJobId &&
-            (!m.reservation ||
-              Date.parse(m.reservation.expiresAt) <= Date.now()) &&
-            m.material === j.spec.material &&
-            m.mediaRemaining >= j.spec.quantity &&
-            (j.spec.outputType !== "3d" ||
-              (j.spec.estimatedSeconds ?? Infinity) <= m.maxJobSeconds) &&
-            m.policy.maxQuantity >= j.spec.quantity &&
-            m.policy.authorizedArtwork &&
-            this.inHours(m),
+            (!j.spec.recommendedMachineId ||
+              m.id === j.spec.recommendedMachineId) &&
+            machineSupportsSpec(m, j.spec, this.config.mode),
         )
         .sort((a, b) => this.price(a, j) - this.price(b, j))[0];
       requireThat(
@@ -1052,6 +1053,8 @@ export class Service {
     );
     requireThat(
       machine.outputType === job.spec.outputType &&
+        (!job.spec.recommendedMachineId ||
+          machine.id === job.spec.recommendedMachineId) &&
         machine.mode === this.config.mode &&
         machine.paired &&
         machine.configured &&

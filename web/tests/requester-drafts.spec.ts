@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import {
   test,
   expect,
@@ -258,6 +259,7 @@ async function fixture(
       exact: true,
     }),
   ).toBeVisible();
+  if (!initial.length || initialLookup) await useManualSettings(page);
   return state;
 }
 const intent = (page: Page) =>
@@ -297,6 +299,7 @@ async function upload(page: Page) {
     })),
   );
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
+  await authorizePictures(page);
   await expect(
     page.getByLabel("Upload artwork", { exact: true }),
   ).toBeEnabled();
@@ -337,6 +340,7 @@ async function noLeaveWarning(page: Page) {
 async function uncertainNewDraft(page: Page) {
   const state = await fixture(page);
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await useManualSettings(page);
   await intent(page).fill("The exact interrupted creation");
   await upload(page);
   state.createUnknown = true;
@@ -443,6 +447,7 @@ test("new-order and edit drafts resume independently and an accepted edit clears
 }) => {
   const state = await fixture(page);
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await useManualSettings(page);
   await upload(page);
   await intent(page).fill("  My separate new order  ");
   await width(page).fill("");
@@ -702,6 +707,7 @@ test("newer edits survive exact interrupted-create reconciliation and a later ex
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
   expect(state.creations).toHaveLength(1);
   state.createUnknown = false;
+  await useManualSettings(page);
   await width(page).fill("53");
   await make(page).click();
   await expect(page.locator(".order-intent")).toHaveText(
@@ -727,6 +733,7 @@ test("explicit interrupted-draft discard leaves unrelated edits intact and allow
   await expect(drafts(page).locator("li")).toHaveCount(1);
   await expect(drafts(page)).toContainText("Keep this unrelated edit");
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await useManualSettings(page);
   await expect(intent(page)).toHaveValue("");
   await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
   await intent(page).fill("A new intentional creation");
@@ -746,6 +753,7 @@ for (const reply of ["missing", "other"] as const)
   }) => {
     const state = await fixture(page);
     await page.getByRole("button", { name: "New order", exact: true }).click();
+    await useManualSettings(page);
     await intent(page).fill(
       "Retain my draft until its exact creation is known",
     );
@@ -906,6 +914,7 @@ test("requester expiry clears hidden and active private drafts before an explici
   await intent(page).fill("Private hidden requester A edit");
   await row(page, "bravo_order").click();
   await page.getByRole("button", { name: "New order", exact: true }).click();
+  await useManualSettings(page);
   await upload(page);
   await intent(page).fill("Private active requester A new draft");
   await budgetToggle(page).check();

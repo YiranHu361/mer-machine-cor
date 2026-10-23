@@ -59,6 +59,10 @@ export const specSchema = z
     depthMm: z.number().positive().max(180).optional(),
     color: z.string().trim().min(1).max(60).optional(),
     estimatedSeconds: z.number().int().positive().max(3600).optional(),
+    recommendedMachineId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,128}$/)
+      .optional(),
   })
   .strict()
   .superRefine((v, ctx) => {

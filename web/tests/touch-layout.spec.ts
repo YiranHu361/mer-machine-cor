@@ -1,3 +1,4 @@
+import { useManualSettings } from "./requester-manual";
 import { test, expect, devices, type Page, type Route } from "@playwright/test";
 
 const pixel =
@@ -185,6 +186,7 @@ test("touch intake keeps controls reachable in portrait and short landscape with
   await expect(
     page.getByRole("heading", { name: "What are we making?", exact: true }),
   ).toBeVisible();
+  await useManualSettings(page);
   for (const viewport of [
     { width: 390, height: 664 },
     { width: 844, height: 320 },

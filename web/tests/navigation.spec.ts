@@ -1,3 +1,4 @@
+import { useManualSettings, authorizePictures } from "./requester-manual";
 import {
   test,
   expect,
@@ -239,6 +240,7 @@ test("a committed creation with lost response remains recoverable after reload w
   const state = await fixture(page, []);
   state.lost = "create";
   await page.goto("/");
+  await useManualSettings(page);
   await page
     .getByLabel("What is it for?", { exact: true })
     .fill("Recover my interrupted creation");
@@ -248,6 +250,7 @@ test("a committed creation with lost response remains recoverable after reload w
     buffer: await readFile(resolve("tests/fixtures/makers.png")),
   });
   await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await authorizePictures(page);
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();

@@ -1,3 +1,4 @@
+import { useManualSettings } from "./requester-manual";
 import { test, expect, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -258,6 +259,7 @@ test("a new multi-image draft keeps its intended images through raster and 3D fo
 }) => {
   const state = await fixture(page, []);
   await page.goto("/");
+  await useManualSettings(page);
   await replaceWithTwoImages(page);
   await page
     .getByLabel("What is it for?", { exact: true })
@@ -273,6 +275,12 @@ test("a new multi-image draft keeps its intended images through raster and 3D fo
     page.getByLabel("Artwork permission", { exact: true }),
   ).toHaveValue("unclear");
   expect(state.intakes[0].assetIds).toEqual(["replacement_1", "replacement_2"]);
+  await page
+    .getByRole("button", {
+      name: "Request artwork permission review",
+      exact: true,
+    })
+    .click();
   await page
     .getByRole("button", { name: "Make production preview", exact: true })
     .click();

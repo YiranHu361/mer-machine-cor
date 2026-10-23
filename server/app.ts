@@ -22,6 +22,10 @@ import { z } from "zod";
 import { Service } from "./service.ts";
 import { createClaudeProvider } from "../integrations/src/claude.ts";
 import {
+  recommendImages,
+  type RecommendationDependencies,
+} from "./recommendations.ts";
+import {
   decodeX402PaymentSignature,
   x402PaymentResponseHeader,
 } from "../integrations/src/payments.ts";
@@ -125,6 +129,7 @@ const machineSchema = z
 export function createApp(
   service: Service,
   webDirectory = resolve("web/dist"),
+  options: { recommendations?: RecommendationDependencies } = {},
 ) {
   const app = express();
   const serializeMachinePatch = machinePatchQueue();
@@ -412,6 +417,18 @@ export function createApp(
         503,
       );
     }
+  });
+  app.post("/api/recommendations", async (req, res) => {
+    const a = await actor(req);
+    requireThat(
+      a.role === "requester",
+      "REQUESTER_REQUIRED",
+      "Use requester access to choose an output for your uploaded pictures.",
+      403,
+    );
+    res.json(
+      await recommendImages(service, a.id, req.body, options.recommendations),
+    );
   });
   app.get("/api/catalog", (req, res) =>
     res.json({
