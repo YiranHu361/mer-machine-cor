@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   useId,
+  useSyncExternalStore,
   cloneElement,
   isValidElement,
   type FormEvent,
@@ -15,6 +16,14 @@ import {
   TrialEconomicsForm,
   type TrialEconomics,
 } from "./OwnerRecords";
+import {
+  readStoredValue,
+  writeStoredValue,
+  removeStoredValue,
+  getCheckoutKey,
+  getStorageStatus,
+  subscribeStorageStatus,
+} from "./storage";
 
 type Output = "sticker" | "instax" | "3d";
 type Asset = {
@@ -86,6 +95,7 @@ type Quote = {
 };
 type Job = {
   id: string;
+  checkoutKey?: string;
   machineId?: string;
   specVersion: number;
   spec: Spec;
@@ -211,6 +221,41 @@ class ApiError extends Error {
     super(message);
   }
 }
+type SnapshotGate = {
+  issued: number;
+  applied: number;
+  revision: number;
+  floor: number;
+};
+const snapshotGate = (): SnapshotGate => ({
+  issued: 0,
+  applied: 0,
+  revision: -1,
+  floor: 0,
+});
+function invalidateSnapshots(gate: SnapshotGate) {
+  gate.floor = ++gate.issued;
+}
+function acceptSnapshot(
+  gate: SnapshotGate,
+  request: number,
+  revision?: number,
+) {
+  if (request < gate.floor) return false;
+  const authoritative = Number.isSafeInteger(revision) && revision! >= 0;
+  if (authoritative) {
+    if (
+      revision! < gate.revision ||
+      (revision === gate.revision && request < gate.applied)
+    )
+      return false;
+    gate.revision = revision!;
+  } else if (gate.revision >= 0 || request < gate.applied) return false;
+  gate.applied = Math.max(gate.applied, request);
+  return true;
+}
+const currentSnapshotError = (gate: SnapshotGate, request: number) =>
+  request >= gate.floor && request >= gate.applied;
 async function api<T>(
   path: string,
   body?: unknown,
@@ -403,6 +448,11 @@ function DeviceArt({ type }: { type: Output }) {
   );
 }
 function App() {
+  const storage = useSyncExternalStore(
+    subscribeStorageStatus,
+    getStorageStatus,
+    getStorageStatus,
+  );
   const isOwner = location.pathname.startsWith("/owner");
   const [health, setHealth] = useState<Health | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -415,12 +465,24 @@ function App() {
     try {
       const [h, s] = await Promise.all([
         api<Health>("/health"),
-        api<Session | { role: null }>("/session").catch(() => null),
+        api<Session | { role: null }>("/session"),
       ]);
+      if (
+        !s ||
+        (s.role !== null &&
+          !(
+            (s.role === "requester" || s.role === "owner") &&
+            typeof s.id === "string" &&
+            s.id.length > 0
+          ))
+      )
+        throw new Error(
+          "The saved session could not be checked. Try again to keep access to your existing orders.",
+        );
       setHealth(h);
-      if ((!s || !s.role) && !isOwner)
+      if (s.role === null && !isOwner)
         setSession(await api<Session>("/session", { role: "requester" }));
-      else setSession(s?.role ? s : null);
+      else setSession(s.role ? s : null);
     } catch (e) {
       setBootError((e as Error).message);
     } finally {
@@ -490,6 +552,17 @@ function App() {
         )}
       </div>
       <main id="main" tabIndex={-1}>
+        {(storage.local === "unavailable" ||
+          storage.session === "unavailable") && (
+          <div className="storage-note">
+            <Notice>
+              Browser storage is unavailable. Your order selection can only be
+              kept in this tab.
+              {storage.session === "unavailable" &&
+                " Wallet payments and physical calibration wait until retry details can be saved. You can still review existing orders."}
+            </Notice>
+          </div>
+        )}
         {boot ? (
           <div className="loading-shell">
             <span className="spinner" /> Opening the workshop…
@@ -501,7 +574,16 @@ function App() {
             <Button onClick={bootApp}>Try again</Button>
           </div>
         ) : isOwner ? (
-          <OwnerApp session={session} setSession={setSession} health={health} />
+          <OwnerApp
+            key={
+              session ? `${session.role}:${session.id}` : "owner-session-ended"
+            }
+            session={session}
+            setSession={(next) =>
+              setSession((active) => (active === session ? next : active))
+            }
+            health={health}
+          />
         ) : (
           <RequesterApp
             key={
@@ -511,11 +593,7 @@ function App() {
             }
             session={session}
             setSession={(next) =>
-              setSession((active) =>
-                active?.id === session?.id && active?.role === session?.role
-                  ? next
-                  : active,
-              )
+              setSession((active) => (active === session ? next : active))
             }
             health={health}
           />
@@ -570,8 +648,10 @@ function RequesterApp({
     current?.artifact?.sha256 && previewHash === current.artifact.sha256,
   );
   const selectedId = useRef<string | null>(
-    localStorage.getItem("fabrary-current-job"),
+    readStoredValue("local", "fabrary-current-job"),
   );
+  const jobsGate = useRef(snapshotGate());
+  const machinesGate = useRef(snapshotGate());
   const [refreshing, setRefreshing] = useState(true);
   const [connected, setConnected] = useState(true);
   const mounted = useRef(true);
@@ -579,6 +659,8 @@ function RequesterApp({
     mounted.current = true;
     return () => {
       mounted.current = false;
+      invalidateSnapshots(jobsGate.current);
+      invalidateSnapshots(machinesGate.current);
     };
   }, []);
   const productionHeading = useRef<HTMLHeadingElement>(null);
@@ -587,16 +669,28 @@ function RequesterApp({
   };
   const refresh = useCallback(async () => {
     if (!mounted.current || session?.role !== "requester") return;
+    const request = ++jobsGate.current.issued;
+    machinesGate.current.issued = Math.max(
+      machinesGate.current.issued,
+      request,
+    );
     try {
       const [m, j] = await Promise.all([
-        api<{ machines: Machine[] }>("/machines"),
-        api<{ jobs: Job[] }>("/jobs"),
+        api<{ machines: Machine[]; revision?: number }>("/machines"),
+        api<{ jobs: Job[]; revision?: number }>("/jobs"),
       ]);
       if (!mounted.current) return;
-      setMachines(m.machines);
-      setJobs(j.jobs);
+      const freshMachines = acceptSnapshot(
+        machinesGate.current,
+        request,
+        m.revision,
+      );
+      const freshJobs = acceptSnapshot(jobsGate.current, request, j.revision);
+      if (!freshMachines && !freshJobs) return;
+      if (freshMachines) setMachines(m.machines);
+      if (freshJobs) setJobs(j.jobs);
       setConnected(true);
-      if (selectedId.current) {
+      if (freshJobs && selectedId.current) {
         const found = j.jobs.find((x) => x.id === selectedId.current);
         if (found)
           setCurrent((old) =>
@@ -604,10 +698,11 @@ function RequesterApp({
           );
       }
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current || !currentSnapshotError(jobsGate.current, request))
+        return;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
         selectedId.current = null;
-        localStorage.removeItem("fabrary-current-job");
+        removeStoredValue("local", "fabrary-current-job");
         setCurrent(null);
         setJobs([]);
         setSession(null);
@@ -619,7 +714,7 @@ function RequesterApp({
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [session?.role]);
+  }, [session]);
   useEffect(() => {
     void refresh();
     const timer = setInterval(refresh, 2500);
@@ -645,13 +740,30 @@ function RequesterApp({
   }, []);
   const select = (job: Job) => {
     if (!mounted.current) return;
+    invalidateSnapshots(jobsGate.current);
     selectedId.current = job.id;
-    localStorage.setItem("fabrary-current-job", job.id);
-    setCurrent(job);
+    writeStoredValue("local", "fabrary-current-job", job.id);
+    setCurrent((old) =>
+      old?.id === job.id && old.version > job.version ? old : job,
+    );
+    setJobs((old) =>
+      old.some((item) => item.id === job.id)
+        ? old.map((item) =>
+            item.id === job.id && item.version < job.version ? job : item,
+          )
+        : [job, ...old],
+    );
+    // Uploaded replacements and model suggestions belong to the editing
+    // context that produced them, never another selected or saved order.
+    setAssets([]);
+    setIntakeDraft(null);
+    setIntakeError("");
     setEditing(false);
     setError("");
   };
   const act = async (name: string, fn: () => Promise<void>) => {
+    invalidateSnapshots(jobsGate.current);
+    invalidateSnapshots(machinesGate.current);
     setBusy(name);
     setError("");
     try {
@@ -666,6 +778,8 @@ function RequesterApp({
   const jobAction = (action: string, body: unknown = {}) => {
     if (!current) return;
     void act(action, async () => {
+      if (action === "checkout")
+        body = { ...(body as object), idempotencyKey: checkoutKey(current) };
       const { job } =
         action === "checkout" && current.quote?.paymentMode === "testnet"
           ? await (
@@ -706,11 +820,13 @@ function RequesterApp({
       assetIds:
         type === "3d"
           ? []
-          : assets.length
-            ? assets.map((asset) => asset.id)
-            : current?.spec.outputType !== "3d"
-              ? current?.spec.assetIds || []
-              : [],
+          : s.outputType !== "3d"
+            ? s.assetIds
+            : assets.length
+              ? assets.map((asset) => asset.id)
+              : current?.spec.outputType !== "3d"
+                ? current?.spec.assetIds || []
+                : [],
     }));
     setError("");
   };
@@ -836,7 +952,7 @@ function RequesterApp({
   };
   const newOrder = () => {
     selectedId.current = null;
-    localStorage.removeItem("fabrary-current-job");
+    removeStoredValue("local", "fabrary-current-job");
     setCurrent(null);
     setAssets([]);
     setIntakeDraft(null);
@@ -857,8 +973,19 @@ function RequesterApp({
     setError("");
     focusProduction();
   };
+  const cancelEdit = () => {
+    setAssets([]);
+    setIntakeDraft(null);
+    setIntakeError("");
+    if (current) setSpec(current.spec);
+    setEditing(false);
+    setError("");
+  };
   const edit = () => {
     if (!current) return;
+    setAssets([]);
+    setIntakeDraft(null);
+    setIntakeError("");
     setSpec(current.spec);
     setBudgetEnabled(Boolean(current.spec.budgetMandate?.enabled));
     setBudget(String((current.spec.budgetMandate?.capCents || 300) / 100));
@@ -1348,7 +1475,7 @@ function RequesterApp({
                   <button
                     className="text-button cancel-edit"
                     type="button"
-                    onClick={() => setEditing(false)}
+                    onClick={cancelEdit}
                   >
                     Keep existing specification
                   </button>
@@ -1869,7 +1996,7 @@ function OrderDetail({
                   onClick={() =>
                     expired
                       ? action("quote", { autoAccept: false })
-                      : action("checkout", { idempotencyKey: checkoutKey(job) })
+                      : action("checkout")
                   }
                 >
                   {expired
@@ -2114,13 +2241,7 @@ function OrderDetail({
   );
 }
 function checkoutKey(job: Job) {
-  const key = `fabrary-checkout-${job.id}-${job.quote?.id}-${job.quote?.version}`;
-  let value = sessionStorage.getItem(key);
-  if (!value) {
-    value = crypto.randomUUID();
-    sessionStorage.setItem(key, value);
-  }
-  return value;
+  return getCheckoutKey(job);
 }
 
 function OwnerApp({
@@ -2137,6 +2258,7 @@ function OwnerApp({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
   const [dashboard, setDashboard] = useState<{
+    revision?: number;
     machines: Machine[];
     jobs: Job[];
     ledger: Ledger[];
@@ -2151,12 +2273,33 @@ function OwnerApp({
   const queueStart = useRef<HTMLDivElement>(null);
   useEffect(() => setOrderPage(1), [orderFilter, orderSearch]);
   const [connected, setConnected] = useState(true);
+  const dashboardGate = useRef(snapshotGate());
+  const ownerMounted = useRef(true);
+  useEffect(() => {
+    ownerMounted.current = true;
+    return () => {
+      ownerMounted.current = false;
+      invalidateSnapshots(dashboardGate.current);
+    };
+  }, []);
   const refresh = useCallback(async () => {
-    if (session?.role !== "owner") return;
+    if (!ownerMounted.current || session?.role !== "owner") return;
+    const request = ++dashboardGate.current.issued;
     try {
-      setDashboard(await api("/owner/dashboard"));
+      const next = await api<NonNullable<typeof dashboard>>("/owner/dashboard");
+      if (
+        !ownerMounted.current ||
+        !acceptSnapshot(dashboardGate.current, request, next.revision)
+      )
+        return;
+      setDashboard(next);
       setConnected(true);
     } catch (error) {
+      if (
+        !ownerMounted.current ||
+        !currentSnapshotError(dashboardGate.current, request)
+      )
+        return;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
         setDashboard(null);
         setSession(null);
@@ -2166,7 +2309,7 @@ function OwnerApp({
       }
       setConnected(false);
     }
-  }, [session?.role]);
+  }, [session]);
   useEffect(() => {
     void refresh();
     const timer = setInterval(refresh, 3000);
@@ -2186,6 +2329,7 @@ function OwnerApp({
     return () => e.close();
   }, [session?.role, refresh]);
   const act = async (name: string, fn: () => Promise<void>) => {
+    invalidateSnapshots(dashboardGate.current);
     setBusy(name);
     setError("");
     setMessage("");
@@ -3056,7 +3200,7 @@ function PhysicalCalibration({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const key = useRef(
-    sessionStorage.getItem(`fabrary-calibration-${m.id}`) ||
+    readStoredValue("session", `fabrary-calibration-${m.id}`) ||
       crypto.randomUUID(),
   );
   const refresh = useCallback(async () => {
@@ -3133,10 +3277,16 @@ function PhysicalCalibration({
                     ? "Choose an inspected prepared model."
                     : "Upload calibration artwork before starting.",
                 );
-              sessionStorage.setItem(
-                `fabrary-calibration-${m.id}`,
-                key.current,
-              );
+              if (
+                !writeStoredValue(
+                  "session",
+                  `fabrary-calibration-${m.id}`,
+                  key.current,
+                )
+              )
+                throw new Error(
+                  "Browser storage is unavailable, so calibration retry details cannot be saved. Allow session storage before starting physical calibration. No job was started.",
+                );
               const result = await api<{ calibration: Calibration }>(
                 `/owner/machines/${m.id}/calibration/start`,
                 {

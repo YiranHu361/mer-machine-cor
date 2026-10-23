@@ -195,8 +195,10 @@ export function createApp(
   app.get("/api/session", async (req, res) => {
     try {
       res.json(await actor(req));
-    } catch {
-      res.json({ role: null });
+    } catch (error) {
+      if (error instanceof Problem && error.code === "AUTH_REQUIRED")
+        res.json({ role: null });
+      else throw error;
     }
   });
   app.post("/api/session", async (req, res) => {
@@ -251,13 +253,15 @@ export function createApp(
       });
     res.clearCookie("fabrary_session").json({ ok: true });
   });
-  app.get("/api/machines", async (req, res) =>
+  app.get("/api/machines", async (req, res) => {
+    const { version: revision, data } = await service.store.read();
     res.json({
-      machines: Object.values((await service.read()).machines).map(
+      revision,
+      machines: Object.values(data.machines).map(
         ({ ownerId, nodeUrl, ownerAddress, ...m }) => m,
       ),
-    }),
-  );
+    });
+  });
   app.post("/api/intake", async (req, res) => {
     const a = await actor(req);
     const input = z
@@ -494,10 +498,11 @@ export function createApp(
   });
   app.get("/api/jobs", async (req, res) => {
     const a = await actor(req);
-    const jobs = Object.values((await service.read()).jobs)
+    const { version: revision, data } = await service.store.read();
+    const jobs = Object.values(data.jobs)
       .filter((j) => a.role === "owner" || j.requesterId === a.id)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    res.json({ jobs: jobs.map(view) });
+    res.json({ revision, jobs: jobs.map(view) });
   });
   app.get("/api/jobs/:id", async (req, res) => {
     await owned(req);
@@ -672,8 +677,9 @@ export function createApp(
   });
   app.get("/api/owner/dashboard", async (req, res) => {
     await owner(req);
-    const s = await service.read();
+    const { version: revision, data: s } = await service.store.read();
     res.json({
+      revision,
       machines: Object.values(s.machines).map(({ nodeUrl, ...m }) => m),
       jobs: Object.values(s.jobs).map(view),
       ledger: Object.values(s.operations),

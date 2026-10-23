@@ -219,6 +219,11 @@ figure {
 main {
   min-height: 70vh;
 }
+.storage-note {
+  max-width: 1328px;
+  margin: 20px auto 0;
+  padding-inline: clamp(14px, 4vw, 46px);
+}
 .requester,
 .owner-workshop {
   max-width: 1328px;
@@ -1461,7 +1466,7 @@ main {
 }
 .evidence-review {
   display: grid;
-  grid-template-columns: 230px 1fr;
+  grid-template-columns: 230px minmax(0, 1fr);
   gap: 24px;
   margin-top: 20px;
   align-items: center;
@@ -1478,6 +1483,17 @@ main {
 }
 .evidence-review small {
   font-size: 12px;
+}
+.evidence-review > * {
+  min-width: 0;
+}
+.evidence-review p,
+.evidence-review small,
+.collection-line strong,
+.machine-reason,
+.public-machine h3,
+.public-machine p {
+  overflow-wrap: anywhere;
 }
 .recovery > .button-row {
   margin-top: 17px;
@@ -2960,5 +2976,31 @@ button {
   }
   .phase-line span {
     font-size: 11px;
+  }
+}
+
+@media (pointer: coarse) {
+  .field input,
+  .field select,
+  .field textarea,
+  .button-row > select {
+    font-size: 16px;
+    min-height: 48px;
+  }
+  .site-header nav a,
+  .brand,
+  .text-button {
+    min-height: 44px;
+  }
+  summary {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+  .check {
+    min-height: 44px;
+    align-items: center;
+  }
+  .check input {
+    margin-top: 0;
   }
 }

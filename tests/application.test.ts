@@ -584,3 +584,126 @@ test("failed upload batches leave no partial artwork and decoded format controls
     f.close();
   }
 });
+
+test("refresh endpoints expose monotonic authoritative revisions bound to their exact data snapshot", async () => {
+  const f = fixture();
+  try {
+    const owner = request.agent(f.app),
+      requester = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    const actor = (
+      await requester
+        .post("/api/session")
+        .send({ role: "requester" })
+        .expect(200)
+    ).body;
+    await mutate(f.store, (s) => {
+      s.assets.revision_fixture = {
+        id: "revision_fixture",
+        ownerId: actor.id,
+        path: "unused-fixture-path",
+        url: "/assets/revision_fixture",
+        sha256: "a".repeat(64),
+        mime: "image/png",
+        width: 1,
+        height: 1,
+        createdAt: new Date().toISOString(),
+      };
+    });
+    const job = await f.service.create(actor.id, spec("revision_fixture"), {
+      id: "revision_fixture",
+      url: "/assets/revision_fixture",
+      sha256: "a".repeat(64),
+    });
+    const originalRead = f.store.read.bind(f.store);
+    for (const [client, path, authReads] of [
+      [requester, "/api/machines", 0],
+      [requester, "/api/jobs", 1],
+      [owner, "/api/owner/dashboard", 1],
+    ] as const) {
+      const before = await originalRead();
+      let reads = 0,
+        interleaved = false;
+      f.store.read = async () => {
+        const snapshot = await originalRead();
+        if (++reads === authReads + 1) {
+          const newer = structuredClone(snapshot.data);
+          newer.machines.phomemo_01.reason =
+            "Committed after the response snapshot was read";
+          newer.jobs[job.id].spec.intent = "Newer committed artwork intent";
+          assert.equal(
+            await f.store.compareAndSet(snapshot.version, newer),
+            true,
+          );
+          interleaved = true;
+        }
+        return snapshot;
+      };
+      const response = await client.get(path).expect(200);
+      f.store.read = originalRead;
+      assert.equal(interleaved, true);
+      assert.equal(response.body.revision, before.version);
+      if (path !== "/api/jobs") {
+        assert.equal(
+          response.body.machines.find((m: any) => m.id === "phomemo_01").reason,
+          before.data.machines.phomemo_01.reason,
+        );
+      }
+      if (path !== "/api/machines") {
+        assert.equal(
+          response.body.jobs.find((j: any) => j.id === job.id).spec.intent,
+          before.data.jobs[job.id].spec.intent,
+        );
+      }
+      const refreshed = await client.get(path).expect(200);
+      assert.equal(refreshed.body.revision, before.version + 1);
+      assert(refreshed.body.revision > response.body.revision);
+      if (path === "/api/machines") {
+        assert.equal(refreshed.body.machines[0].ownerId, undefined);
+        assert.equal(refreshed.body.machines[0].nodeUrl, undefined);
+        assert.equal(refreshed.body.machines[0].ownerAddress, undefined);
+      }
+    }
+  } finally {
+    f.close();
+  }
+});
+
+test("session lookup failures remain service errors and preserve the existing requester identity", async () => {
+  const f = fixture();
+  const originalRead = f.store.read.bind(f.store);
+  try {
+    const anonymous = await request(f.app).get("/api/session").expect(200);
+    assert.deepEqual(anonymous.body, { role: null });
+    const a = request.agent(f.app);
+    const original = (
+      await a.post("/api/session").send({ role: "requester" }).expect(200)
+    ).body;
+    const sessionsBefore = (await originalRead()).data.sessions;
+    f.store.read = async () => {
+      throw new Error("Authoritative session store temporarily unavailable");
+    };
+    const unavailable = await a.get("/api/session").expect(500);
+    assert.equal(unavailable.body.error.code, "SERVICE_ERROR");
+    assert.equal(unavailable.body.role, undefined);
+    assert.equal(unavailable.headers["set-cookie"], undefined);
+    f.store.read = originalRead;
+    const recovered = await a.get("/api/session").expect(200);
+    assert.equal(recovered.body.id, original.id);
+    assert.equal(recovered.body.role, "requester");
+    assert.deepEqual((await originalRead()).data.sessions, sessionsBefore);
+    await mutate(f.store, (s) => {
+      for (const session of Object.values(s.sessions))
+        session.expiresAt = new Date(Date.now() - 1000).toISOString();
+    });
+    assert.deepEqual((await a.get("/api/session").expect(200)).body, {
+      role: null,
+    });
+  } finally {
+    f.store.read = originalRead;
+    f.close();
+  }
+});

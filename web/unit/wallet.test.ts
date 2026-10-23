@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { privateKeyToAccount } from "viem/accounts";
 import { verifyTypedData } from "viem";
@@ -8,6 +8,30 @@ import {
   BASE_SEPOLIA_USDC,
   type WalletProvider,
 } from "../src/wallet.ts";
+import { cancelUnsubmittedWalletAuthorization } from "../src/storage.ts";
+
+function storageFixture() {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+  };
+}
+beforeEach(() => {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: storageFixture(), sessionStorage: storageFixture() },
+  });
+  cancelUnsubmittedWalletAuthorization(context());
+});
+afterEach(() => {
+  Reflect.deleteProperty(globalThis, "window");
+});
 
 const context = () => ({
   jobId: "job_browser",
@@ -237,4 +261,202 @@ test("unconfirmed settlement remains pending after wallet authorization", async 
   });
   assert.equal(result.job.paymentState, "collection_pending");
   assert.equal(result.job.productionState, "quoted");
+});
+
+test("unavailable, quota-limited, or silent session storage blocks signatures and signed submissions", async () => {
+  for (const failure of ["getter", "quota", "silent-write"] as const) {
+    const value = { sessionStorage: storageFixture() };
+    Object.defineProperty(globalThis, "window", { configurable: true, value });
+    cancelUnsubmittedWalletAuthorization(context());
+    if (failure === "getter")
+      Object.defineProperty(value, "sessionStorage", {
+        get: () => {
+          throw new DOMException("Denied", "SecurityError");
+        },
+      });
+    else
+      value.sessionStorage.setItem =
+        failure === "quota"
+          ? () => {
+              throw new DOMException("Full", "QuotaExceededError");
+            }
+          : () => {};
+    let signatures = 0;
+    let signedPosts = 0;
+    const actual = provider();
+    await assert.rejects(
+      () =>
+        checkoutWithWallet(context(), {
+          provider: {
+            request: async (args) => {
+              if (args.method === "eth_signTypedData_v4") signatures++;
+              return actual.request(args);
+            },
+          },
+          fetcher: (async (_path, init) => {
+            if (new Headers(init?.headers).has("PAYMENT-SIGNATURE"))
+              signedPosts++;
+            return response(challenge(), 402);
+          }) as typeof fetch,
+        }),
+      /Browser storage is unavailable.*No payment was signed or submitted/,
+    );
+    assert.equal(signatures, 0);
+    assert.equal(signedPosts, 0);
+  }
+});
+test("an ambiguous signed retry cannot request another authorization when API still returns 402", async () => {
+  let signatures = 0;
+  let signedPosts = 0;
+  const actual = provider();
+  const options = {
+    provider: {
+      request: async (args: Parameters<WalletProvider["request"]>[0]) => {
+        if (args.method === "eth_signTypedData_v4") signatures++;
+        return actual.request(args);
+      },
+    },
+    fetcher: (async (_path, init) => {
+      if (new Headers(init?.headers).has("PAYMENT-SIGNATURE")) {
+        signedPosts++;
+        throw new TypeError("fixture lost response");
+      }
+      return response(challenge(), 402);
+    }) as typeof fetch,
+  };
+  await assert.rejects(
+    () => checkoutWithWallet(context(), options),
+    /Retry this same order/,
+  );
+  await assert.rejects(
+    () => checkoutWithWallet(context(), options),
+    /earlier wallet authorization may still be pending/,
+  );
+  assert.equal(signatures, 1);
+  assert.equal(signedPosts, 1);
+});
+test("a saved ambiguous authorization allows server reconciliation without wallet access", async () => {
+  let calls = 0;
+  await assert.rejects(() =>
+    checkoutWithWallet(context(), {
+      provider: provider(),
+      fetcher: (async (_path, init) => {
+        if (new Headers(init?.headers).has("PAYMENT-SIGNATURE"))
+          throw new TypeError("fixture lost response");
+        return response(challenge(), 402);
+      }) as typeof fetch,
+    }),
+  );
+  const result = await checkoutWithWallet<{ job: { paymentState: string } }>(
+    context(),
+    {
+      provider: {
+        request: async () => {
+          calls++;
+          throw new Error("must not call wallet");
+        },
+      },
+      fetcher: (async () =>
+        response({
+          job: { paymentState: "collection_pending" },
+        })) as typeof fetch,
+    },
+  );
+  assert.equal(result.job.paymentState, "collection_pending");
+  assert.equal(calls, 0);
+});
+
+test("concurrent checkout requests cannot ask for two signatures while one wallet approval is open", async () => {
+  let entered!: () => void;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let signatures = 0;
+  const actual = provider();
+  const options = {
+    provider: {
+      request: async (args: Parameters<WalletProvider["request"]>[0]) => {
+        if (args.method === "eth_signTypedData_v4") {
+          signatures++;
+          entered();
+          await gate;
+        }
+        return actual.request(args);
+      },
+    },
+    fetcher: (async (_path, init) =>
+      new Headers(init?.headers).has("PAYMENT-SIGNATURE")
+        ? response({ job: { paymentState: "held" } })
+        : response(challenge(), 402)) as typeof fetch,
+  };
+  const first = checkoutWithWallet(context(), options);
+  await waiting;
+  await assert.rejects(
+    () => checkoutWithWallet(context(), options),
+    /earlier wallet authorization may still be pending/,
+  );
+  release();
+  await first;
+  assert.equal(signatures, 1);
+});
+
+test("declining the signature before submission clears its checkpoint and permits an explicit retry", async () => {
+  const fetcher = (async (_path, init) =>
+    new Headers(init?.headers).has("PAYMENT-SIGNATURE")
+      ? response({ job: { paymentState: "held" } })
+      : response(challenge(), 402)) as typeof fetch;
+  await assert.rejects(
+    () =>
+      checkoutWithWallet(context(), {
+        fetcher,
+        provider: provider({
+          eth_signTypedData_v4: Object.assign(new Error("Declined"), {
+            code: 4001,
+          }),
+        }),
+      }),
+    /Wallet approval was declined/,
+  );
+  const result = await checkoutWithWallet<{ job: { paymentState: string } }>(
+    context(),
+    { fetcher, provider: provider() },
+  );
+  assert.equal(result.job.paymentState, "held");
+});
+
+test("cleared session storage cannot erase an ambiguous authorization claim in the open page", async () => {
+  let signatures = 0;
+  const actual = provider();
+  const options = {
+    provider: {
+      request: async (args: Parameters<WalletProvider["request"]>[0]) => {
+        if (args.method === "eth_signTypedData_v4") signatures++;
+        return actual.request(args);
+      },
+    },
+    fetcher: (async (_path, init) => {
+      if (new Headers(init?.headers).has("PAYMENT-SIGNATURE"))
+        throw new TypeError("fixture lost response");
+      return response(challenge(), 402);
+    }) as typeof fetch,
+  };
+  await assert.rejects(
+    () => checkoutWithWallet(context(), options),
+    /Retry this same order/,
+  );
+  // A browser privacy control/eviction removes persisted entries while this
+  // document remains open. Do not let null storage create another signature.
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage: storageFixture(), sessionStorage: storageFixture() },
+  });
+  await assert.rejects(
+    () => checkoutWithWallet(context(), options),
+    /earlier wallet authorization may still be pending/,
+  );
+  assert.equal(signatures, 1);
 });

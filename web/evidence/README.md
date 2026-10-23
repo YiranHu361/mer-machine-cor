@@ -1,6 +1,12 @@
 # Browser verification evidence
 
-Final run: 2026-10-22 11:02 PM America/Los_Angeles (`2026-10-23T06:02:14.386Z`). Working tree after the browser wallet, calibration, recovery and accessibility changes. Chromium 156.0.8078.4 / Playwright 1.64.1, macOS arm64. Backend reported `simulation`, `mock`, and authoritative `spacetimedb`.
+Current overnight checkpoint: 2026-10-23, 01:21 Pacific. **37 scenarios passed in each of Chromium, Firefox and WebKit**, with 39 automated accessibility scans and no detected violations. 20 storage/wallet unit cases passed. Current per-engine reports are `overnight-second-{chromium,firefox,webkit}-browser.json`; source fingerprint and scope are recorded in [the current checkpoint](../../docs/evidence/overnight-second-qa.json). [Overnight log](../../docs/overnight-qa.md) tracks remaining work through 9:00 a.m. Pacific.
+
+New evidence includes emulated touch portrait/short landscape/320px reflow (`overnight-touch-webkit-*`) and actual local service-restart reconnect (`overnight-sse-reconnected.png`). Touch fixtures intercept application APIs; native iOS behavior is unverified. Actual reconnect disabled polling and used SpacetimeDB, simulation and mock payments. No physical output/live payment/model call is claimed.
+
+The following entries are historical implementation baselines.
+
+Historical baseline: 2026-10-22 11:02 PM America/Los_Angeles (`2026-10-23T06:02:14.386Z`). Working tree after the browser wallet, calibration, recovery and accessibility changes. Chromium 156.0.8078.4 / Playwright 1.64.1, macOS arm64. Backend reported `simulation`, `mock`, and authoritative `spacetimedb`.
 
 - Production build and strict TypeScript passed.
 - Eight wallet boundary unit tests passed; actual EIP712 signatures were verified offline. No live wallet or on-chain result is claimed.

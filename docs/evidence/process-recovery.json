@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-23T07:35:01.130Z",
+  "at": "2026-10-23T08:12:05.565Z",
   "status": "PASS",
   "mode": "simulation",
   "store": "sqlite-development",
@@ -7,23 +7,23 @@
   "results": [
     {
       "case": "node crash after possible start",
-      "jobId": "job_b042991d-7704-4925-aed0-0cb0549a72e0",
-      "attemptId": "attempt_d42d2392-4e29-41b2-a073-a7d8be2856b9",
+      "jobId": "job_ad2c7db1-8e3a-4e84-9847-5072833beb0e",
+      "attemptId": "attempt_fe8d8e44-3202-4eea-9df3-5910bd9d6186",
       "state": "needs_review",
       "paymentBeforeResolution": "held",
       "durableAttempts": 1
     },
     {
       "case": "orchestrator crash after node acceptance",
-      "jobId": "job_6dab0916-45d7-4782-aad7-abf6a13fcb66",
-      "attemptId": "attempt_427a1682-72ba-4c07-a465-032bc978b93e",
+      "jobId": "job_1e146f3a-5481-4faa-8c65-aa0d661b574d",
+      "attemptId": "attempt_fa07bca4-8fad-4b4c-a4fe-617c7e065865",
       "state": "produced",
       "durableAttempts": 1
     },
     {
       "case": "node unavailable before durable acceptance",
-      "jobId": "job_6d528ac2-b0dc-462f-9bd5-bfdd8c4b7aa5",
-      "attemptId": "attempt_a4ae50a9-4165-4b2f-8b90-291d0831a6a1",
+      "jobId": "job_db8f2d8e-86bc-46f0-af51-f21ba057bfb0",
+      "attemptId": "attempt_b41a4825-5c77-454e-99b2-453714a0897c",
       "state": "failed",
       "payment": "refunded",
       "durableAttempts": 0

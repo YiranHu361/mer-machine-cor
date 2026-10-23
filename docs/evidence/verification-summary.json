@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T07:40:53.999Z",
-  "sourceStateSha256": "85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33",
+  "recordedAt": "2026-10-23T08:21:31.617Z",
+  "sourceStateSha256": "66bc8ea5e7a773ad50eb3160bf32aa2bea56fd2f0e65f14fed32452f41a65a08",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 53,
+    "backendApplicationAndProcessRecovery": 55,
     "node": 65,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
-    "browserWalletUnit": 8,
-    "browserScenarios": 17,
+    "browserStorageAndWalletUnit": 20,
+    "browserScenarios": 37,
     "browserEngines": 3,
-    "uniqueTestCases": 173,
-    "testExecutionsIncludingThreeEngines": 207,
+    "uniqueTestCases": 207,
+    "testExecutionsIncludingThreeEngines": 281,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -22,7 +22,8 @@
     "3 consecutive simulated Instax jobs",
     "pass/fail/review/lost-ack fixtures",
     "actual signed calibration API with simulator",
-    "actual local FastMCP authorized app transaction"
+    "actual local FastMCP authorized app transaction",
+    "Native EventSource reconnect after actual local backend/node restart, with polling disabled"
   ],
   "physicalJobs": 0,
   "onchainTransactions": 0,
@@ -34,8 +35,31 @@
     ".data/overnight-software-acceptance.log": "6324e5ed8b264dbdc16fa9644c937c47d8610dedcff63d34d3bd3960660f5c92",
     ".data/overnight-calibration.log": "1ba93b928382ba61eaf119839e669be4399500aad487fd7e58875396f0442b22",
     ".data/overnight-spacetime.log": "f0beb4094db037f89605e1cb61a8becb5f24e7bbb3127e89f16ce0c8ffaec7a7",
-    ".data/overnight-fetch-local.log": "f7c2b4537c093888fe5b699f96ceb2e8d958f05bcb2282f46af67717697df8f3"
+    ".data/overnight-fetch-local.log": "f7c2b4537c093888fe5b699f96ceb2e8d958f05bcb2282f46af67717697df8f3",
+    ".data/overnight-second-software-final.log": "f4f914e88e03a5cd8e217cbb017bcb356a5b2234f4298ec5ca764da4dc40aeae",
+    ".data/overnight-second-web-final.log": "4cc103ccef1b92149b896eae1da8d3e517ab0240369e39021ffa18c92eb13310",
+    ".data/overnight-second-wallet-final.log": "a5472a4eefc009e99d7703da506d68234f20069fe02e7e3cceb28104d1ef3e9e",
+    ".data/overnight-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-second-chromium-browser.log": "7c7790e17546b955abcbb513e6a73dfd5cdcca9f8b14b27966f9fb7aa5797f28",
+    ".data/overnight-second-firefox-browser.log": "48f57d3e6693e7101805b0116f2cfcfe3bbdf8e76c663b42e50ce0f122980c4c",
+    ".data/overnight-second-webkit-browser.log": "e8399db54ce345739b8497d6268d1e4813d552a06e0f3ae5d007de951d8d98d2"
   },
-  "notes": "October 23 overnight verified checkpoint; further scheduled audits continue until 9 a.m. Pacific. See overnight-qa.json for per-engine evidence and scope.",
-  "localTimeZone": "America/Los_Angeles"
+  "notes": "October 23 second overnight checkpoint; see overnight-second-qa.json for current evidence and overnight-qa.json for the historical first checkpoint. Further audits continue until 9 a.m. Pacific.",
+  "localTimeZone": "America/Los_Angeles",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 172,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  }
 }

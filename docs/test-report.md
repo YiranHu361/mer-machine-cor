@@ -1,28 +1,28 @@
 # Verification report
 
-Recorded 2026-10-23 00:40 Pacific (America/Los_Angeles). Overnight testing continues until 9:00 a.m. on October 23. Machine-readable timestamps are UTC.
+Recorded 2026-10-23 01:21 Pacific (America/Los_Angeles). Overnight testing continues until 9:00 a.m. on October 23. Machine-readable timestamps are UTC.
 
 **Partial completion.** The software is runnable and the software checks below pass. Required physical and live integration acceptance is still blocked; the entire PRD is not done. No physical output, onchain transaction, live Claude call, ASI:One discovery, interview, sponsor eligibility or shipping event is claimed.
 
 Working source-state identifier:
 
-`85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33`
+`66bc8ea5e7a773ad50eb3160bf32aa2bea56fd2f0e65f14fed32452f41a65a08`
 
-Reproduce with `node scripts/state-id.mjs`. It hashes application, node, integrations, tests, browser configuration, setup scripts and dependency/runtime pins; private data, generated builds and reports are excluded. The full software check followed the backend/node/integration changes; the final build and all three browser suites followed the last UI refinement. [Overnight checkpoint](overnight-qa.md), [machine-readable summary](evidence/overnight-qa.json).
+Reproduce with `node scripts/state-id.mjs`. It hashes application, node, integrations, tests, browser configuration, setup scripts and dependency/runtime pins; private data, generated builds and reports are excluded. The full software check followed the backend/node/integration changes; the final build and all three browser suites followed the last UI refinement. [Overnight checkpoint](overnight-qa.md), [current machine-readable summary](evidence/overnight-second-qa.json).
 
 ## Checks actually executed
 
 | Suite                                                    | Result                                    | Boundary and evidence                                                                                                                                                                    |
 | -------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend typecheck and application/process/realtime tests | **53 passed**, 0 failed/skipped           | Actual HTTP, Pillow, private assets, SQLite CAS, process deaths, concurrency, and 36 live-stream reconnects without leaked subscriptions. `.data/overnight-software-check.log`           |
-| Python node                                              | **65 passed** in 5.58s                    | Real journal/auth/image processing, isolated device/camera boundaries; configuration-bound calibration, owner-policy races and delayed-stop fencing. [Node details](node-integration.md) |
+| Backend typecheck and application/process/realtime tests | **55 passed**, 0 failed/skipped           | Actual HTTP, Pillow, private assets, SQLite CAS, process deaths, concurrency, and 36 live-stream reconnects without leaked subscriptions. `.data/overnight-second-software-final.log`    |
+| Python node                                              | **65 passed** in 5.52s                    | Real journal/auth/image processing, isolated device/camera boundaries; configuration-bound calibration, owner-policy races and delayed-stop fencing. [Node details](node-integration.md) |
 | Payment/Claude fixtures and typecheck                    | **25 passed** / PASS                      | Official signatures/headers, transfer receipts, durable checkpoint failures and conservative image parsing; no live funds or model calls                                                 |
 | Fetch bridge fixtures                                    | **5 passed**                              | Actual in-process MCP/Chat Protocol and requester/sender/mandate guards. One upstream Authlib deprecation warning                                                                        |
-| Browser wallet unit tests                                | **8 passed**                              | EIP1193 fixtures and offline cryptographic signatures; no live wallet connection or settlement                                                                                           |
+| Browser storage/wallet unit tests                        | **20 passed**                             | Denied/quota/silent storage, concurrent/ambiguous wallet retries, storage eviction and offline EIP1193 signatures; no live settlement                                                    |
 | Production web build / strict TypeScript                 | PASS                                      | Latest bundle served at loopback port 4318; fonts local and wallet code loaded separately                                                                                                |
-| Built app browser suite, Chromium                        | **17 passed**, 0 skipped/flaky/unexpected | [Chromium report](../web/evidence/overnight-chromium-browser.json)                                                                                                                       |
-| Same suite, Firefox                                      | **17 passed**, 0 skipped/flaky/unexpected | [Firefox report](../web/evidence/overnight-firefox-browser.json)                                                                                                                         |
-| Same suite, WebKit                                       | **17 passed**, 0 skipped/flaky/unexpected | [WebKit report](../web/evidence/overnight-webkit-browser.json)                                                                                                                           |
+| Built app browser suite, Chromium                        | **37 passed**, 0 skipped/flaky/unexpected | [Chromium report](../web/evidence/overnight-second-chromium-browser.json)                                                                                                                |
+| Same suite, Firefox                                      | **37 passed**, 0 skipped/flaky/unexpected | [Firefox report](../web/evidence/overnight-second-firefox-browser.json)                                                                                                                  |
+| Same suite, WebKit                                       | **37 passed**, 0 skipped/flaky/unexpected | [WebKit report](../web/evidence/overnight-second-webkit-browser.json)                                                                                                                    |
 | Automated accessibility                                  | **39 scans**, 0 detected violations       | 13 states per engine, WCAG A/AA rules; keyboard and screenshots reviewed separately. This is not complete accessibility conformance                                                      |
 | Actual local SpacetimeDB SDK/module                      | PASS                                      | CAS, cross-client subscriptions, anonymous read isolation and unauthorized reducer rejection; isolated test database                                                                     |
 | Finite actual-app acceptance                             | PASS                                      | 10 sticker + 3 Instax **simulation** jobs, plus missing-output failure/refund, review/override and lost acknowledgment. [Evidence](evidence/software-acceptance.json)                    |
@@ -30,9 +30,11 @@ Reproduce with `node scripts/state-id.mjs`. It hashes application, node, integra
 | Actual local FastMCP application transaction             | PASS                                      | Dedicated requester, approval via HTTP, mandate, MCP quote/checkout/dispatch, mock release and simulated pickup. [Evidence](../integrations/evidence/local-acceptance.json)              |
 | Dependency audits and configured-secret scan             | PASS                                      | No moderate-or-higher advisories in root/web/integrations; configured secrets absent from deliverable candidates                                                                         |
 
-**173 unique test cases**; running the 17 browser cases in three engines yields **207 test executions**. Five browser checks use the actual application, eleven intercept all application APIs, and one intercepts startup health failure before recovering against the actual application. Earlier real database restart/state-hash and read-only public testnet compatibility evidence is retained; those unchanged boundaries were not rerun simply to increase the count.
+**207 unique test cases**; running the 37 browser cases in three engines yields **281 test executions**. Five browser checks use the actual application, 31 intercept application APIs, and one intercepts startup health failure before recovering against the actual application. Earlier real database restart/state-hash and read-only public testnet compatibility evidence is retained; those unchanged boundaries were not rerun simply to increase the count.
 
 `npm run check` runs the deterministic/software suites, typechecks and build. Live suites remain separate and blocked prerequisites are never counted as passed. Browser and finite acceptance reject physical devices and live payment modes.
+
+The complete software check followed the backend/session API changes. The final web build, strict web TypeScript, 20 storage/wallet unit tests and all three browser suites followed the final artwork-context repair. Finite simulation acceptance, actual database CAS/restart and dependency audits were retained from the first checkpoint. After the final web repairs, only affected web checks were repeated. The configured-secret scan was rerun.
 
 ## Functional evidence
 
@@ -40,7 +42,7 @@ The actual browser flow includes supported simulated-device registration, distin
 
 The live dashboard test disables all polling intervals>=2000ms, independently pauses/resumes a machine and observes the open dashboard update plus named SSE refresh events. It uses actual SpacetimeDB; polling cannot hide a disconnected subscription. Stable screenshots: [desktop requester](../web/evidence/requester-ready-desktop.png), [mobile requester](../web/evidence/requester-mobile.png), [owner](../web/evidence/owner-desktop.png), [SSE](../web/evidence/sse-live-dashboard.png).
 
-Eleven isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, plus Claude suggestion/manual-fallback behavior. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
+Thirty-one isolated UI-fixture browser checks cover the pending-payment reference and measured-cost forms, Claude suggestion/manual fallback, artwork editing, reordered responses, session/store failures and touch layouts. They intercept all API calls and establish **UI behavior only**. Actual payment matching and provider parsing are covered in their separate backend/integration suites; real funded/provider acceptance remains blocked.
 
 [Process-death evidence](evidence/process-recovery.json) records: node crash after a durable possible start→review/held with exactly1 attempt; orchestrator crash while accepted simulated work continues→reconciled completion/release with exactly1 attempt; unavailable node before acceptance→authenticated absence, audited failure/refund,0 node attempts. No new physical request resolves uncertainty. This suite uses explicitly isolated SQLite development persistence; the separate real Spacetime restart and live-update tests establish the required store path.
 
@@ -57,7 +59,7 @@ Prepared3D tests bind file hash, overall dimensions, material, single color and 
 | Real testnet collection, release and refund                                                      | 0 submitted transactions; standard SDK/receipt fixtures passed                            | **NOT RUN / BLOCKED**                                   |
 | ASI:One discovery and authorized remote invocation                                               | Actual local MCP transaction passed; no remote discovery observed                         | **NOT RUN / BLOCKED**                                   |
 
-The1.509-second simulation measurement starts **after a shared artwork upload**, before `POST /jobs`, and ends after scripted owner preparation/resume. It excludes upload and all physical production/development/handling time, so it cannot establish the60-second target. Two scripted handling calls per job are recorded; they are not a measured person's labor. No physical performance target is claimed met, and no physical timing result exists from which to calculate a measured miss. Required timing acceptance remains unmet until measured.
+The1.5195-second simulation measurement starts **after a shared artwork upload**, before `POST /jobs`, and ends after scripted owner preparation/resume. It excludes upload and all physical production/development/handling time, so it cannot establish the60-second target. Two scripted handling calls per job are recorded; they are not a measured person's labor. No physical performance target is claimed met, and no physical timing result exists from which to calculate a measured miss. Required timing acceptance remains unmet until measured.
 
 Consumables, physical machine time, owner labor, failure rate, API cost, willingness to pay and actual owner earnings have not been measured. Price cards are unmeasured development estimates. The measured-trial form records inputs without defaulting blank values to zero, and keeps quoted allocations separate from confirmed income; failed/refunded jobs do not count quoted payout/fees as received.
 
@@ -73,6 +75,15 @@ October 23 overnight repairs:
 - Fresh owner policy is checked after artwork retrieval. Calibration is bound to device/camera/transport/material/adapter provenance and cannot carry from simulation to hardware. Pairing changes and calibration revocations reach the dashboard.
 - Pre-start stops cannot later print; old stops, canceled callers and active workers cannot release a machine into a newer attempt before stop transport settles.
 - Bounded camera capture, parseable camera errors, known payment hashes preserved after checkpoint failure, and cached/contradictory/unavailable visual evidence routed to review.
+
+Second overnight pass repairs:
+
+- Authoritative snapshot revisions prevent old background responses from undoing owner actions or rolling requester order details backward; late authentication errors cannot end a renewed owner session.
+- Session-store outages and malformed successful session responses show retry, preserve the saved requester identity and never silently replace it.
+- Browser preference storage failures keep the interface usable. Mock checkout keys remain stable; wallet signing and physical calibration require verified retry checkpoints. Concurrent, ambiguous and in-page storage-evicted wallet attempts cannot sign again.
+- Discarded multi-image replacements and model suggestions cannot contaminate another order or a later edit. Intended replacement images survive raster format changes, and a rebuilt file still requires approval.
+- Long collection/evidence/machine text wraps; touch controls and 16px input text remain usable in short landscape viewports and 320px equivalent reflow. Reduced motion is checked.
+- Actual local backend/node restart restores EventSource delivery to the already-open dashboard with polling disabled. [Reconnect proof](evidence/overnight-sse-reconnect.json).
 
 Earlier implementation repairs:
 

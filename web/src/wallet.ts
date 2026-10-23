@@ -10,6 +10,12 @@ import {
   type Hex,
 } from "viem";
 import { baseSepolia } from "viem/chains";
+import {
+  beginWalletAuthorization,
+  cancelUnsubmittedWalletAuthorization,
+  hasWalletAuthorization,
+  WALLET_RETRY_NOTICE,
+} from "./storage.ts";
 
 export const BASE_SEPOLIA_USDC = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 export type WalletProvider = {
@@ -115,6 +121,7 @@ export async function checkoutWithWallet<T>(
     return value as T;
   }
   const challenge = validateChallenge(value, context);
+  if (hasWalletAuthorization(context)) throw new Error(WALLET_RETRY_NOTICE);
   const provider =
     options.provider ||
     (typeof window !== "undefined"
@@ -147,12 +154,15 @@ export async function checkoutWithWallet<T>(
         primaryType: string;
         message: Record<string, unknown>;
       }) => {
+        beginWalletAuthorization(context);
         try {
           return await wallet.signTypedData({
             ...message,
             account: account as Hex,
           } as Parameters<typeof wallet.signTypedData>[0]);
         } catch (error) {
+          // Signing failed before any payload could reach our checkout API.
+          cancelUnsubmittedWalletAuthorization(context);
           const walletError = error as {
             code?: number;
             name?: string;

@@ -1,0 +1,331 @@
+{
+  "recordedAt": "2026-10-23T08:21:31.617Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "66bc8ea5e7a773ad50eb3160bf32aa2bea56fd2f0e65f14fed32452f41a65a08",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 55,
+    "node": 65,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserStorageAndWallet": 20,
+    "browserScenarios": 37,
+    "uniqueCases": 207,
+    "checksIncludingThreeBrowserEngines": 281,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T08:20:19.598Z",
+      "durationMs": 37041.477,
+      "report": "web/evidence/overnight-second-chromium-browser.json",
+      "reportSha256": "fb7a27bea12914fa14a30c99c08bbc4b2076658857c531454672929e96b08feb",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T08:18:54.629Z",
+      "durationMs": 45881.735,
+      "report": "web/evidence/overnight-second-firefox-browser.json",
+      "reportSha256": "3e7edd23411e0098c93c7b36179adbbe246f4a4ccff04b0aa6e75b7da6ec17eb",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T08:19:40.877Z",
+      "durationMs": 38326.75,
+      "report": "web/evidence/overnight-second-webkit-browser.json",
+      "reportSha256": "221fe387b709d4552809fc4802e625af5dc5cdcdfeea208c2a0f834b1b6b44d2",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "actualLocalChecks": {
+    "backendRestartSseReconnect": {
+      "at": "2026-10-23T08:12:23.850Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 1917,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "earlierAcceptance": "First-checkpoint Spacetime CAS/access/subscriptions, 10 sticker + 3 Instax simulation jobs, failure/review/lost-ack, signed simulation calibration API and actual local FastMCP application loop remain retained; unchanged loops were not rerun this pass."
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 172,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-second-software-final.log": "f4f914e88e03a5cd8e217cbb017bcb356a5b2234f4298ec5ca764da4dc40aeae",
+    ".data/overnight-second-web-final.log": "4cc103ccef1b92149b896eae1da8d3e517ab0240369e39021ffa18c92eb13310",
+    ".data/overnight-second-wallet-final.log": "a5472a4eefc009e99d7703da506d68234f20069fe02e7e3cceb28104d1ef3e9e",
+    ".data/overnight-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-second-chromium-browser.log": "7c7790e17546b955abcbb513e6a73dfd5cdcca9f8b14b27966f9fb7aa5797f28",
+    ".data/overnight-second-firefox-browser.log": "48f57d3e6693e7101805b0116f2cfcfe3bbdf8e76c663b42e50ce0f122980c4c",
+    ".data/overnight-second-webkit-browser.log": "e8399db54ce345739b8497d6268d1e4813d552a06e0f3ae5d007de951d8d98d2"
+  },
+  "notes": "Complete software check followed backend/session API changes. Final web build, strict web TypeScript, 20 wallet/storage unit tests and three-engine browser suite followed the final requester draft repair. Touch is browser emulation, including 320px equivalent reflow; native iOS keyboard/pinch/zoom is unverified. No physical timing, complete accessibility conformance or live acceptance claimed.",
+  "finalBuild": {
+    "indexSha256": "36cc69303dbf583793fd6db055003b298ceb87d0d1c2f7c9844ce6f7420b97d6",
+    "script": "/assets/index-DOE2uAIX.js",
+    "stylesheet": "/assets/index-DgRIFagg.css"
+  }
+}

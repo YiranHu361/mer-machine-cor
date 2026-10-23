@@ -28,8 +28,8 @@ Baseline observed this night:
 ## Verified first checkpoint, 00:40 Pacific
 
 The first pass is complete; the overnight task remains active. Three independent
-reviews plus a second review of their fixes produced the changes below. Current
-source fingerprint: `85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33`.
+reviews plus a second review of their fixes produced the changes below. Source fingerprint at this
+checkpoint: `85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33`.
 
 - Mobile controls and supporting text are readable; stronger text contrast, 320–1440 px reflow, keyboard tabs/skip navigation, visible error focus/scroll and production-preview retry are verified.
 - Owner queue starts with actionable orders, with search, view filters and eight-order pages. Older orders stay reachable. Pending collection/payment receives a useful heading.
@@ -68,14 +68,56 @@ Detailed evidence: [test report](test-report.md), [machine-readable checkpoint](
 Early failing diagnostic reports are archived privately under `.data/`; final
 per-engine reports are under `web/evidence/overnight-*-browser.json`.
 
+## Verified second checkpoint, 01:21 Pacific
+
+Continuation from commit `8a5b7a5` reproduced and repaired additional browser state
+failures. The overnight task remains active through 9:00 a.m. Pacific. Source
+fingerprint: `66bc8ea5e7a773ad50eb3160bf32aa2bea56fd2f0e65f14fed32452f41a65a08`.
+
+- Desktop/touch: long collection references, machine reasons and evidence tokens wrap; 44px touch navigation/disclosures and 16px coarse-pointer inputs work in 844 × 320 landscape. Tests include 390px portrait, 320px equivalent 200% reflow, reduced motion and touch radio/tab/disclosure controls. WebKit emulates iPhone 13; native iOS keyboard, pinch, true browser zoom and device performance remain unverified.
+- Browser storage: getter exceptions, quota failures and silently dropped writes leave the interface usable with a visible notice. Mock checkout keeps the same key after a lost response/reload. Wallet signatures and physical calibration wait for a verified checkpoint; no signed submission occurs when storage is unavailable. Concurrent/ambiguous wallet attempts and storage clearing in the same open page cannot request another signature. All wallet operations here use offline fixtures; no live wallet or funds.
+- Refresh ordering: same-snapshot database revisions on machines/jobs/dashboard let newer authoritative data outrank reply order. An old owner response cannot restore completed preparation, a stale requester list cannot roll approved detail back, and an old 401 cannot log out a renewed owner session. Slower requests still apply when they contain newer data.
+- Session recovery: an unavailable authoritative session store now returns a service error instead of anonymous state. The browser requires a valid session lookup before creating a first requester. 503 and malformed 200 responses offer retry, send no replacement-session POST, and recover the same saved orders.
+- Artwork isolation: discarded two-image replacements and model suggestions from order A could silently replace order B's sources when changing format. Selection/edit/cancel now reset that draft context, while intended replacement images remain bound to their own draft. Four regressions cover cross-order discard/direct selection, same-order cancel and the intended multi-image/suggestion/permission flow. Rebuilt files still require explicit approval. Busy controls prevent accessible same-session context switches during suggestions; earlier identity/unmount callbacks remain covered.
+- Actual local reconnect: a bounded restart of the local backend/node preserved database/assets/journals. The open owner view displayed disconnect, reconnected through native EventSource, then received independent pause/resume mutations with dashboard/health polling disabled. Final proof observed 2 opens, 1 error and 4 refresh events. No job/payment was submitted for this check.
+
+Verification on this checkpoint:
+
+| Check                                            | Result                                          |
+| ------------------------------------------------ | ----------------------------------------------- |
+| Backend/application/process/realtime             | 55 passed                                       |
+| Python node                                      | 65 passed in 5.52s                              |
+| Payment/Claude and Fetch fixtures                | 25+5 passed                                     |
+| Browser storage/wallet unit                      | 20 passed                                       |
+| Built-application browser scenarios              | 37 passed per engine; Chromium, Firefox, WebKit |
+| Automated accessibility                          | 39 A/AA scans, no detected violations           |
+| Build/strict types/configured-secret scan        | Passed                                          |
+| Actual local SSE reconnect after service restart | Passed with polling disabled                    |
+
+That is 207 unique cases or 281 executions counting the three browser
+engines, with no final failed/skipped/flaky cases. Full software checks followed
+backend/session changes; final web build/unit/browser checks followed the last
+artwork repair. After the final web repairs, only affected web checks were repeated. Finite
+simulation/database acceptance and dependency audits were retained from the first checkpoint. Live and physical prerequisites remain blocked.
+
+Current [machine-readable checkpoint](evidence/overnight-second-qa.json),
+[full test report](test-report.md), [reconnect evidence](evidence/overnight-sse-reconnect.json).
+Representative screenshots: [portrait](../web/evidence/overnight-touch-webkit-portrait-390.png),
+[short landscape](../web/evidence/overnight-touch-webkit-landscape-844x320.png),
+[storage recovery notice](../web/evidence/overnight-touch-webkit-storage-320x664.png),
+[reconnected dashboard](../web/evidence/overnight-sse-reconnected.png).
+Earlier diagnostic/affected-only reports remain private under `.data/`; final
+per-engine reports use `overnight-second-*-browser.json`.
+
 ## Next useful audits
 
-1. Inspect touch/mobile WebKit behavior, short landscape viewports, 200% zoom, reduced motion and long text. The completed desktop-engine viewport checks do not prove actual iOS device usability.
-2. Exercise unavailable/quota-limited local/session storage, interrupted navigation and restored sessions. Use offline wallet/API fixtures; do not submit testnet transactions or silently open a new requester identity.
-3. Test delayed/reordered background refreshes around owner actions and requester job selection. Ensure a late poll cannot permanently replace newer visible state or restore stale controls. Backend idempotency is already covered.
-4. Inspect real EventSource reconnection after a bounded backend restart with polling disabled; existing SSE proof covers delivery and subscription cleanup, but not every reconnect timing. Preserve database/node journals and do not clear unrelated orders.
-5. Review multi-image upload/replacement, asynchronous suggestion/edit interactions and existing approved-file integrity with isolated fixtures. Avoid creating physical artifacts or redundant simulation loops.
-6. Fix only reproduced issues, add meaningful regressions, rerun affected checks and refresh evidence. At the morning cutoff, prepare the final handoff and disable the heartbeat. No optional sponsor add-ons are authorized by this overnight quality pass.
+The first-pass touch/storage/reordered-refresh/reconnect/artwork audits are complete. Continue with new boundaries rather than unchanged full-suite reruns:
+
+1. Browser back/forward, reload and interrupted navigation around order creation, editing, quotes and owner login/logout. Preserve the requester identity and existing selected-order semantics; distinguish a lost mutation response from an unsubmitted request.
+2. Adversarial form/API validation for meaningful Unicode/length/numeric/budget/quantity/catalog edge cases, using isolated fixtures or isolated stores. Reproduce a concrete user-visible or safety failure before changing behavior.
+3. Owner queue/search/page behavior as live updates move jobs between handling, follow-up and history. Check keyboard focus and reachable actions at narrow widths.
+4. Cached or failed media and asynchronous image/model paths when artwork is replaced or a preview changes. Preserve the approved artifact/hash and explicit permission review; no live model spending.
+5. Record fixes, affected checks and remaining scope. At 9:00 a.m. Pacific, perform final relevant checks, prepare the morning handoff and disable the heartbeat. Physical/live prerequisites remain external blockers; do not fill time with redundant simulation loops or sponsor add-ons.
 
 ## Morning handoff requirements
 
