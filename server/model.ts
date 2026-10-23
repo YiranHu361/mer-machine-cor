@@ -196,6 +196,12 @@ export interface Job {
   evidence?: any;
   baseline?: any;
   pickup?: { code: string; expiresAt: string; redeemedAt?: string };
+  pickupRenewals?: {
+    key: string;
+    expectedVersion: number;
+    expectedExpiresAt: string;
+    renewedAt: string;
+  }[];
   history: { at: string; event: string; reason: string }[];
   createdAt: string;
   updatedAt: string;

@@ -3105,3 +3105,66 @@ button {
     margin-top: 0;
   }
 }
+
+/* Pickup renewal keeps the stored item separate from production and payment. */
+.owner-pickup {
+  padding: 24px 25px;
+  background: #f2f6fd;
+  border-top: 1px solid var(--line);
+}
+.owner-pickup > h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.owner-pickup > h4:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+.owner-pickup p {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 9px 0;
+}
+.pickup-renewal {
+  margin-top: 15px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.pickup-renewal p {
+  margin: 0 0 12px;
+}
+.pickup-recovery {
+  margin-top: 15px;
+}
+.pickup-recovery p {
+  color: inherit;
+}
+.pickup-status-check {
+  margin: 8px 0 0;
+  padding-left: 0;
+}
+.owner-pickup .redeem-form {
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  grid-template-columns: minmax(150px, 240px) minmax(0, 1fr);
+}
+.pickup.expired {
+  background: #fff4e4;
+  border-color: #ddc39b;
+}
+@media (max-width: 760px) {
+  .owner-pickup {
+    padding: 20px 18px;
+  }
+  .owner-pickup .redeem-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pickup-renewal > button {
+    width: 100%;
+  }
+}

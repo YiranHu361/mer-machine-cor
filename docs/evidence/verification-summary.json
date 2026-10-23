@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T13:29:50.905Z",
-  "sourceStateSha256": "156048174a716046bfc6603a8878c15324e6c8fe6a6568fafc1f19f1839040d4",
+  "recordedAt": "2026-10-23T14:06:08.004Z",
+  "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 223,
-    "node": 119,
+    "backendApplicationAndProcessRecovery": 237,
+    "node": 137,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 200,
+    "browserScenarios": 214,
     "browserEngines": 3,
-    "uniqueTestCases": 601,
-    "testExecutionsIncludingThreeEngines": 1001,
+    "uniqueTestCases": 647,
+    "testExecutionsIncludingThreeEngines": 1075,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -91,11 +91,11 @@
     ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
     ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "Eleventh composite checkpoint; exact current/retained provenance in overnight-eleventh-qa.json. Overnight work continues through9amPacific.",
+  "notes": "Twelfth checkpoint; full current browser reports and exact application/test-fixture provenance in overnight-twelfth-qa.json. Work remains active through9a.m.Pacific; required live acceptance is blocked.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 287,
+    "candidateFiles": 318,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [

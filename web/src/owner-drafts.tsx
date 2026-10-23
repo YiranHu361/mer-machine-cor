@@ -11,7 +11,7 @@ import {
 import { useOwnerFormGuard } from "./owner-form-guard";
 
 type Entry = { value: unknown; initial: unknown; dirty: boolean };
-type ActionKind = "handling" | "pickup" | "review" | "clear";
+type ActionKind = "handling" | "pickup" | "renewal" | "review" | "clear";
 type ActionJob = {
   id: string;
   specVersion: number;
@@ -27,7 +27,13 @@ type ActionJob = {
   pickup?: { code?: string; expiresAt?: string; redeemedAt?: string };
   history?: Array<{ event: string }>;
 };
-const actionKinds: ActionKind[] = ["handling", "pickup", "review", "clear"];
+const actionKinds: ActionKind[] = [
+  "handling",
+  "pickup",
+  "renewal",
+  "review",
+  "clear",
+];
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object")
@@ -44,7 +50,7 @@ export function ownerActionDraftKey(kind: ActionKind, job: ActionJob) {
     kind === "handling"
       ? job.productionState === "produced" &&
         job.fulfillmentState === "awaiting_owner"
-      : kind === "pickup"
+      : kind === "pickup" || kind === "renewal"
         ? job.fulfillmentState === "ready_for_pickup"
         : kind === "review"
           ? job.productionState === "needs_review"
@@ -66,7 +72,9 @@ export function ownerActionDraftKey(kind: ActionKind, job: ActionJob) {
           fulfillmentState: job.fulfillmentState,
           evidence: job.evidence,
           collectionPoint: job.quote?.collectionPoint,
-          ...(kind === "pickup" ? { pickup: job.pickup } : {}),
+          ...(kind === "pickup" || kind === "renewal"
+            ? { pickup: job.pickup }
+            : {}),
         }),
       )
     : "inactive";

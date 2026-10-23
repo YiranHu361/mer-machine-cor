@@ -182,7 +182,12 @@ class InstaxLink3:
                     self.print_acknowledged = True
                 return super().parse_printer_response(event, packet)
 
-        printer = ConfiguredPrinter(device_address=config["bluetoothAddress"], print_enabled=True, verbose=False)
+        try:
+            printer = ConfiguredPrinter(device_address=config["bluetoothAddress"], print_enabled=True, verbose=False)
+        except SystemExit:
+            # The vendored CLI constructor exits when Bluetooth is unavailable.
+            # A disconnected adapter must fail this job, never stop the node.
+            raise NodeError("link3_unavailable", "Configured Link 3 Bluetooth runtime is unavailable; inspect the local adapter before retrying", 503) from None
         self.device = printer
         printer.serviceUUID, printer.writeCharUUID, printer.notifyCharUUID = (config[key] for key in ("serviceUUID", "writeCharUUID", "notifyCharUUID"))
         try:
@@ -302,9 +307,15 @@ class Bambu:
             raise NodeError("device_busy", "Bambu actual state is not idle: " + state, 409)
         filename = "fabrary_" + re.sub(r"[^A-Za-z0-9_-]", "_", attempt_id)[:64] + ".3mf"
         with artifact.open("rb") as stream:
-            await asyncio.to_thread(printer.upload_file, stream, filename)
+            uploaded = await asyncio.to_thread(printer.upload_file, stream, filename)
+        # The pinned SDK catches STOR errors and returns None. Only a positive
+        # FTP completion reply permits a print command for the approved bytes.
+        if not isinstance(uploaded, str) or not re.match(r"^2[0-9]{2}(?:[ -]|$)", uploaded):
+            raise NodeError("bambu_upload", "Bambu did not confirm the prepared file upload; no print command was issued", 503)
         # publish success only acknowledges the command, never physical finish.
-        await asyncio.to_thread(printer.start_print, filename, entry.get("plateNumber", 1), False, [], None, False)
+        published = await asyncio.to_thread(printer.start_print, filename, entry.get("plateNumber", 1), False, [], None, False)
+        if published is not True:
+            raise NodeError("bambu_publication", "Bambu print command publication is unconfirmed; inspect the printer and never automatically reprint", 503)
         saw_running = False
         deadline = time.monotonic() + self.config.get("maxJobSeconds", 900)
         while time.monotonic() < deadline:
@@ -325,7 +336,9 @@ class Bambu:
         if self.printer is None:
             return {"status": "unknown", "reason": "No connected Bambu client; physical state is unknown"}
         try:
-            await asyncio.to_thread(self.printer.stop_print)
+            published = await asyncio.to_thread(self.printer.stop_print)
+            if published is not True:
+                return {"status": "unknown", "reason": "Stop command publication is unconfirmed; inspect the printer"}
             return {"status": "requested", "reason": "Stop command published; this acknowledgment does not confirm physical stoppage"}
         except Exception:
             return {"status": "unknown", "reason": "Stop command outcome is unknown; inspect the printer"}

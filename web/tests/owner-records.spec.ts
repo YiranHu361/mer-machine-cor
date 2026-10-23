@@ -465,7 +465,12 @@ test("owner queue finds actionable orders, keeps history and supports keyboard v
       ],
     }),
     makeJob("job_prepare", "produced", "awaiting_owner"),
-    makeJob("job_pickup", "produced", "ready_for_pickup"),
+    makeJob("job_pickup", "produced", "ready_for_pickup", {
+      pickup: {
+        code: "QUEUE-PICKUP-FIXTURE",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      },
+    }),
     makeJob("job_running", "running", "unprepared", { paymentState: "held" }),
     makeJob("job_collected", "produced", "collected"),
     makeJob("job_cancelled", "cancelled", "unprepared", {

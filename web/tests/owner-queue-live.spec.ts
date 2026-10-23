@@ -23,6 +23,10 @@ function pickupJob(index: number) {
     productionState: "produced",
     paymentState: "released",
     fulfillmentState: "ready_for_pickup",
+    pickup: {
+      code: index === 1 ? "READY-123" : `READY-${index}`,
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+    },
     history: [],
   };
 }
@@ -70,7 +74,15 @@ async function ownerQueue(page: Page, initial: QueueJob[]) {
       const id = path.split("/").at(-2);
       jobs = jobs.map((job) =>
         job.id === id
-          ? { ...job, fulfillmentState: "collected", version: job.version + 1 }
+          ? {
+              ...job,
+              fulfillmentState: "collected",
+              version: job.version + 1,
+              pickup: {
+                ...job.pickup,
+                redeemedAt: new Date().toISOString(),
+              },
+            }
           : job,
       );
       revision++;

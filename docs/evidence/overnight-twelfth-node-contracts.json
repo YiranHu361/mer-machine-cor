@@ -1,0 +1,64 @@
+{
+  "recordedAt": "2026-10-23T14:01:31.713Z",
+  "scope": "Actual NodeService/SQLite and pinned SDK wrappers; all FTP/MQTT/BLE/socket boundaries faked. No discovery, real devices, funds or live providers.",
+  "sdkVersion": "2.6.6",
+  "regressions": {
+    "transportLifetime": 9,
+    "installedSdkContracts": 9,
+    "fullNodeSuite": 137
+  },
+  "baseline": {
+    "failedUploadThenStart": true,
+    "disconnectedStopReturn": false,
+    "oldStopLabel": "requested",
+    "missingBluetoothProcess": {
+      "scope": "Actual NodeService and actual vendored Instax constructor with fake zero-Bluetooth adapter list; mock artifact transport; no physical discovery or connection",
+      "exit_code": 1,
+      "accepted": {
+        "status": "accepted",
+        "execution_status": "accepted",
+        "attempt_id": "isolated_attempt",
+        "reason": null,
+        "completion_credible": false
+      },
+      "survived_marker": false,
+      "saved_attempt": {
+        "attempt_id": "isolated_attempt",
+        "status": "running",
+        "estimated_consumption_recorded": 0
+      },
+      "stderr_contains_no_adapters": true
+    }
+  },
+  "fixed": {
+    "failedUploadDoesNotStart": "Three actual SDK/Node failure cases assert no start after failed FTP/disconnection, unconfirmed publication stays uncertain, zero inferred consumption and exact durable replay only.",
+    "stopPublication": "False/unconfirmed returns unknown; strict published=True reports requested, never confirmed stopped.",
+    "missingBluetoothProcess": {
+      "scope": "Actual NodeService and actual vendored Instax constructor with fake zero-Bluetooth adapter list; mock artifact transport; no physical discovery or connection",
+      "exit_code": 0,
+      "accepted": {
+        "status": "accepted",
+        "execution_status": "accepted",
+        "attempt_id": "isolated_attempt",
+        "reason": null,
+        "completion_credible": false
+      },
+      "survived_marker": true,
+      "saved_attempt": {
+        "attempt_id": "isolated_attempt",
+        "status": "uncertain",
+        "estimated_consumption_recorded": 0
+      },
+      "stderr_contains_no_adapters": false
+    },
+    "transportLifetime": "Retained hardware task/cleanup survives timeout, caller cancellation and cancellation of close. Release/reuse and journal ownership remain fenced; late valid estimates commit once without altering uncertainty. Before/after accounting commit faults stay pending until explicit authorized recovery."
+  },
+  "evidence": {
+    "suite": ".data/overnight-twelfth-software-final.log",
+    "sourceTests": [
+      "node/tests/test_transport_lifetime.py",
+      "node/tests/test_installed_adapter_contracts.py"
+    ],
+    "boundary": "Software-only; SDK success is not physical completion. Link 3 exact-device compatibility and three physical acceptance suites remain blocked."
+  }
+}

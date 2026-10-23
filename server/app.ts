@@ -145,10 +145,13 @@ export function createApp(
     ) {
       try {
         const origin = new URL(req.headers.origin);
+        const configured = new URL(service.config.assetOrigin);
+        const port = (url: URL) =>
+          Number(url.port || (url.protocol === "https:" ? 443 : 80));
         requireThat(
           ["http:", "https:"].includes(origin.protocol) &&
             ["127.0.0.1", "localhost"].includes(origin.hostname) &&
-            [4317, 4318].includes(Number(origin.port)),
+            [4317, port(configured)].includes(port(origin)),
           "ORIGIN_REJECTED",
           "This local application only accepts requests from its own interface.",
           403,
@@ -1461,6 +1464,7 @@ export function createApp(
   for (const [route, fn] of Object.entries({
     prepare: (jobId: string, b: any) => service.prepare(jobId, b),
     clear: (jobId: string, b: any) => service.clearFailed(jobId, b),
+    "renew-pickup": (jobId: string, b: any) => service.renewPickup(jobId, b),
     redeem: (jobId: string, b: any) => service.redeem(jobId, b.code),
     review: (jobId: string, b: any) =>
       service.operatorReview(jobId, b.result, b.reason),

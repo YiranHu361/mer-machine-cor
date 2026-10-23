@@ -1,0 +1,498 @@
+{
+  "recordedAt": "2026-10-23T14:06:08.004Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 237,
+    "node": 137,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "webUnits": 29,
+    "browserScenarios": 214,
+    "uniqueCases": 647,
+    "checksIncludingThreeBrowserEngines": 1075,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 214,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 118097.271,
+      "startedAt": "2026-10-23T13:55:13.251Z",
+      "report": "web/evidence/overnight-twelfth-chromium-browser.json",
+      "reportSha256": "0e8f6db608fb634fe3b42bbdeba821bfa4cd04913fe6ea550d577392eebd9b41",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 214,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 153745.501,
+      "startedAt": "2026-10-23T13:57:11.771Z",
+      "report": "web/evidence/overnight-twelfth-firefox-browser.json",
+      "reportSha256": "2bf056fb8761f0d4d4c120f860e8fc0fa581f47f654cbad093f139c18ca2065e",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 214,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "durationMs": 135778.719,
+      "startedAt": "2026-10-23T13:59:45.947Z",
+      "report": "web/evidence/overnight-twelfth-webkit-browser.json",
+      "reportSha256": "bad1ccca76d140b0b221f9e0f11b47583f20fabe32ed3f6bd239dec953297cfd",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "pickup-renewal-recovery-320",
+          "rulesPassed": 9,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "automatedAccessibilityScans": 51,
+  "softwareProvenance": {
+    "completeSharedCheck": ".data/overnight-twelfth-software-final.log",
+    "completeSharedSourceStateSha256": "d1bbf1c980892c1f582d6514eb65e5b0180818cc7270525bef5008dd58b54d1e",
+    "finalSourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+    "subsequentBrowserFixturesOnly": [
+      "web/tests/owner-queue-live.spec.ts",
+      "web/tests/owner-records.spec.ts",
+      "web/tests/refresh-ordering.spec.ts"
+    ],
+    "note": "All final application changes, including the stale-scope renewal cleanup and configured-origin fix, preceded the complete shared check and production build. Three later browser-only corrections provide actual API future pickup expiry/code and collection redeemedAt in positive fixtures; assertions, App/styles/backend/Node/bundle are unchanged. Final full214-case suites use those fixtures and that built origin. Diagnostic and repeated affected runs are not extra unique cases."
+  },
+  "actualLocalChecks": {
+    "finalRuntime": {
+      "checkedAt": "2026-10-23T14:04:17.152Z",
+      "sourceStateSha256": "4d7f272a25f2730c80773aa8d0012628f66409811e12be1331d3732821833ee3",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "nativeBackendRestartSse": {
+      "at": "2026-10-23T13:51:02.654Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 4234,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "nativePickup": [
+      {
+        "engine": "chromium",
+        "at": "2026-10-23T13:51:13.749Z",
+        "boundary": "Built UI, actual HTTP/native EventSource and temporary SQLite with a seeded prepared simulation item; no API interception or physical production",
+        "physicalIO": false,
+        "status": "PASS",
+        "checks": [
+          "Expired code hidden and explicit owner renewal keyboard-usable at320px",
+          "Renewal creates one new epoch and leaves other active job, machine estimate and payments unchanged",
+          "Requester receives the new code through native SSE with polling disabled",
+          "Old code rejected; new code hands off once; exact renewal replay stays collected"
+        ],
+        "nativeSse": {
+          "opens": 1,
+          "refreshes": 3
+        },
+        "deviceCalls": 0,
+        "paymentCalls": 0,
+        "pageErrors": 0
+      },
+      {
+        "engine": "firefox",
+        "at": "2026-10-23T13:51:15.208Z",
+        "boundary": "Built UI, actual HTTP/native EventSource and temporary SQLite with a seeded prepared simulation item; no API interception or physical production",
+        "physicalIO": false,
+        "status": "PASS",
+        "checks": [
+          "Expired code hidden and explicit owner renewal keyboard-usable at320px",
+          "Renewal creates one new epoch and leaves other active job, machine estimate and payments unchanged",
+          "Requester receives the new code through native SSE with polling disabled",
+          "Old code rejected; new code hands off once; exact renewal replay stays collected"
+        ],
+        "nativeSse": {
+          "opens": 1,
+          "refreshes": 3
+        },
+        "deviceCalls": 0,
+        "paymentCalls": 0,
+        "pageErrors": 0
+      },
+      {
+        "engine": "webkit",
+        "at": "2026-10-23T13:51:17.062Z",
+        "boundary": "Built UI, actual HTTP/native EventSource and temporary SQLite with a seeded prepared simulation item; no API interception or physical production",
+        "physicalIO": false,
+        "status": "PASS",
+        "checks": [
+          "Expired code hidden and explicit owner renewal keyboard-usable at320px",
+          "Renewal creates one new epoch and leaves other active job, machine estimate and payments unchanged",
+          "Requester receives the new code through native SSE with polling disabled",
+          "Old code rejected; new code hands off once; exact renewal replay stays collected"
+        ],
+        "nativeSse": {
+          "opens": 1,
+          "refreshes": 3
+        },
+        "deviceCalls": 0,
+        "paymentCalls": 0,
+        "pageErrors": 0
+      }
+    ],
+    "calibrationEstimateHistorical": "docs/evidence/overnight-eleventh-calibration-api.json",
+    "earlierAcceptance": "Retained first-checkpoint Spacetime CAS/access/subscriptions, finite10-sticker/3-Instax simulation loop and local FastMCP, eighth creation restart replay, tenth durable cancellation and eleventh calibration/media acceptance. These were not rerun for volume or relabeled physical."
+  },
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 318,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-twelfth-software-final.log": "89411b81ee6036d4944db255afa76934ef037743f7040d78279049176683d708",
+    ".data/overnight-twelfth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-twelfth-chromium-browser.log": "6b655d5689145d78bec4245885a555dc419c9fcfe14490cac9cd07aac98e4bce",
+    ".data/overnight-twelfth-firefox-browser.log": "b00d521d4176f5e805e0a7697aa035ebadf3451293f8ddc8387ed0dd8b97af81",
+    ".data/overnight-twelfth-webkit-browser.log": "6e2b2de6bec237f52773d1e76a4adc8605e3e412e66595a14bd33b4ad7def43a",
+    ".data/overnight-twelfth-chromium-pickup-browser.log": "557afbd274be72f499de8df731dbf5839c8e37cc942e4879f682a24e9b2b7e59",
+    ".data/overnight-twelfth-firefox-pickup-browser.log": "22d7005a8892cd6ebebea43e05bd7449071c3ed2571e758ff640261204f6b8e3",
+    ".data/overnight-twelfth-webkit-pickup-browser.log": "c1b818c2ab62d6d84a782e2321ab27492745133fdca150b988ef1fcb97d2d3b5"
+  },
+  "finalBuild": {
+    "indexSha256": "ba3900c2240d6118b862b6c13e7a1ec8adbf0c98cc8af127780c1dba9e7074b9",
+    "script": "/assets/index-EdjwfnwC.js",
+    "stylesheet": "/assets/index-CoAnXThc.css"
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "remoteDiscovery": "NOT_RUN",
+  "fixes": [
+    "Deliberate owner-only expired pickup renewal with durable exact request identity, atomic epoch/version checks and replay after later renewal/collection/restart; no machine, media, production or payment change",
+    "Requester hides expired code at<=expiry; owner clock, local saved-state recovery, exact retry, session-private draft retention, current-response validation and guarded keyboard focus",
+    "Actual hardware adapter task/cleanup retained through timeout, canceled caller and canceled shutdown; pending transport blocks release/reuse and journal ownership survives until completion",
+    "Valid late returned media estimates account once without altering uncertainty; ambiguous storage outcomes remain fenced until explicit recovery",
+    "Pinned Bambu upload/publish/stop return contracts checked; failed upload never starts, unconfirmed publish stays uncertain, false stop is unknown",
+    "Vendored missing-Bluetooth SystemExit translated locally; Node stays alive and unrelated simulation continues",
+    "Configured local app port now passes origin validation; other hosts/ports reject without mutation"
+  ],
+  "diagnostics": [
+    "Initial partial Chromium full run exposed an old positive live-queue fixture without any pickup metadata. Unknown expiry was correctly blocked. Three positive fixtures now match actual API metadata; safeguards and existing assertions were preserved. Initial report is private and not counted as final.",
+    "Independent stale-scope failure left an obsolete disabled renewal block after another owner renewed; minimal UI cleanup and new regression preserve current state, newer focus and one local POST.",
+    "Actual random-port browser check exposed hardcoded origin ports despite configurable server PORT. Configured loopback origin now works without allowing remote origins or arbitrary other ports.",
+    "Canceled-close and pinned-SDK failures were reproduced using actual Node/journal/installed wrappers with fake transports only; missing BLE process proof changed exit1/running to exit0/uncertain/survived."
+  ],
+  "remainingActionable": [
+    "Finish passive long-session stability audit, review final docs/evidence and perform relevant cutoff checks by9a.m.Pacific",
+    "Required physical devices/cameras/owner readiness, funded Base Sepolia wallets/RPC, Claude and Agentverse configuration remain external blockers"
+  ],
+  "notes": "Actual retained runtime remains simulation/mock/SpacetimeDB. New native pickup checks use a seeded prepared simulation item in temporary SQLite with actual HTTP/built UI/native EventSource, polling disabled and zero Node/payment calls; they do not claim physical fulfillment. Fake SDK tests do not establish exact-device compatibility or physical completion."
+}

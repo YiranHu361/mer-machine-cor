@@ -2211,6 +2211,96 @@ export class Service {
       return j;
     });
   }
+  async renewPickup(jobId: string, body: any) {
+    requireThat(
+      body &&
+        typeof body === "object" &&
+        !Array.isArray(body) &&
+        Object.keys(body).every((key) =>
+          ["idempotencyKey", "expectedVersion", "expectedExpiresAt"].includes(
+            key,
+          ),
+        ) &&
+        typeof body.idempotencyKey === "string" &&
+        body.idempotencyKey.trim().length >= 8 &&
+        body.idempotencyKey.length <= 200 &&
+        Number.isSafeInteger(body.expectedVersion) &&
+        body.expectedVersion > 0 &&
+        typeof body.expectedExpiresAt === "string" &&
+        Number.isFinite(Date.parse(body.expectedExpiresAt)),
+      "PICKUP_RENEWAL_REQUIRED",
+      "Refresh the saved order before asking for a replacement expired pickup code.",
+      422,
+    );
+    const replay = (job: Job) => {
+      const previous = job.pickupRenewals?.find(
+        (request) => request.key === body.idempotencyKey,
+      );
+      if (!previous) return false;
+      requireThat(
+        previous.expectedVersion === body.expectedVersion &&
+          previous.expectedExpiresAt === body.expectedExpiresAt,
+        "IDEMPOTENCY_CONFLICT",
+        "This renewal request already belongs to another saved pickup-code state.",
+        409,
+      );
+      return true;
+    };
+    const known = await this.job(jobId);
+    if (replay(known)) return known;
+    return mutate(this.store, (state) => {
+      const job = ownValue(state.jobs, jobId);
+      requireThat(job, "NOT_FOUND", "Order not found.", 404);
+      if (replay(job)) return job;
+      requireThat(
+        job.productionState === "produced" &&
+          job.fulfillmentState === "ready_for_pickup" &&
+          job.pickup &&
+          !job.pickup.redeemedAt,
+        "PICKUP_UNAVAILABLE",
+        "Only an uncollected prepared item with an expired pickup code can receive a new code.",
+        409,
+      );
+      requireThat(
+        job.version === body.expectedVersion &&
+          job.pickup.expiresAt === body.expectedExpiresAt,
+        "PICKUP_CHANGED",
+        "The saved pickup state changed. Refresh the order before deciding whether a new code is still needed.",
+        409,
+      );
+      requireThat(
+        Number.isFinite(Date.parse(job.pickup.expiresAt)) &&
+          Date.parse(job.pickup.expiresAt) <= Date.now(),
+        "PICKUP_NOT_EXPIRED",
+        "The current pickup code is still valid. Use that code for handoff.",
+        409,
+      );
+      const renewedMs = Date.now();
+      const renewedAt = new Date(renewedMs).toISOString();
+      let code: string;
+      do {
+        code = randomBytes(6).toString("hex").toUpperCase();
+      } while (code === job.pickup.code);
+      job.pickup = {
+        code,
+        expiresAt: new Date(renewedMs + this.config.pickupMs).toISOString(),
+      };
+      job.pickupRenewals ??= [];
+      job.pickupRenewals.push({
+        key: body.idempotencyKey,
+        expectedVersion: body.expectedVersion,
+        expectedExpiresAt: body.expectedExpiresAt,
+        renewedAt,
+      });
+      record(
+        job,
+        "pickup_code_renewed",
+        "Owner replaced the expired pickup code for this prepared item; production, payment and machine availability were unchanged.",
+      );
+      return job;
+    });
+  }
+
   async redeem(jobId: string, code: string) {
     return mutate(this.store, (s) => {
       const j = s.jobs[jobId];

@@ -7,13 +7,13 @@ See [overnight QA](overnight-qa.md) for the latest checkpoint and remaining audi
 The owner queue now starts with orders needing action; use its view selector,
 search and page controls to reach collected/cancelled orders.
 
-The application runs on loopback http://127.0.0.1:4318, Python node on127.0.0.1:8788 and actual SpacetimeDB2.13.0 on127.0.0.1:3002. Production frontend is served by the backend. Optional Vite development preview uses4317. The default running checkpoint is **simulation / mock / actual SpacetimeDB**. This is a functional software demonstration, not a physical acceptance claim.
+The application runs on loopback http://127.0.0.1:4318, Python node on127.0.0.1:8788 and actual SpacetimeDB 2.13.0 on127.0.0.1:3002. Production frontend is served by the backend. Optional Vite development preview uses4317. The default running checkpoint is **simulation / mock / actual SpacetimeDB**. This is a functional software demonstration, not a physical acceptance claim.
 
 All changes are inside the dedicated writable `fabrary/` directory. Original project references and pasted contract remain unchanged. Credentials, uploaded assets, journals and installed local runtime live under ignored private `.data/` or `.env`.
 
 ## Setup and start
 
-Use Node25.8.1 (`.node-version`), npm11.11.0 and uv. Both Python environments use3.12.11; their compatible dependency graphs are separately locked because the current node FastMCP4 and Fetch adapter FastMCP2 have different requirements.
+Use Node 25.8.1 (`.node-version`), npm11.11.0 and uv. Both Python environments use3.12.11; their compatible dependency graphs are separately locked because the current node FastMCP4 and Fetch adapter FastMCP2 have different requirements.
 
 ```sh
 npm ci
@@ -28,13 +28,13 @@ npm run build
 
 `setup` creates `.data/local-credentials.json` with owner login, node Bearer and HMAC keys, file mode0600. It prints the path, never the values. Keep `.data` private. Optional overrides and their purposes are listed without values in `.env.example`. A fresh setup defaults to labeled SQLite development mode unless `.env` explicitly selects SpacetimeDB; that mode cannot satisfy Spacetime acceptance.
 
-For this preserved session, the installed runtime and its data/config were moved out of `/tmp` into `.data/spacetime-runtime/`, then restarted with identical authoritative state (51 jobs,3 machines at the checkpoint). Start it with:
+For this preserved session, the installed runtime and its data/config were moved out of `/tmp` into `.data/spacetime-runtime/`, then restarted with identical authoritative state (51 jobs, 3 machines at the checkpoint). Start it with:
 
 ```sh
 npm run spacetime
 ```
 
-For a new machine, install **SpacetimeDB2.13.0** following [official installation](https://spacetimedb.com/install). Select version2.13.0, then start a standalone loopback server and publish this module **only** to that local server:
+For a new machine, install **SpacetimeDB 2.13.0** following [official installation](https://spacetimedb.com/install). Select version2.13.0, then start a standalone loopback server and publish this module **only** to that local server:
 
 ```sh
 spacetime start --listen-addr 127.0.0.1:3002 --data-dir .data/spacetime-runtime/data --non-interactive
@@ -60,7 +60,7 @@ This starts the node and backend with matching local credentials. Run one backen
 4. Approve the current production preview. Quote a briefly reserved machine. Prices are **unmeasured development estimates**. An enabled budget mandate may auto-accept only an approved specification within its integer-cent cap. Artwork/specification/price changes invalidate approval.
 5. Mock checkout is clearly labeled. Dispatch persists one attempt before contacting the node. Status, evidence, hold/release/refund and pickup are independent facts. In testnet mode the requester explicitly uses a configured Base Sepolia browser wallet. Missing wallet, wrong network or declined signature never becomes a paid order.
 6. Passing visible-output evidence permits release. An unusable frame is review; missing output fails/refunds. Owner inspection overrides are recorded with reasons. Neither verification nor a test payout means collection.
-7. Owner removes, labels, stores and clears before marking ready for pickup. Resume availability separately; another job can run while the older item awaits collection. Redeem the expiring pickup code once at actual handoff.
+7. Owner removes, labels, stores and clears before marking ready for pickup. Resume availability separately; another job can run while the older item awaits collection. Redeem the expiring pickup code once at actual handoff. If it expires, the owner selects **Renew expired pickup code** for the stored item; the new code appears in the requester’s order. Renewal does not make another item, move payment or change machine availability. If confirmation is uncertain, use **Check pickup status** before an explicit retry. Do not repeat production or preparation to replace a code.
 
 ## Hardware prerequisites and finite physical acceptance
 
@@ -85,7 +85,7 @@ Owner hardware calibration UI uploads an image (or uses a reviewed3D model), exp
 
 If backend intent exists but acceptance is unknown, **Cancel before device acceptance** asks the node to durably block that exact authorization. It succeeds only before any accepted attempt exists. A404 lookup alone does not establish safe cancellation, and this action never sends a physical stop. Accepted work remains blocked until the existing worker/stop settles and its actual result is resolved. Refresh a failed/uncertain action using the local saved-calibration recovery control; it does not repeat the mutation. A different known attempt's resolution never clears an unrelated pending request key.
 
-Run the PRD physical suite after calibration: **10 consecutive stickers,3 consecutive actual Link3 photos,1 full short prepared Bambu job**. For each order, record actual upload-to-ready time, transfer/ejection/development/verification intervals where applicable, every owner intervention, consumables, failures and receipts. Owner handling must be performed and confirmed in the UI between jobs. Never auto-affirm physical removal from a script. Record pass, missing-output failure, ambiguous review and recovery cases on the actual devices. The sticker median<60 seconds, Instax<2 minutes where supported by measurements, and active onboarding<5 minutes remain **unmeasured**, not met.
+Run the PRD physical suite after calibration: **10 consecutive stickers, 3 consecutive actual Link3 photos, 1 full short prepared Bambu job**. For each order, record actual upload-to-ready time, transfer/ejection/development/verification intervals where applicable, every owner intervention, consumables, failures and receipts. Owner handling must be performed and confirmed in the UI between jobs. Never auto-affirm physical removal from a script. Record pass, missing-output failure, ambiguous review and recovery cases on the actual devices. The sticker median<60 seconds, Instax<2 minutes where supported by measurements, and active onboarding<5 minutes remain **unmeasured**, not met.
 
 ## Recovery and operator accounting
 
@@ -107,4 +107,10 @@ Put all secrets in ignored `.env` or the environment; do not paste them into cha
 
 ## Software checks and evidence
 
-`npm run check` runs deterministic/application/process-recovery, node, payments/Claude, Fetch and wallet tests plus type checks/build. Browser tests require the running simulator/mock app and use actual backend persistence/node code. `FABRARY_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser` runs the full UI and SSE-only cases. `npm run test:acceptance` refuses hardware/testnet/SQLite and runs finite10-sticker/3-Instax **software** loops plus failure fixtures. `npm run diagnose` reveals configuration presence and blockers without values. See [test-report.md](test-report.md) and stable [UI evidence](../web/evidence/README.md).
+`npm run check` runs deterministic/application/process-recovery, node, payments/Claude, Fetch and wallet tests plus type checks/build. Browser tests require the running simulator/mock app. Most browser cases use isolated API fixtures; the actual workflow/SSE cases use the retained backend/node, while the supplemental native pickup flow uses temporary SQLite and a seeded prepared simulation item. `FABRARY_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser` runs the full UI and SSE-only cases. `npm run test:acceptance` refuses hardware/testnet/SQLite and runs finite10-sticker/3-Instax **software** loops plus failure fixtures. `npm run diagnose` reveals configuration presence and blockers without values. See [test-report.md](test-report.md) and stable [UI evidence](../web/evidence/README.md).
+
+## Estimated media and pending device transport
+
+Media is an owner-editable estimate based on planned quantity, not a physical measurement. Actual returned execution and one-time estimate deduction commit together; calibration and failed output update it, and pickup never deducts again. Newer owner counts are preserved. If a concurrent update leaves an estimate unconfirmed, use **Recovery & order history → Reconcile saved outcome**, then deliberately retry handling/clearing; the item does not need to be made again.
+
+A timeout or stop acknowledgement does not prove physical stoppage. The node retains the actual hardware transport and cleanup, blocks release/reuse while `transport_pending` or `stop_pending`, and holds its journal lock through shutdown. A canceled close can be retried after those operations settle. Fix storage before retrying an unrecorded late estimate. Bambu requires confirmed upload/publication; an unconfirmed stop remains unknown. Missing Instax Bluetooth becomes a recoverable node error, never proof that exact Link3 hardware is compatible.

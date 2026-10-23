@@ -135,6 +135,12 @@ type Job = {
     completionCredible: boolean;
   };
   pickup?: { code?: string; expiresAt?: string; redeemedAt?: string };
+  pickupRenewals?: {
+    key: string;
+    expectedVersion: number;
+    expectedExpiresAt: string;
+    renewedAt: string;
+  }[];
   history: { at: string; event: string; reason?: string }[];
   createdAt: string;
   updatedAt: string;
@@ -2370,6 +2376,9 @@ function OrderDetail({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+  const pickupDeadline = Date.parse(job.pickup?.expiresAt || "");
+  const pickupExpiryKnown = Number.isFinite(pickupDeadline);
+  const pickupExpired = pickupExpiryKnown && pickupDeadline <= now;
   const q = job.quote;
   const remaining = q ? Math.max(0, new Date(q.expiresAt).getTime() - now) : 0;
   const expired = Boolean(q && remaining === 0);
@@ -2683,30 +2692,45 @@ function OrderDetail({
           </Notice>
         )}
       {job.fulfillmentState === "ready_for_pickup" && (
-        <div className="pickup">
-          <h3>Ready for pickup</h3>
+        <div
+          className={`pickup${pickupExpired ? " expired" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
+          <h3>
+            {pickupExpired
+              ? "Pickup code expired"
+              : pickupExpiryKnown
+                ? "Ready for pickup"
+                : "Pickup status needs checking"}
+          </h3>
           <p>
             {q?.collectionPoint || "See the owner at the collection point."}
           </p>
-          {job.pickup?.code ? (
+          {pickupExpired ? (
+            <p>
+              Ask the owner to renew your pickup code. A new code will appear
+              here when renewal is confirmed. Your item is still stored; it does
+              not need to be made again.
+            </p>
+          ) : !pickupExpiryKnown ? (
+            <p>
+              The pickup expiry could not be confirmed. Wait for the saved order
+              to refresh before using a code.
+            </p>
+          ) : job.pickup?.code ? (
             <>
               <span className="pickup-code">{job.pickup.code}</span>
               <p>
                 Show this single-use code to the owner when they hand over your
                 item.
               </p>
+              <small>Expires {date(job.pickup.expiresAt!)}</small>
             </>
           ) : (
             <p>
               Your pickup code will appear when the owner confirms preparation.
             </p>
-          )}
-          {job.pickup?.expiresAt && (
-            <small>
-              {new Date(job.pickup.expiresAt).getTime() < now
-                ? "Code expired. Contact the owner."
-                : `Expires ${date(job.pickup.expiresAt)}`}
-            </small>
           )}
         </div>
       )}
@@ -3324,12 +3348,26 @@ function OwnerApp({
                                 ledger={dashboard.ledger}
                                 busy={busy}
                                 health={health}
-                                action={(action, body) =>
-                                  act(`${job.id}-${action}`, () =>
-                                    request(
-                                      `/owner/jobs/${job.id}/${action}`,
-                                      body || {},
-                                    ),
+                                refresh={refresh}
+                                action={(action, body, options) =>
+                                  act(
+                                    `${job.id}-${action}`,
+                                    async () => {
+                                      if (options?.onAccepted) {
+                                        const result = await api<{
+                                          job?: unknown;
+                                        }>(
+                                          `/owner/jobs/${job.id}/${action}`,
+                                          body || {},
+                                        );
+                                        options.onAccepted(result?.job);
+                                      } else
+                                        await request(
+                                          `/owner/jobs/${job.id}/${action}`,
+                                          body || {},
+                                        );
+                                    },
+                                    options?.onError,
                                   )
                                 }
                                 simulation={(outcome) =>
@@ -5412,6 +5450,457 @@ function PhysicalCalibration({
   );
 }
 
+type OwnerJobAction = (
+  name: string,
+  body?: unknown,
+  options?: {
+    onError?: (error: Error) => void;
+    onAccepted?: (job: unknown) => void;
+  },
+) => Promise<boolean>;
+type PickupRenewalBody = {
+  idempotencyKey: string;
+  expectedVersion: number;
+  expectedExpiresAt: string;
+};
+type PickupRenewalDraft = {
+  body: PickupRenewalBody;
+  phase: "pending" | "unknown";
+  message: string;
+  checkedVersion?: number;
+} | null;
+function OwnerPickup({
+  job,
+  busy,
+  action,
+  refresh,
+}: {
+  job: Job;
+  busy: string;
+  action: OwnerJobAction;
+  refresh: () => Promise<boolean>;
+}) {
+  const scope = ownerActionDraftKey("renewal", job);
+  const [code, setCode] = useOwnerDraft(
+    ownerActionDraftKey("pickup", job),
+    () => "",
+    Boolean,
+  );
+  const [renewal, setRenewal] = useOwnerDraft<PickupRenewalDraft>(
+    scope,
+    () => null,
+    Boolean,
+  );
+  const [now, setNow] = useState(Date.now());
+  const [reading, setReading] = useState(false);
+  const [transferringFocus, setTransferringFocus] = useState(false);
+  const [readError, setReadError] = useState("");
+  const [readResult, setReadResult] = useState<{
+    sequence: number;
+    ok: boolean;
+    initiator: HTMLElement;
+  } | null>(null);
+  const [focusSequence, setFocusSequence] = useState(0);
+  const mounted = useRef(true);
+  const operation = useRef(0);
+  const liveScope = useRef(scope);
+  liveScope.current = scope;
+  const liveJob = useRef(job);
+  liveJob.current = job;
+  const notice = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const renewButton = useRef<HTMLButtonElement>(null);
+  const checkButton = useRef<HTMLButtonElement>(null);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<{
+    sequence: number;
+    initiator: Element | null;
+    kind: "error" | "current";
+    minVersion?: number;
+  } | null>(null);
+  const deadline = Date.parse(job.pickup?.expiresAt || "");
+  const expiryKnown = Number.isFinite(deadline);
+  const expired = expiryKnown && deadline <= now;
+  const renewalBusy = busy === `${job.id}-renew-pickup`;
+  const unknownRenewal = Boolean(
+    renewal && (renewal.phase === "unknown" || !renewalBusy),
+  );
+  const blocked = Boolean(busy) || reading;
+  const canRenew =
+    job.productionState === "produced" &&
+    job.fulfillmentState === "ready_for_pickup" &&
+    !job.pickup?.redeemedAt &&
+    expired &&
+    Number.isSafeInteger(job.version) &&
+    job.version > 0;
+  const canRetry = Boolean(
+    unknownRenewal &&
+    renewal?.checkedVersion === job.version &&
+    renewal.body.expectedVersion === job.version &&
+    renewal.body.expectedExpiresAt === job.pickup?.expiresAt &&
+    canRenew,
+  );
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      operation.current++;
+    };
+  }, []);
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [job.pickup?.expiresAt]);
+  useEffect(() => {
+    setReadError("");
+  }, [scope]);
+  const queueFocus = (request: NonNullable<typeof pendingFocus.current>) => {
+    pendingFocus.current = request;
+    setFocusSequence((value) => value + 1);
+  };
+  const renewalRecorded = (value: Job, body: PickupRenewalBody) =>
+    value.pickupRenewals?.some(
+      (record) =>
+        record.key === body.idempotencyKey &&
+        record.expectedVersion === body.expectedVersion &&
+        record.expectedExpiresAt === body.expectedExpiresAt &&
+        Number.isFinite(Date.parse(record.renewedAt)),
+    );
+  const validCurrent = (value: unknown): value is Job => {
+    const saved = value as Job | null;
+    return Boolean(
+      saved &&
+      typeof saved === "object" &&
+      !Array.isArray(saved) &&
+      saved.id === job.id &&
+      Number.isSafeInteger(saved.version) &&
+      saved.version > 0 &&
+      saved.productionState === "produced" &&
+      ["ready_for_pickup", "collected"].includes(saved.fulfillmentState) &&
+      saved.pickup &&
+      typeof saved.pickup === "object" &&
+      !Array.isArray(saved.pickup) &&
+      typeof saved.pickup.code === "string" &&
+      saved.pickup.code.length > 0 &&
+      saved.pickup.code.length <= 256 &&
+      Number.isFinite(Date.parse(saved.pickup.expiresAt || "")) &&
+      (saved.fulfillmentState === "collected"
+        ? Number.isFinite(Date.parse(saved.pickup.redeemedAt || ""))
+        : !saved.pickup.redeemedAt) &&
+      (saved.pickupRenewals === undefined ||
+        (Array.isArray(saved.pickupRenewals) &&
+          saved.pickupRenewals.every(
+            (record) =>
+              record &&
+              typeof record.key === "string" &&
+              Number.isSafeInteger(record.expectedVersion) &&
+              record.expectedVersion > 0 &&
+              typeof record.expectedExpiresAt === "string" &&
+              Number.isFinite(Date.parse(record.expectedExpiresAt)) &&
+              Number.isFinite(Date.parse(record.renewedAt)),
+          ))),
+    );
+  };
+  const renew = async (retry = false) => {
+    if (blocked || !canRenew || (renewal && (!retry || !canRetry))) return;
+    const body =
+      retry && renewal
+        ? renewal.body
+        : {
+            idempotencyKey: crypto.randomUUID(),
+            expectedVersion: job.version,
+            expectedExpiresAt: job.pickup!.expiresAt!,
+          };
+    const capturedScope = scope;
+    const initiator = document.activeElement;
+    const sequence = ++operation.current;
+    setReadError("");
+    setTransferringFocus(true);
+    setRenewal({ body, phase: "pending", message: "" });
+    let failure: Error | undefined;
+    let acceptedVersion: number | undefined;
+    const accepted = await action("renew-pickup", body, {
+      onError: (error) => {
+        failure = error;
+      },
+      onAccepted: (value) => {
+        if (
+          !validCurrent(value) ||
+          value.version <= body.expectedVersion ||
+          !renewalRecorded(value, body)
+        )
+          throw new ApiError(
+            "Pickup renewal response could not be matched to this request.",
+            "invalid_response",
+            0,
+            true,
+          );
+        acceptedVersion = value.version;
+      },
+    });
+    if (!mounted.current || operation.current !== sequence) return;
+    if (accepted) {
+      if (liveScope.current === capturedScope)
+        setRenewal({
+          body,
+          phase: "unknown",
+          message:
+            "The renewal was accepted, but the latest pickup state still needs confirmation. Check its saved status before another action.",
+        });
+      queueFocus({
+        sequence,
+        initiator,
+        kind: "current",
+        minVersion: acceptedVersion,
+      });
+    } else if (liveScope.current === capturedScope) {
+      const message =
+        failure instanceof ApiError && failure.code === "PICKUP_NOT_EXPIRED"
+          ? "The workshop reports that the current code is still valid. Check the saved pickup status before using it or trying again."
+          : failure instanceof ApiError &&
+              ["PICKUP_CHANGED", "PICKUP_UNAVAILABLE"].includes(failure.code)
+            ? "The saved pickup state changed. Check its current status before deciding whether renewal is still needed."
+            : "Renewal could not be confirmed. Check the saved pickup status before retrying. No new item or payment was requested.";
+      setRenewal({ body, phase: "unknown", message });
+      queueFocus({ sequence, initiator, kind: "error" });
+    } else setTransferringFocus(false);
+  };
+  const check = async (initiator: HTMLElement) => {
+    if (blocked) return;
+    const sequence = ++operation.current;
+    setReading(true);
+    setReadError("");
+    const ok = await refresh();
+    if (!mounted.current || operation.current !== sequence) return;
+    setReading(false);
+    setReadResult({ sequence, ok, initiator });
+  };
+  useEffect(() => {
+    if (!readResult || reading || busy) return;
+    const result = readResult;
+    setReadResult(null);
+    if (result.sequence !== operation.current) return;
+    if (!result.ok || !validCurrent(liveJob.current)) {
+      setReadError(
+        "The saved pickup status could not be confirmed. Keep the current item and try checking again; no renewal was sent by this check.",
+      );
+      queueFocus({
+        sequence: result.sequence,
+        initiator: result.initiator,
+        kind: "error",
+      });
+      return;
+    }
+    if (renewal) {
+      const current = liveJob.current;
+      if (
+        renewalRecorded(current, renewal.body) ||
+        current.version > renewal.body.expectedVersion ||
+        current.pickup?.expiresAt !== renewal.body.expectedExpiresAt
+      )
+        setRenewal(null);
+      else
+        setRenewal({
+          ...renewal,
+          phase: "unknown",
+          checkedVersion: current.version,
+        });
+    }
+    queueFocus({
+      sequence: result.sequence,
+      initiator: result.initiator,
+      kind: "current",
+    });
+  }, [readResult, reading, busy, job]);
+  useEffect(() => {
+    const request = pendingFocus.current;
+    if (!request || blocked || request.sequence !== operation.current) return;
+    requestAnimationFrame(() => {
+      if (!mounted.current || request.sequence !== operation.current) return;
+      const active = document.activeElement;
+      if (active !== request.initiator && active !== document.body) {
+        pendingFocus.current = null;
+        setTransferringFocus(false);
+        return;
+      }
+      const awaitingState =
+        request.minVersion !== undefined &&
+        liveJob.current.version < request.minVersion;
+      const target =
+        request.kind === "error" || awaitingState
+          ? notice.current
+          : renewal
+            ? canRetry
+              ? retryButton.current
+              : checkButton.current
+            : !expired && expiryKnown
+              ? input.current
+              : renewButton.current || heading.current;
+      if (
+        !target?.isConnected ||
+        !target.getClientRects().length ||
+        target.matches(":disabled")
+      )
+        return;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "nearest", behavior: "instant" });
+      if (awaitingState) request.initiator = target;
+      else {
+        pendingFocus.current = null;
+        setTransferringFocus(false);
+      }
+    });
+  }, [
+    focusSequence,
+    blocked,
+    renewal,
+    canRetry,
+    expired,
+    expiryKnown,
+    job.version,
+  ]);
+  return (
+    <section className="owner-pickup">
+      <h4 tabIndex={-1} ref={heading}>
+        Confirm handoff
+      </h4>
+      <p>
+        {expired
+          ? "Pickup code expired. Renew it before recording collection. The item is still stored for this order."
+          : !expiryKnown
+            ? "The pickup expiry could not be confirmed. Check its saved status before using a code."
+            : `Enter the requester’s pickup code when you hand over this item. Expires ${date(job.pickup!.expiresAt!)}. Codes work once.`}
+      </p>
+      {(expired || transferringFocus) && (
+        <div className="pickup-renewal">
+          <p>
+            A new code will appear in the requester’s order. Renewal does not
+            make another item, change payment or record collection.
+          </p>
+          <button
+            className="secondary"
+            type="button"
+            ref={renewButton}
+            disabled={blocked || Boolean(renewal) || !canRenew}
+            aria-busy={renewalBusy || undefined}
+            onClick={() => void renew()}
+          >
+            {renewalBusy
+              ? "Renewing pickup code…"
+              : "Renew expired pickup code"}
+          </button>
+        </div>
+      )}
+      {(unknownRenewal ||
+        readError ||
+        !expiryKnown ||
+        reading ||
+        readResult ||
+        pendingFocus.current?.kind === "current") && (
+        <div
+          className={`notice ${unknownRenewal || readError || !expiryKnown ? "error" : "info"} pickup-recovery`}
+          role={
+            unknownRenewal || readError || !expiryKnown ? "alert" : "status"
+          }
+          tabIndex={-1}
+          ref={notice}
+        >
+          <p>
+            {readError ||
+              renewal?.message ||
+              (!expiryKnown
+                ? "The pickup expiry could not be confirmed. Check the saved pickup status before using a code."
+                : reading
+                  ? "Checking the saved pickup status…"
+                  : unknownRenewal
+                    ? "An earlier renewal has not been confirmed. Check its saved pickup status before retrying."
+                    : "Saved pickup status confirmed.")}
+          </p>
+          <div className="button-row">
+            <button
+              className="text-button"
+              type="button"
+              ref={checkButton}
+              disabled={blocked}
+              onClick={(event) => void check(event.currentTarget)}
+            >
+              Check pickup status
+            </button>
+            {canRetry && (
+              <button
+                className="text-button"
+                type="button"
+                ref={retryButton}
+                disabled={blocked}
+                onClick={() => void renew(true)}
+              >
+                Retry pickup code renewal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {!unknownRenewal &&
+        expiryKnown &&
+        !reading &&
+        !readResult &&
+        !pendingFocus.current && (
+          <button
+            className="text-button pickup-status-check"
+            type="button"
+            ref={checkButton}
+            disabled={blocked}
+            onClick={(event) => void check(event.currentTarget)}
+          >
+            Check pickup status
+          </button>
+        )}
+      <form
+        className="redeem-form"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (expired || !expiryKnown || blocked || renewal) return;
+          if (await action("redeem", { code })) setCode("");
+        }}
+      >
+        <Field label="Pickup code">
+          <input
+            ref={input}
+            required
+            disabled={blocked || expired || !expiryKnown || Boolean(renewal)}
+            autoComplete="off"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            placeholder="Requester’s code"
+          />
+        </Field>
+        <div className="button-row">
+          <Button
+            className="primary"
+            busy={busy === `${job.id}-redeem`}
+            disabled={blocked || expired || !expiryKnown || Boolean(renewal)}
+            type="submit"
+          >
+            Redeem & record collection
+          </Button>
+          {code && (
+            <Button
+              className="secondary"
+              type="button"
+              disabled={blocked}
+              onClick={() => setCode("")}
+            >
+              Discard pickup code
+            </Button>
+          )}
+        </div>
+      </form>
+    </section>
+  );
+}
+
 function OwnerJob({
   job: j,
   busy,
@@ -5419,12 +5908,14 @@ function OwnerJob({
   action,
   simulation,
   ledger,
+  refresh,
 }: {
   job: Job;
   ledger: Ledger[];
   busy: string;
   health: Health | null;
-  action: (name: string, body?: unknown) => Promise<boolean>;
+  action: OwnerJobAction;
+  refresh: () => Promise<boolean>;
   simulation: (outcome: string) => Promise<boolean>;
 }) {
   const emptyPreparation = () => ({
@@ -5437,11 +5928,6 @@ function OwnerJob({
     ownerActionDraftKey("handling", j),
     emptyPreparation,
     (value) => Object.values(value).some(Boolean),
-  );
-  const [code, setCode] = useOwnerDraft(
-    ownerActionDraftKey("pickup", j),
-    () => "",
-    Boolean,
   );
   const [reviewDraft, setReviewDraft] = useOwnerDraft(
     ownerActionDraftKey("review", j),
@@ -5576,51 +6062,7 @@ function OwnerJob({
         </form>
       )}
       {j.fulfillmentState === "ready_for_pickup" && (
-        <form
-          className="redeem-form"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (await action("redeem", { code })) setCode("");
-          }}
-        >
-          <div>
-            <h4>Confirm handoff</h4>
-            <p>
-              Enter the requester’s pickup code when you hand over this item.
-              Codes expire and work once.
-            </p>
-          </div>
-          <Field label="Pickup code">
-            <input
-              required
-              disabled={Boolean(busy)}
-              autoComplete="off"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="Requester’s code"
-            />
-          </Field>
-          <div className="button-row">
-            <Button
-              className="primary"
-              busy={busy === `${j.id}-redeem`}
-              disabled={Boolean(busy)}
-              type="submit"
-            >
-              Redeem & record collection
-            </Button>
-            {code && (
-              <Button
-                className="secondary"
-                type="button"
-                disabled={Boolean(busy)}
-                onClick={() => setCode("")}
-              >
-                Discard pickup code
-              </Button>
-            )}
-          </div>
-        </form>
+        <OwnerPickup job={j} busy={busy} action={action} refresh={refresh} />
       )}
       {j.evidence && (
         <details className="owner-evidence" open={needsReview}>

@@ -114,7 +114,9 @@ async function renderNetworkResult(page: Page) {
 test("an old owner refresh cannot restore preparation after a confirmed handling action (UI fixture)", async ({
   page,
 }) => {
-  let state = {
+  let state: ReturnType<typeof fixtureJob> & {
+    pickup?: { code: string; expiresAt: string };
+  } = {
     ...fixtureJob(),
     productionState: "produced",
     paymentState: "released",
@@ -137,7 +139,15 @@ test("an old owner refresh cannot restore preparation after a confirmed handling
       return true;
     }
     if (path === `/api/owner/jobs/${state.id}/prepare`) {
-      state = { ...state, version: 2, fulfillmentState: "ready_for_pickup" };
+      state = {
+        ...state,
+        version: 2,
+        fulfillmentState: "ready_for_pickup",
+        pickup: {
+          code: "PREPARED-PICKUP-FIXTURE",
+          expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        },
+      };
       await json(route, { job: state });
       return true;
     }

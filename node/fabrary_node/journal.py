@@ -160,22 +160,34 @@ class Journal:
             self.audit(request["machine_id"], request["attempt_id"], "accepted", "Authorization, policy and artifact hash checked")
         return self.get(request["attempt_id"]), True
 
+    def _account_consumption(self, row: dict) -> bool:
+        if not row["started_at"] or row["estimated_consumption_recorded"]:
+            return False
+        quantity = json.loads(row["binding"])["parameters"]["quantity"]
+        if type(quantity) is not int or quantity < 1:
+            raise NodeError("attempt_binding", "Saved attempt has no valid planned media quantity", 409)
+        state = self.machine(row["machine_id"])
+        state["mediaRemaining"] = max(0, state["mediaRemaining"] - quantity)
+        self.save_machine(row["machine_id"], state)
+        self.db.execute("UPDATE attempts SET estimated_consumption_recorded=1 WHERE attempt_id=?", (row["attempt_id"],))
+        return True
+
+    def account_returned_consumption(self, attempt_id: str) -> None:
+        """Record only a valid late adapter return's estimate, never its outcome."""
+        with self.transaction():
+            row = self.get(attempt_id)
+            if not row:
+                raise NodeError("unknown_attempt", "Unknown attempt", 404)
+            if self._account_consumption(row):
+                self.audit(row["machine_id"], attempt_id, "late_media_estimate", "Adapter returned after the execution worker detached; planned quantity estimate recorded without changing the outcome")
+
     def update(self, attempt_id: str, status: str, *, reason: str | None = None, credible: bool = False, artifact_path: str | None = None, account_consumption: bool = False) -> None:
         with self.transaction():
             row = self.get(attempt_id)
             if not row:
                 raise NodeError("unknown_attempt", "Unknown attempt", 404)
-            # The worker's planned-quantity estimate and terminal fact share a
-            # durable commit. An exact retry can never deduct twice, and owner
-            # stock changes made during execution remain the current baseline.
-            if account_consumption and row["started_at"] and not row["estimated_consumption_recorded"]:
-                quantity = json.loads(row["binding"])["parameters"]["quantity"]
-                if type(quantity) is not int or quantity < 1:
-                    raise NodeError("attempt_binding", "Saved attempt has no valid planned media quantity", 409)
-                state = self.machine(row["machine_id"])
-                state["mediaRemaining"] = max(0, state["mediaRemaining"] - quantity)
-                self.save_machine(row["machine_id"], state)
-                self.db.execute("UPDATE attempts SET estimated_consumption_recorded=1 WHERE attempt_id=?", (attempt_id,))
+            if account_consumption:
+                self._account_consumption(row)
             # A late worker completion cannot overturn an operator stop or uncertainty.
             if row["status"] in {"failed", "uncertain", "completed"} and status != row["status"]:
                 return

@@ -1,0 +1,20 @@
+{
+  "engine": "chromium",
+  "at": "2026-10-23T13:51:13.749Z",
+  "boundary": "Built UI, actual HTTP/native EventSource and temporary SQLite with a seeded prepared simulation item; no API interception or physical production",
+  "physicalIO": false,
+  "status": "PASS",
+  "checks": [
+    "Expired code hidden and explicit owner renewal keyboard-usable at320px",
+    "Renewal creates one new epoch and leaves other active job, machine estimate and payments unchanged",
+    "Requester receives the new code through native SSE with polling disabled",
+    "Old code rejected; new code hands off once; exact renewal replay stays collected"
+  ],
+  "nativeSse": {
+    "opens": 1,
+    "refreshes": 3
+  },
+  "deviceCalls": 0,
+  "paymentCalls": 0,
+  "pageErrors": 0
+}

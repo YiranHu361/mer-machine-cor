@@ -30,7 +30,13 @@ function job(index: number) {
     productionState: "produced",
     fulfillmentState: index === 1 ? "ready_for_pickup" : "awaiting_owner",
     paymentState: "released",
-    pickup: index === 1 ? { expiresAt: "2026-10-23T12:30:00.000Z" } : undefined,
+    pickup:
+      index === 1
+        ? {
+            code: "ACTIVE_FIXTURE_CODE",
+            expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          }
+        : undefined,
     evidence: {
       url: pixel,
       capturedAt: at,
@@ -437,7 +443,9 @@ test("renewed pickup expiry clears a hidden private code and its document warnin
     .getByLabel("Show orders", { exact: true })
     .selectOption("production");
   await cancelDocumentChange(page);
-  state.jobs[1].pickup!.expiresAt = "2026-10-23T14:30:00.000Z";
+  state.jobs[1].pickup!.expiresAt = new Date(
+    Date.now() + 7200000,
+  ).toISOString();
   await state.refresh();
   await allOrders(page);
   await expect(

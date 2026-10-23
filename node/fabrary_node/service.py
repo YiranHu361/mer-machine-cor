@@ -49,6 +49,7 @@ class NodeService:
         self.journal = Journal(self.data_dir / "journal.sqlite")
         self.machines, self.adapters, self.tasks = {}, {}, {}
         self.stop_tasks: dict[str, tuple[str, asyncio.Task]] = {}
+        self.transport_tasks: dict[str, dict] = {}
         for given in (machines if machines is not None else DEFAULT_MACHINES):
             config = dict(given)
             if config.get("mode", "simulation") not in {"simulation", "hardware"}:
@@ -125,6 +126,26 @@ class NodeService:
         if not isinstance(binding, str) or not binding or binding != current:
             raise NodeError("configuration_binding", "Attempt belongs to another device or capture configuration; this authorization cannot be applied to the current setup", 403)
 
+    def transport_pending(self, machine_id: str) -> bool:
+        entry = self.transport_tasks.get(machine_id)
+        return bool(entry and (not entry["task"].done() or entry["account_pending"]))
+
+    def account_detached_transport(self, entry: dict) -> None:
+        if entry["detached"] and entry["returned"]:
+            entry["account_pending"] = True
+            self.journal.account_returned_consumption(entry["attempt_id"])
+            entry["account_pending"] = False
+
+    def require_transport_settled(self, machine_id: str, *, retry_account: bool = True) -> None:
+        entry = self.transport_tasks.get(machine_id)
+        if retry_account and entry and entry["task"].done() and entry["account_pending"]:
+            try:
+                self.account_detached_transport(entry)
+            except Exception:
+                raise NodeError("transport_pending", "The returned device operation's estimate could not be saved; keep this machine blocked and retry after local storage recovers", 409) from None
+        if self.transport_pending(machine_id):
+            raise NodeError("transport_pending", "The actual device transport is still pending; wait for its execution and cleanup before releasing or reusing the machine", 409)
+
     def stop_pending(self, machine_id: str) -> bool:
         stop = self.stop_tasks.get(machine_id)
         return bool(stop and not stop[1].done())
@@ -159,12 +180,12 @@ class NodeService:
             "camera": "simulation" if config["mode"] == "simulation" else "configured" if config.get("cameraCommand") or config.get("cameraUrl") else "unconfigured",
             "abort_support": "confirmed" if config["mode"] == "simulation" else "requested" if isinstance(adapter, Bambu) else "unsupported",
             "paired": state["paired"], "configured": not blockers, "calibrated": state["calibrated"],
-            "listed": state["listed"], "ready": bool(state["ready"] and not state["paused"] and not blockers and not self.journal.active(machine_id) and not self.stop_pending(machine_id)),
-            "stop_pending": self.stop_pending(machine_id),
+            "listed": state["listed"], "ready": bool(state["ready"] and not state["paused"] and not blockers and not self.journal.active(machine_id) and not self.stop_pending(machine_id) and not self.transport_pending(machine_id)),
+            "stop_pending": self.stop_pending(machine_id), "transport_pending": self.transport_pending(machine_id),
             "paused": state["paused"], "media_remaining": state["mediaRemaining"], "max_quantity": state["maxQuantity"],
             "max_job_seconds": state["maxJobSeconds"], "hours": {**state["hours"], "timezone": "UTC"},
             "handling": ["remove", "label", "store", "clear", "explicitly resume"],
-            "blockers": blockers, "reason": "; ".join(blockers) if blockers else "Device stop operation is still pending; wait before reusing this machine" if self.stop_pending(machine_id) else state.get("reason"),
+            "blockers": blockers, "reason": "; ".join(blockers) if blockers else "Device stop operation is still pending; wait before reusing this machine" if self.stop_pending(machine_id) else "The actual device transport is still pending; wait before releasing or reusing this machine" if self.transport_pending(machine_id) else state.get("reason"),
             "catalog": [{k: e[k] for k in ("id", "sha256", "widthMm", "heightMm", "depthMm", "color", "material", "estimatedSeconds") if k in e} for e in config.get("catalog", []) if e.get("reviewed") is True]}
 
     def get_status(self, machine_id: str, job_id: str | None = None, attempt_id: str | None = None) -> dict:
@@ -178,13 +199,13 @@ class NodeService:
         manifest = self.get_capabilities(machine_id)
         return {"machine_id": machine_id, "mode": config["mode"], "ready": manifest["ready"],
             "paused": state["paused"], "configured": manifest["configured"], "calibrated": state["calibrated"],
-            "stop_pending": manifest["stop_pending"],
+            "stop_pending": manifest["stop_pending"], "transport_pending": manifest["transport_pending"],
             "media_remaining": state["mediaRemaining"], "execution_status": attempt["status"] if attempt else "idle",
             "job_id": attempt["job_id"] if attempt else None, "attempt_id": attempt["attempt_id"] if attempt else None,
             "completion_credible": bool(attempt and attempt["completion_credible"]),
             "accepted_at": attempt["accepted_at"] if attempt else None, "started_at": attempt["started_at"] if attempt else None,
             "completed_at": attempt["completed_at"] if attempt else None,
-            "reason": manifest["reason"] if manifest["stop_pending"] else attempt["reason"] if attempt and attempt["reason"] else manifest["reason"], "blockers": manifest["blockers"]}
+            "reason": manifest["reason"] if manifest["stop_pending"] or manifest["transport_pending"] else attempt["reason"] if attempt and attempt["reason"] else manifest["reason"], "blockers": manifest["blockers"]}
 
     def validate_parameters(self, machine_id: str, parameters: dict) -> None:
         config, state = self.machine(machine_id), self.journal.machine(machine_id)
@@ -224,6 +245,7 @@ class NodeService:
 
     def validate_acceptance_policy(self, machine_id: str, parameters: dict, scope: str) -> dict:
         self.require_stop_settled(machine_id)
+        self.require_transport_settled(machine_id)
         self.validate_parameters(machine_id, parameters)
         manifest, state = self.get_capabilities(machine_id), self.journal.machine(machine_id)
         if scope == "calibration":
@@ -357,16 +379,45 @@ class NodeService:
         self.journal.update(attempt_id, "running", artifact_path=str(path))
         if self.journal.get(attempt_id)["status"] != "running":
             return
+        transport = None
         try:
             timeout = self.journal.machine(machine_id)["maxJobSeconds"] + 30
-            status, credible, reason = await asyncio.wait_for(self.adapters[machine_id].run(path, parameters, attempt_id), timeout)
+            if expected_mode == "hardware":
+                adapter = self.adapters[machine_id]
+                transport = {"attempt_id": attempt_id, "detached": False, "returned": False, "account_pending": False}
+                async def run_transport():
+                    result = await adapter.run(path, parameters, attempt_id)
+                    transport["returned"] = bool(isinstance(result, (tuple, list)) and len(result) == 3 and isinstance(result[0], str) and result[0] in {"completed", "failed", "uncertain"} and type(result[1]) is bool and isinstance(result[2], str))
+                    self.account_detached_transport(transport)
+                    return result
+                task = asyncio.create_task(run_transport())
+                transport["task"] = task
+                self.transport_tasks[machine_id] = transport
+                # Observe late exceptions without treating them as completion.
+                task.add_done_callback(lambda done: done.exception() if not done.cancelled() else None)
+                status, credible, reason = await asyncio.wait_for(asyncio.shield(task), timeout)
+            else:
+                status, credible, reason = await asyncio.wait_for(self.adapters[machine_id].run(path, parameters, attempt_id), timeout)
             if row["outcome"] == "lost_ack":
                 status, credible, reason = "uncertain", False, "Simulation: physical outcome intentionally uncertain after lost acknowledgment; do not reprint"
             self.journal.update(attempt_id, status, reason=reason, credible=credible, account_consumption=True)
         except asyncio.CancelledError:
-            # Process shutdown retains running; the next startup marks uncertain.
+            # The hardware task can outlive this caller, including to_thread.
+            # Shutdown retains running; the next startup marks uncertainty.
+            if transport:
+                transport["detached"] = True
+                try:
+                    self.account_detached_transport(transport)
+                except Exception:
+                    pass
             raise
         except Exception as exc:
+            if transport:
+                transport["detached"] = True
+                try:
+                    self.account_detached_transport(transport)
+                except Exception:
+                    pass
             stop = await self.request_device_stop(machine_id, attempt_id)
             self.journal.update(attempt_id, "uncertain", reason="Execution error after possible start (" + type(exc).__name__ + "); " + stop["reason"])
 
@@ -481,6 +532,7 @@ class NodeService:
         resuming = changes.get("paused") is False or changes.get("ready") is True
         if resuming:
             self.require_stop_settled(machine_id)
+            self.require_transport_settled(machine_id)
         if resuming and (not state["calibrated"] or not changes.get("cleared") or not changes.get("inspected") or self.journal.active(machine_id)):
             raise NodeError("inspection_required", "Resume requires calibration, explicit inspection and clearing, and no active or uncertain attempt", 409)
         for key, minimum, maximum in (("mediaRemaining", 0, 100000), ("maxQuantity", 1, 100), ("maxJobSeconds", 1, 3600)):
@@ -509,6 +561,7 @@ class NodeService:
             raise NodeError("calibration_context", "Calibration attempt ID must be a nonempty string of at most 128 characters", 422)
         config = self.machine(machine_id)
         self.require_stop_settled(machine_id)
+        self.require_transport_settled(machine_id)
         state, adapter = self.journal.machine(machine_id), self.adapters[machine_id]
         blockers = adapter.blockers()
         def response(result: dict) -> dict:
@@ -558,6 +611,14 @@ class NodeService:
         self.machine(machine_id)
         if inspected is not True or not isinstance(result, str) or result not in {"completed", "failed"} or not isinstance(reason, str) or not 5 <= len(reason.strip()) <= 1000:
             raise NodeError("operator_resolution", "Reconciliation requires inspection, completed/failed result and a concrete reason", 422)
+        # A prior late-estimate storage failure is retried before opening the
+        # resolution transaction, never as a nested SQLite transaction.
+        transport = self.transport_tasks.get(machine_id)
+        if transport and transport["attempt_id"] == attempt_id and transport["task"].done() and transport["account_pending"]:
+            target = self.journal.get(attempt_id)
+            if not target or target["machine_id"] != machine_id or target["job_id"] != job_id:
+                raise NodeError("attempt_binding", "Resolution does not match this execution attempt", 403)
+            self.require_transport_settled(machine_id)
         with self.journal.transaction():
             row = self.journal.get(attempt_id)
             if not row or row["machine_id"] != machine_id or row["job_id"] != job_id:
@@ -566,6 +627,7 @@ class NodeService:
             task = self.tasks.get(attempt_id)
             if task and not task.done():
                 raise NodeError("attempt_active", "The execution worker is still active; wait for it to settle before inspection can release the machine", 409)
+            self.require_transport_settled(machine_id, retry_account=False)
             if row["status"] not in {"uncertain", "failed", "completed"}:
                 raise NodeError("attempt_active", "An active worker cannot be resolved by inspection", 409)
             if row["status"] in {"failed", "completed"}:
@@ -597,7 +659,14 @@ class NodeService:
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
         # Retain the journal lock until any already-issued device stop has
         # actually returned; a new process must not overtake a delayed command.
-        await asyncio.gather(*(task for _, task in self.stop_tasks.values()), return_exceptions=True)
+        # If close itself is cancelled, keep actual I/O alive and the lock owned;
+        # the caller can retry close after those operations have settled.
+        await asyncio.gather(*(asyncio.shield(task) for _, task in self.stop_tasks.values()), return_exceptions=True)
+        # Cancelling an asyncio caller cannot cancel its blocking hardware
+        # thread. Retain journal ownership until that transport has really ended.
+        await asyncio.gather(*(asyncio.shield(entry["task"]) for entry in self.transport_tasks.values()), return_exceptions=True)
+        for machine_id in self.transport_tasks:
+            self.require_transport_settled(machine_id)
         for adapter in self.adapters.values():
             if isinstance(adapter, Bambu) and adapter.printer is not None:
                 await asyncio.to_thread(adapter.printer.mqtt_stop)
