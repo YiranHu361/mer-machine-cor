@@ -1,0 +1,150 @@
+{
+  "at": "2026-10-23T06:08:12.603Z",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "runs": [
+    {
+      "outputType": "sticker",
+      "jobId": "job_7764aecc-0897-4f25-b80c-afdddf477acf",
+      "attemptId": "attempt_4a0507b3-ab07-4a71-be20-fc2837d5bc65",
+      "readyMilliseconds": 633,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_bda611cb-8829-4c2c-a449-8508f4d9eb9a",
+      "attemptId": "attempt_4a266018-e430-49c8-a3b6-fccc7cce6cf7",
+      "readyMilliseconds": 1575,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_fb56b275-bd66-479e-a7c5-948f23a32755",
+      "attemptId": "attempt_3878aa6c-3539-4eb0-b649-1e22f7ea7a8e",
+      "readyMilliseconds": 1483,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_73506ad5-cbe4-4328-b3a7-80d5f007d7c9",
+      "attemptId": "attempt_58b1314d-c6a6-4600-b3b8-32ddc6daaaa2",
+      "readyMilliseconds": 1517,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_88e488db-afac-479b-9d5e-2775722672d8",
+      "attemptId": "attempt_f84c9489-f595-4e83-bc06-d57b537c886c",
+      "readyMilliseconds": 1507,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_140d7f0a-df99-470c-8270-223a14a8c976",
+      "attemptId": "attempt_e86d47c6-4182-43bd-9f8b-684a4744c8ea",
+      "readyMilliseconds": 1511,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_9ee54acb-40f8-4215-8fd6-82c84a9e4876",
+      "attemptId": "attempt_6559038f-ecba-4217-807b-31d6dbbe818c",
+      "readyMilliseconds": 1520,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_3c6a85a6-347f-4805-9272-9416368c467d",
+      "attemptId": "attempt_fc3f5e87-231e-45f2-b0ab-53c4c0cf18db",
+      "readyMilliseconds": 1398,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_bba0fb5b-f29e-4381-8d5d-4399191e9de5",
+      "attemptId": "attempt_039bfa0a-0382-46cf-a233-2504cefe6002",
+      "readyMilliseconds": 1600,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "sticker",
+      "jobId": "job_58ec6751-227c-4e28-9929-f2d546baa094",
+      "attemptId": "attempt_6b550e6f-62a5-42b5-a932-eb2c489dc946",
+      "readyMilliseconds": 1400,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "instax",
+      "jobId": "job_0366fd7d-2b3f-437c-8201-241ad16500bf",
+      "attemptId": "attempt_434766f9-312a-47b0-ae8a-ee38c7406449",
+      "readyMilliseconds": 1332,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "instax",
+      "jobId": "job_394f5aa1-39e1-4849-83f0-d0ab2e06a3f1",
+      "attemptId": "attempt_81a0c46f-abf8-4a6e-9611-925b668745e6",
+      "readyMilliseconds": 1507,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    },
+    {
+      "outputType": "instax",
+      "jobId": "job_045a112f-9c9a-4406-8c8c-2e5ab958acc3",
+      "attemptId": "attempt_d712c9e4-3431-4c8d-a2f1-436cfcdd8659",
+      "readyMilliseconds": 1508,
+      "ownerActions": 2,
+      "source": "simulation",
+      "paymentState": "released"
+    }
+  ],
+  "failureCases": [
+    {
+      "outcome": "fail",
+      "jobId": "job_e20820e1-8348-4565-a8c2-6935e0ca0931",
+      "finalProductionState": "failed",
+      "finalPaymentState": "refunded"
+    },
+    {
+      "outcome": "review",
+      "jobId": "job_71cf087b-983f-4f3c-a4e5-ed09bef7f1ac",
+      "finalProductionState": "produced",
+      "finalPaymentState": "released"
+    },
+    {
+      "outcome": "lost_ack",
+      "jobId": "job_ce73d474-c199-4584-a5a3-82e7b51cb288",
+      "finalProductionState": "produced",
+      "finalPaymentState": "released"
+    }
+  ],
+  "physicalAcceptance": "BLOCKED: no devices, cameras or owner readiness configured",
+  "simulatedStickerMedianMilliseconds": 1509,
+  "physicalPerformanceTargets": "UNMEASURED; simulation timing is not a physical acceptance result",
+  "timingScope": "After shared artwork upload: starts before POST /jobs; ends after scripted owner preparation and resume. This is not upload-to-ready or physical timing.",
+  "ownerActionsScope": "Two scripted software handling calls per job, not measured owner labor."
+}

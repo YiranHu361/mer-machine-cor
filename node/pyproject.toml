@@ -1,0 +1,34 @@
+[project]
+name = "fabrary-node"
+version = "0.1.0"
+description = "Authenticated Fabrary machine node and deterministic image preparation"
+requires-python = ">=3.11"
+dependencies = [
+  "fastmcp==4.1.3",
+  "fastapi==0.161.1",
+  "uvicorn==0.54.0",
+  "pillow==13.0.0",
+  "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+hardware = [
+    "phomemo-printer==1.0.5",
+    "bambulabs-api==2.6.6",
+    "simplepyble==1.2.0",
+]
+
+[dependency-groups]
+dev = ["pytest==9.1.1", "pytest-asyncio==1.3.0"]
+
+[project.scripts]
+fabrary-node = "fabrary_node.server:main"
+fabrary-prepare = "fabrary_node.prepare:main"
+
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

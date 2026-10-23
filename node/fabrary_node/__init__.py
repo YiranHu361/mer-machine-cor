@@ -1,0 +1,1 @@
+"""Fabrary authenticated machine node."""

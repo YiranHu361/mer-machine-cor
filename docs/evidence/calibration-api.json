@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-23T06:15:19.422Z",
+  "status": "PASS",
+  "mode": "simulation",
+  "store": "spacetimedb",
+  "machineId": "phomemo_01",
+  "calibrationId": "calibration_1479d765-cbe7-469c-adc8-dedbeef99868",
+  "attemptId": "calibration_attempt_ef7b4242-b1d4-49fc-8def-af1b5fd976a1",
+  "scope": "Actual owner upload, prepare, signed calibration attempt, durable duplicate, status/evidence, inspection and explicit resume",
+  "physicalCalibration": "NOT_RUN"
+}

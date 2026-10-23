@@ -1,0 +1,1714 @@
+import { createHmac, randomBytes } from "node:crypto";
+import { mutate, type Store } from "./store.ts";
+import {
+  id,
+  hash,
+  now,
+  record,
+  specificationHash,
+  parameters,
+  requireThat,
+  Problem,
+  specSchema,
+  type State,
+  type Job,
+  type Machine,
+  type Spec,
+  type Asset,
+  type Operation,
+} from "./model.ts";
+import type { NodeBoundary } from "./node-client.ts";
+import type { PaymentBoundary, PaymentResult } from "./payments.ts";
+import { readFile } from "node:fs/promises";
+import { createClaudeProvider } from "../integrations/src/claude.ts";
+export interface Config {
+  mode: "simulation" | "hardware";
+  paymentMode: "mock" | "testnet";
+  storeMode: string;
+  assetOrigin: string;
+  secret: string;
+  quoteMs: number;
+  pickupMs: number;
+  ownerCode: string;
+  dataDir: string;
+  nodeUrl: string;
+  catalog?: any[];
+}
+export class Service {
+  private busy = new Set<string>();
+  private lastProbe = 0;
+  constructor(
+    public store: Store,
+    public node: NodeBoundary,
+    public payment: PaymentBoundary,
+    public config: Config,
+  ) {}
+  async read() {
+    return (await this.store.read()).data;
+  }
+  async job(jobId: string, actor?: { id: string; role: string }) {
+    const s = await this.read();
+    const j = s.jobs[jobId];
+    requireThat(j, "NOT_FOUND", "Order not found.", 404);
+    if (actor)
+      requireThat(
+        actor.role === "owner"
+          ? s.machines[j.machineId ?? ""]?.ownerId === actor.id ||
+              actor.id === "team_owner"
+          : j.requesterId === actor.id,
+        "FORBIDDEN",
+        "This order belongs to a different account.",
+        403,
+      );
+    return j;
+  }
+  async startCalibration(
+    machineId: string,
+    ownerId: string,
+    input: unknown,
+    artifact: Job["artifact"],
+    key: string,
+    ownerReady: boolean,
+  ) {
+    requireThat(
+      ownerReady === true && key?.length >= 8,
+      "OWNER_READY_REQUIRED",
+      "Confirm loaded media, a clear output area and supervision before the finite calibration job.",
+    );
+    const spec = specSchema.parse(input);
+    if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+    const accepted = await mutate(this.store, (s) => {
+      const m = s.machines[machineId];
+      requireThat(
+        m && m.ownerId === ownerId,
+        "FORBIDDEN",
+        "This machine belongs to another owner.",
+        403,
+      );
+      s.calibrations ??= {};
+      const existing = Object.values(s.calibrations).find(
+        (j) => j.machineId === machineId && j.checkoutKey === key,
+      );
+      if (existing) {
+        requireThat(
+          hash(existing.spec) === hash(spec) &&
+            existing.artifact.sha256 === artifact.sha256,
+          "IDEMPOTENCY_CONFLICT",
+          "This calibration key already binds a different specification or artifact.",
+        );
+        return { calibration: existing, start: false };
+      }
+      requireThat(
+        !m.activeJobId &&
+          (!m.reservation || Date.parse(m.reservation.expiresAt) <= Date.now()),
+        "MACHINE_BUSY",
+        "Calibration requires an idle machine.",
+      );
+      requireThat(
+        m.outputType === spec.outputType &&
+          m.material === spec.material &&
+          spec.quantity === 1 &&
+          m.mode === this.config.mode,
+        "CALIBRATION_SPEC",
+        "Calibration must match this device, loaded media and a single output.",
+      );
+      for (const assetId of spec.assetIds)
+        requireThat(
+          s.assets[assetId]?.ownerId === ownerId ||
+            s.assets[assetId]?.ownerId === "catalog",
+          "ASSET_ACCESS",
+          "Use owner calibration artwork or a reviewed prepared model.",
+          403,
+        );
+      const timestamp = now();
+      const calibration: Job = {
+        id: id("calibration"),
+        requesterId: ownerId,
+        machineId,
+        specVersion: 1,
+        spec,
+        artifact,
+        productionState: "dispatched",
+        paymentState: "unpaid",
+        fulfillmentState: "unprepared",
+        history: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+        attemptId: id("calibration_attempt"),
+        checkoutKey: key,
+      };
+      record(
+        calibration,
+        "calibration_authorized",
+        "Owner explicitly authorized this finite calibration job; it is not a paid customer order.",
+      );
+      s.calibrations[calibration.id] = calibration;
+      m.activeJobId = calibration.id;
+      m.ready = false;
+      m.paused = true;
+      m.calibrated = false;
+      return { calibration, start: true };
+    });
+    if (accepted.start) {
+      const c = accepted.calibration,
+        m = (await this.read()).machines[machineId];
+      try {
+        const result = await this.node.call(
+          "/calibrate",
+          {
+            machine_id: machineId,
+            inspected: false,
+            job: {
+              ...this.node.token(c, m, "calibration"),
+              job_id: c.id,
+              attempt_id: c.attemptId,
+              machine_id: machineId,
+              artifact_url: this.assetUrl(c.artifact.id),
+              artifact_sha256: c.artifact.sha256,
+              parameters: parameters(c),
+            },
+          },
+          m,
+        );
+        await mutate(this.store, (s) => {
+          const current = s.calibrations![c.id];
+          current.productionState =
+            result.execution_status === "running" ? "running" : "dispatched";
+          record(
+            current,
+            "calibration_accepted",
+            "Node acceptance journaled; inspect result before confirming calibration.",
+          );
+        });
+      } catch (e) {
+        await mutate(this.store, (s) => {
+          const current = s.calibrations![c.id];
+          current.productionState = "needs_review";
+          record(current, "calibration_uncertain", (e as Error).message);
+          s.machines[machineId].reason =
+            "Calibration acknowledgment uncertain; reconcile existing attempt and inspect. Never automatically print again.";
+        });
+      }
+    }
+    return (await this.read()).calibrations![accepted.calibration.id];
+  }
+  async calibrationStatus(machineId: string) {
+    const s = await this.read();
+    const c = Object.values(s.calibrations ?? {})
+      .filter((c) => c.machineId === machineId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    if (!c) return { calibration: null, status: null };
+    let status: any;
+    try {
+      status = await this.node.call(
+        "get_status",
+        { machine_id: machineId, job_id: c.id, attempt_id: c.attemptId },
+        s.machines[machineId],
+      );
+      if (
+        ["completed", "failed", "uncertain"].includes(status.execution_status)
+      ) {
+        try {
+          const frame = await this.node.call(
+            "camera_snapshot",
+            {
+              token: this.node.token(c, s.machines[machineId], "camera").token,
+              machine_id: machineId,
+              job_id: c.id,
+              attempt_id: c.attemptId,
+              phase: "result",
+            },
+            s.machines[machineId],
+          );
+          requireThat(
+            frame.machine_id === machineId &&
+              frame.job_id === c.id &&
+              frame.attempt_id === c.attemptId &&
+              frame.source ===
+                (s.machines[machineId].mode === "simulation"
+                  ? "simulation"
+                  : "camera") &&
+              Date.parse(frame.captured_at) >= Date.parse(c.createdAt) &&
+              Math.abs(Date.now() - Date.parse(frame.captured_at)) < 60000,
+            "INVALID_FRAME",
+            "Calibration evidence does not match this attempt or capture time.",
+          );
+          await mutate(this.store, (s) => {
+            s.calibrations![c.id].evidence = {
+              url: frame.frame_url,
+              capturedAt: frame.captured_at,
+              machineId,
+              jobId: c.id,
+              frame,
+            };
+          });
+        } catch {}
+      }
+      await mutate(this.store, (s) => {
+        const current = s.calibrations![c.id];
+        const state = status.execution_status;
+        current.productionState =
+          state === "completed"
+            ? "produced"
+            : state === "failed"
+              ? "failed"
+              : state === "uncertain"
+                ? "needs_review"
+                : state === "running"
+                  ? "running"
+                  : "dispatched";
+      });
+    } catch (e) {
+      status = { execution_status: "unknown", reason: (e as Error).message };
+    }
+    return { calibration: (await this.read()).calibrations![c.id], status };
+  }
+  async resolveCalibration(machineId: string, body: any) {
+    requireThat(
+      body.inspected === true &&
+        ["completed", "failed"].includes(body.result) &&
+        typeof body.reason === "string" &&
+        body.reason.trim().length >= 10,
+      "INSPECTION_REQUIRED",
+      "Record the observed result, inspection and a specific reason.",
+    );
+    const s = await this.read(),
+      m = s.machines[machineId];
+    const c = Object.values(s.calibrations ?? {}).find(
+      (c) => c.machineId === machineId && c.attemptId === body.attemptId,
+    );
+    requireThat(
+      c,
+      "CALIBRATION_NOT_FOUND",
+      "This calibration attempt does not belong to the machine.",
+    );
+    await this.node.call(
+      "/reconcile",
+      {
+        machine_id: machineId,
+        job_id: c.id,
+        attempt_id: c.attemptId,
+        inspected: true,
+        result: body.result,
+        reason: body.reason,
+      },
+      m,
+    );
+    await mutate(this.store, (s) => {
+      const current = s.calibrations![c.id];
+      current.productionState =
+        body.result === "completed" ? "produced" : "failed";
+      record(current, "calibration_operator_resolution", body.reason);
+      if (body.result === "failed") {
+        s.machines[machineId].activeJobId = null;
+        s.machines[machineId].calibrated = false;
+        s.machines[machineId].reason =
+          "Calibration failed; inspect and fix before repeating a newly authorized calibration.";
+      }
+    });
+    return this.calibrationStatus(machineId);
+  }
+  async create(requesterId: string, input: unknown, artifact: Job["artifact"]) {
+    const parsed = specSchema.safeParse(input);
+    if (!parsed.success)
+      throw new Problem(
+        "INVALID_SPEC",
+        parsed.error.issues.map((i) => i.message).join(" "),
+        422,
+      );
+    const spec = parsed.data;
+    if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+    return mutate(this.store, (s) => {
+      for (const a of spec.assetIds)
+        requireThat(
+          s.assets[a]?.ownerId === requesterId ||
+            (spec.outputType === "3d" && s.assets[a]?.ownerId === "catalog"),
+          "ASSET_ACCESS",
+          "Upload your own artwork first.",
+          403,
+        );
+      const timestamp = now();
+      const job: Job = {
+        id: id("job"),
+        requesterId,
+        machineId: null,
+        specVersion: 1,
+        spec,
+        artifact,
+        productionState:
+          spec.permission === "unclear" ? "needs_review" : "specified",
+        paymentState: "unpaid",
+        fulfillmentState: "unprepared",
+        history: [],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      };
+      record(
+        job,
+        "specified",
+        spec.permission === "unclear"
+          ? "Artwork permission needs operator review."
+          : "Production preview prepared; approve it before quoting.",
+      );
+      s.jobs[job.id] = job;
+      return job;
+    });
+  }
+  validateCatalog(spec: Spec, artifact: Job["artifact"]) {
+    const model = this.config.catalog?.find(
+      (m) => m.id === spec.preparedModelId,
+    );
+    requireThat(
+      model &&
+        model.widthMm === spec.widthMm &&
+        model.heightMm === spec.heightMm &&
+        model.depthMm === spec.depthMm &&
+        model.color === spec.color &&
+        model.estimatedSeconds === spec.estimatedSeconds &&
+        model.material === spec.material &&
+        spec.assetIds.length === 1 &&
+        spec.assetIds[0] === model.artifactId &&
+        artifact.sha256 === model.sha256,
+      "MODEL_UNCONFIGURED",
+      "Choose the exact dimensions, material and artifact from the reviewed prepared model catalog.",
+      422,
+    );
+  }
+  async revise(jobId: string, input: unknown, artifact: Job["artifact"]) {
+    const spec = specSchema.parse(input);
+    if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.paymentState === "unpaid" && !j.attemptId,
+        "LOCKED",
+        "A paid or dispatched specification cannot be edited.",
+      );
+      for (const a of spec.assetIds)
+        requireThat(
+          s.assets[a]?.ownerId === j.requesterId ||
+            (spec.outputType === "3d" && s.assets[a]?.ownerId === "catalog"),
+          "ASSET_ACCESS",
+          "Artwork is not owned by this requester.",
+          403,
+        );
+      if (j.machineId && s.machines[j.machineId]?.reservation?.jobId === j.id)
+        delete s.machines[j.machineId].reservation;
+      j.spec = spec;
+      j.specVersion++;
+      j.artifact = artifact;
+      delete j.approvedSpecHash;
+      delete j.quote;
+      j.machineId = null;
+      j.productionState =
+        spec.permission === "unclear" ? "needs_review" : "specified";
+      record(
+        j,
+        "approval_invalidated",
+        "Artwork or specification changed; approve the new production preview.",
+      );
+      return j;
+    });
+  }
+  async approve(jobId: string, body: any) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.spec.permission === "authorized",
+        "CONTENT_REVIEW",
+        "An operator must resolve unclear artwork permission before checkout.",
+      );
+      requireThat(
+        j.paymentState === "unpaid" && !j.attemptId,
+        "LOCKED",
+        "This order cannot be reapproved.",
+      );
+      requireThat(
+        body.specVersion === j.specVersion &&
+          body.artifactSha256 === j.artifact.sha256,
+        "STALE_APPROVAL",
+        "Approve the current preview and specification.",
+      );
+      j.approvedSpecHash = specificationHash(j);
+      j.productionState = "approved";
+      record(
+        j,
+        "specification_approved",
+        "Requester approved the exact production artifact and parameters.",
+      );
+      return j;
+    });
+  }
+  async quote(jobId: string, autoAccept = false) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.approvedSpecHash === specificationHash(j),
+        "APPROVAL_REQUIRED",
+        "Approve the current production preview first.",
+      );
+      requireThat(
+        j.paymentState === "unpaid" && !j.attemptId,
+        "LOCKED",
+        "This order already has a payment or dispatch.",
+      );
+      requireThat(
+        ["approved", "quoted"].includes(j.productionState),
+        "ORDER_CLOSED",
+        "Only an approved active order can be quoted.",
+      );
+      if (
+        j.quote &&
+        Date.parse(j.quote.expiresAt) > Date.now() &&
+        j.machineId &&
+        s.machines[j.machineId].reservation?.jobId === j.id
+      ) {
+        if (autoAccept) {
+          requireThat(
+            j.spec.budgetMandate?.enabled &&
+              j.quote.totalCents <= j.spec.budgetMandate.capCents,
+            "MANDATE_REQUIRED",
+            "Automatic acceptance needs an explicit mandate covering the approved quote.",
+          );
+          j.quote.accepted = true;
+          record(
+            j,
+            "mandate_accepted",
+            "Existing approved quote accepted within explicit budget mandate.",
+          );
+        }
+        return j;
+      }
+      const machine = Object.values(s.machines)
+        .filter(
+          (m) =>
+            m.outputType === j.spec.outputType &&
+            m.mode === this.config.mode &&
+            m.paired &&
+            m.configured &&
+            m.calibrated &&
+            m.listed &&
+            m.ready &&
+            !m.paused &&
+            !m.activeJobId &&
+            (!m.reservation ||
+              Date.parse(m.reservation.expiresAt) <= Date.now()) &&
+            m.material === j.spec.material &&
+            m.mediaRemaining >= j.spec.quantity &&
+            (j.spec.outputType !== "3d" ||
+              (j.spec.estimatedSeconds ?? Infinity) <= m.maxJobSeconds) &&
+            m.policy.maxQuantity >= j.spec.quantity &&
+            m.policy.authorizedArtwork &&
+            this.inHours(m),
+        )
+        .sort((a, b) => this.price(a, j) - this.price(b, j))[0];
+      requireThat(
+        machine,
+        "NO_MACHINE",
+        "No ready machine supports this output. Ask the owner to calibrate, list and resume a matching machine.",
+      );
+      const card = machine.priceCard;
+      const items = [
+        { label: "Consumables", cents: card.consumables * j.spec.quantity },
+        { label: "Machine time", cents: card.machine * j.spec.quantity },
+        { label: "Owner handling", cents: card.handling },
+        { label: "Platform fee", cents: card.platform },
+      ];
+      const totalCents = items.reduce((a, b) => a + b.cents, 0);
+      if (autoAccept)
+        requireThat(
+          j.spec.budgetMandate?.enabled &&
+            totalCents <= j.spec.budgetMandate.capCents,
+          "MANDATE_REQUIRED",
+          "Automatic acceptance needs an explicit budget mandate covering this approved quote.",
+        );
+      const expiresAt = new Date(
+        Date.now() + this.config.quoteMs,
+      ).toISOString();
+      j.machineId = machine.id;
+      j.quote = {
+        id: id("quote"),
+        version: (j.quote?.version ?? 0) + 1,
+        expiresAt,
+        specHash: j.approvedSpecHash!,
+        items,
+        totalCents,
+        ownerCents: totalCents - card.platform,
+        platformCents: card.platform,
+        currency: "USD",
+        paymentMode: this.config.paymentMode,
+        collectionPoint: machine.collectionPoint,
+        accepted: autoAccept,
+      };
+      machine.reservation = { jobId: j.id, expiresAt };
+      j.productionState = "quoted";
+      record(
+        j,
+        "quoted",
+        "Machine reserved until quote expiry. Prices are an unmeasured development price card.",
+      );
+      return j;
+    });
+  }
+  price(m: Machine, j: Job) {
+    return (
+      (m.priceCard.consumables + m.priceCard.machine) * j.spec.quantity +
+      m.priceCard.handling +
+      m.priceCard.platform
+    );
+  }
+  inHours(m: Machine) {
+    const h = new Date().getUTCHours();
+    return m.hours.start <= h && h < m.hours.end;
+  }
+  async checkout(jobId: string, key: string, payload?: any) {
+    requireThat(
+      typeof key === "string" && key.length >= 8 && key.length <= 200,
+      "IDEMPOTENCY_REQUIRED",
+      "Checkout needs a stable idempotency key.",
+      422,
+    );
+    const current = await this.job(jobId);
+    if (current.paymentState !== "unpaid") {
+      requireThat(
+        current.checkoutKey === key,
+        "CHECKOUT_EXISTS",
+        "Use the existing checkout for this order.",
+      );
+      return current;
+    }
+    requireThat(
+      current.productionState === "quoted" &&
+        current.quote &&
+        current.quote.specHash === current.approvedSpecHash,
+      "QUOTE_REQUIRED",
+      "Get a current approved quote before checkout.",
+    );
+    requireThat(
+      Date.parse(current.quote.expiresAt) > Date.now(),
+      "QUOTE_EXPIRED",
+      "This quote expired. Request a new quote before paying.",
+    );
+    if (this.payment.mode === "testnet" && !payload && this.payment.challenge) {
+      const challenge = await this.payment.challenge(current);
+      throw Object.assign(
+        new Problem(
+          "PAYMENT_REQUIRED",
+          "Base Sepolia test payment is required.",
+          402,
+        ),
+        { challenge },
+      );
+    }
+    const op = await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      if (j.paymentState !== "unpaid") {
+        requireThat(
+          j.checkoutKey === key,
+          "CHECKOUT_EXISTS",
+          "Use the existing checkout.",
+        );
+        return null;
+      }
+      requireThat(
+        j.productionState === "quoted",
+        "ORDER_CLOSED",
+        "Only an active quoted order can enter checkout.",
+      );
+      requireThat(
+        j.quote &&
+          j.quote.specHash === specificationHash(j) &&
+          j.approvedSpecHash === j.quote.specHash,
+        "QUOTE_REQUIRED",
+        "Get a current quote first.",
+      );
+      requireThat(
+        Date.parse(j.quote.expiresAt) > Date.now(),
+        "QUOTE_EXPIRED",
+        "This quote expired. Request a new quote before paying.",
+      );
+      const m = s.machines[j.machineId!];
+      requireThat(
+        m.reservation?.jobId === j.id &&
+          Date.parse(m.reservation.expiresAt) > Date.now(),
+        "RESERVATION_EXPIRED",
+        "The machine reservation expired. Request a new quote.",
+      );
+      j.checkoutKey = key;
+      j.quote.accepted = true;
+      j.paymentState = "collection_pending";
+      record(
+        j,
+        "collection_pending",
+        "Payment collection is awaiting confirmation.",
+      );
+      const operation: Operation = {
+        id: `collect:${j.id}:${j.quote.id}:${id("collection_attempt")}`,
+        jobId: j.id,
+        kind: "collection",
+        status: "submitting",
+        createdAt: now(),
+        updatedAt: now(),
+        amountCents: j.quote.totalCents,
+        mode: this.payment.mode,
+      };
+      s.operations[operation.id] = operation;
+      j.collectionOperationId = operation.id;
+      return operation;
+    });
+    if (op) {
+      try {
+        await this.applyPayment(
+          op.id,
+          await this.payment.collect(await this.job(jobId), op, payload),
+        );
+      } catch (e) {
+        if ((e as any).safeToRetry === true)
+          await this.applyPayment(op.id, {
+            status: "failed",
+            reference: `unsubmitted:${op.id}`,
+            reason: `Payment was not collected. ${(e as Error).message}`,
+          });
+        else
+          await this.pending(
+            op.id,
+            `Collection outcome unknown: ${(e as Error).message}`,
+          );
+      }
+    }
+    return this.job(jobId);
+  }
+  async pending(operationId: string, reason: string) {
+    await mutate(this.store, (s) => {
+      const op = s.operations[operationId];
+      if (op.status === "confirmed" || op.status === "failed") return;
+      op.status = "pending";
+      op.reason = reason;
+      op.updatedAt = now();
+      record(s.jobs[op.jobId], "payment_pending", reason);
+    });
+  }
+  async applyPayment(operationId: string, result: PaymentResult) {
+    await mutate(this.store, (s) => {
+      const op = s.operations[operationId];
+      if (
+        op.status === "confirmed" ||
+        (op.status === "failed" && result.status !== "confirmed")
+      )
+        return;
+      const j = s.jobs[op.jobId];
+      if (
+        op.kind === "collection" &&
+        j.collectionOperationId &&
+        j.collectionOperationId !== op.id
+      ) {
+        requireThat(
+          result.status !== "confirmed",
+          "STALE_COLLECTION",
+          "An earlier failed collection cannot fund a later attempt; operator review required.",
+        );
+        return;
+      }
+      if (result.status === "confirmed") {
+        const previous = s.paymentReferences[result.reference];
+        requireThat(
+          !previous || previous === op.id,
+          "PAYMENT_REPLAY",
+          "This payment reference is already assigned to another operation.",
+        );
+        s.paymentReferences[result.reference] = op.id;
+      }
+      Object.assign(op, result, { updatedAt: now() });
+      if (result.status === "pending") {
+        record(
+          j,
+          "payment_pending",
+          result.reason ?? "Awaiting transaction confirmation.",
+        );
+        return;
+      }
+      if (result.status === "failed") {
+        if (op.kind === "collection") {
+          j.paymentState = "unpaid";
+          delete j.checkoutKey;
+        }
+        record(
+          j,
+          "payment_failed",
+          result.reason ??
+            "Payment operation failed; operator reconciliation required.",
+        );
+        return;
+      }
+      if (op.kind === "collection") {
+        if (result.receipt?.payer) j.requesterAddress = result.receipt.payer;
+        j.paymentState = "held";
+        const m = s.machines[j.machineId!];
+        const valid =
+          j.productionState !== "cancelled" &&
+          j.quote &&
+          Date.parse(j.quote.expiresAt) > Date.now() &&
+          m.reservation?.jobId === j.id &&
+          !m.activeJobId;
+        if (valid) j.productionState = "payment_confirmed";
+        else {
+          j.paymentState = "refund_pending";
+          j.productionState =
+            j.productionState === "cancelled" ? "cancelled" : "needs_review";
+          if (m.reservation?.jobId === j.id) delete m.reservation;
+          record(
+            j,
+            "late_payment",
+            "Collection confirmed after reservation expiry or cancellation; refund pending, dispatch prohibited.",
+          );
+        }
+      }
+      if (op.kind === "release") j.paymentState = "released";
+      if (op.kind === "refund") j.paymentState = "refunded";
+      record(
+        j,
+        `${op.kind}_confirmed`,
+        result.reason ?? "Transaction confirmed.",
+      );
+    });
+    const j = await this.job((await this.read()).operations[operationId].jobId);
+    if (j.paymentState === "refund_pending")
+      await this.transfer(j.id, "refund");
+  }
+  async transfer(jobId: string, kind: "release" | "refund") {
+    const op = await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      const existing = Object.values(s.operations).find(
+        (o) => o.jobId === j.id && o.kind === kind,
+      );
+      if (existing) {
+        if (
+          existing.status === "failed" &&
+          existing.retryable === true &&
+          !existing.transactionHash
+        ) {
+          existing.status = "submitting";
+          existing.retryable = false;
+          existing.updatedAt = now();
+          record(
+            j,
+            `${kind}_retry`,
+            "Retrying a definite pre-submission prerequisite failure using the same allocation.",
+          );
+          return existing;
+        }
+        return null;
+      }
+      const other = Object.values(s.operations).find(
+        (o) =>
+          o.jobId === j.id &&
+          o.kind === (kind === "release" ? "refund" : "release"),
+      );
+      requireThat(
+        !other,
+        "LEDGER_CONFLICT",
+        "Release and refund are mutually exclusive.",
+      );
+      requireThat(
+        [
+          "held",
+          kind === "release" ? "release_pending" : "refund_pending",
+        ].includes(j.paymentState),
+        "NOT_HELD",
+        "A confirmed collected hold is required.",
+      );
+      if (kind === "release")
+        requireThat(
+          j.evidence?.result === "pass",
+          "VERIFICATION_REQUIRED",
+          "Only passing verified output can release funds.",
+        );
+      const operation: Operation = {
+        id: `${kind}:${j.id}`,
+        jobId: j.id,
+        kind,
+        status: "submitting",
+        createdAt: now(),
+        updatedAt: now(),
+        amountCents:
+          kind === "release" ? j.quote!.ownerCents : j.quote!.totalCents,
+        mode: this.payment.mode,
+      };
+      s.operations[operation.id] = operation;
+      j.paymentState =
+        kind === "release" ? "release_pending" : "refund_pending";
+      record(
+        j,
+        `${kind}_pending`,
+        "Ledger allocated; transfer confirmation pending.",
+      );
+      return operation;
+    });
+    if (!op) return this.job(jobId);
+    try {
+      const s = await this.read();
+      await this.applyPayment(
+        op.id,
+        await this.payment.transfer(
+          s.jobs[jobId],
+          s.machines[s.jobs[jobId].machineId!],
+          op,
+        ),
+      );
+    } catch (e) {
+      const message = (e as Error).message;
+      const stored = (await this.read()).operations[op.id];
+      if (
+        !stored.transactionHash &&
+        !stored.receipt &&
+        ((e as any).safeToRetry === true ||
+          /^(TREASURY_PRIVATE_KEY_REQUIRED|OWNER_ADDRESS_REQUIRED|REQUESTER_ADDRESS_REQUIRED|WRONG_CHAIN|TREASURY_KEY_ADDRESS_MISMATCH)/.test(
+            message,
+          ))
+      ) {
+        await mutate(this.store, (s) => {
+          const allocation = s.operations[op.id];
+          allocation.status = "failed";
+          allocation.retryable = true;
+          allocation.reason = `Transfer not submitted: ${message}`;
+          allocation.updatedAt = now();
+          record(s.jobs[jobId], "transfer_blocked", allocation.reason);
+        });
+      } else await this.pending(op.id, `Transfer outcome unknown: ${message}`);
+    }
+    return this.job(jobId);
+  }
+  async attachConfirmedPaymentReference(
+    jobId: string,
+    operationId: string,
+    transactionHash: string,
+    reason: string,
+  ) {
+    requireThat(
+      /^0x[0-9a-fA-F]{64}$/.test(transactionHash) &&
+        reason?.trim().length >= 10,
+      "REFERENCE_REQUIRED",
+      "Supply a transaction hash and a specific reconciliation reason.",
+      422,
+    );
+    const state = await this.read(),
+      j = state.jobs[jobId],
+      op = state.operations[operationId];
+    requireThat(
+      this.payment.mode === "testnet" &&
+        op?.jobId === jobId &&
+        op.receipt &&
+        ["pending", "submitting"].includes(op.status),
+      "NOT_PENDING",
+      "Only a recorded pending testnet operation can be reconciled by reference.",
+    );
+    requireThat(
+      !op.transactionHash ||
+        op.transactionHash.toLowerCase() === transactionHash.toLowerCase(),
+      "REFERENCE_CONFLICT",
+      "Reconcile the already recorded transaction hash; replacements are not permitted.",
+    );
+    const candidate = {
+      ...op,
+      transactionHash,
+      receipt: { ...op.receipt, transactionHash },
+    };
+    const result = await this.payment.reconcile(
+      j,
+      state.machines[j.machineId!],
+      candidate,
+    );
+    requireThat(
+      result.status === "confirmed",
+      "REFERENCE_UNCONFIRMED",
+      "This transaction is not confirmed as the exact expected Base Sepolia token transfer. The existing operation remains pending.",
+    );
+    await mutate(this.store, (s) =>
+      record(s.jobs[jobId], "operator_payment_reconciliation", reason),
+    );
+    await this.applyPayment(op.id, result);
+    return this.job(jobId);
+  }
+  async cancel(jobId: string) {
+    const j = await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      if (j.productionState === "cancelled") return j;
+      requireThat(
+        !j.attemptId &&
+          ![
+            "dispatched",
+            "running",
+            "verifying",
+            "produced",
+            "failed",
+          ].includes(j.productionState),
+        "DISPATCH_STARTED",
+        "Dispatch has started. Ask the owner to resolve the order; cancellation cannot confirm physical stoppage.",
+      );
+      j.productionState = "cancelled";
+      if (j.paymentState === "held") j.paymentState = "refund_pending";
+      if (j.machineId && s.machines[j.machineId].reservation?.jobId === j.id)
+        delete s.machines[j.machineId].reservation;
+      record(
+        j,
+        "cancelled",
+        j.paymentState === "refund_pending"
+          ? "Cancelled before dispatch; refund pending confirmation."
+          : "Cancelled before dispatch. Any pending collection must reconcile.",
+      );
+      return j;
+    });
+    if (j.paymentState === "refund_pending")
+      await this.transfer(j.id, "refund");
+    return this.job(jobId);
+  }
+  assetUrl(assetId: string) {
+    const expires = Math.floor(Date.now() / 1000) + 300;
+    const sig = createHmac("sha256", this.config.secret)
+      .update(`${assetId}:${expires}`)
+      .digest("hex");
+    return `${this.config.assetOrigin}/${assetId}?expires=${expires}&sig=${sig}`;
+  }
+  async dispatch(jobId: string) {
+    const result = await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      if (j.attemptId) return { job: j, start: false };
+      requireThat(
+        j.paymentState === "held" && j.productionState === "payment_confirmed",
+        "UNPAID",
+        "A confirmed collected payment is required before dispatch.",
+      );
+      requireThat(
+        j.quote &&
+          j.approvedSpecHash === specificationHash(j) &&
+          j.quote.specHash === j.approvedSpecHash,
+        "STALE_ARTIFACT",
+        "Specification approval no longer matches the artifact.",
+      );
+      const m = s.machines[j.machineId!];
+      requireThat(
+        m.ready &&
+          !m.paused &&
+          m.calibrated &&
+          m.listed &&
+          m.reservation?.jobId === j.id &&
+          Date.parse(m.reservation.expiresAt) > Date.now() &&
+          !m.activeJobId &&
+          this.inHours(m),
+        "MACHINE_NOT_READY",
+        "The reserved machine is no longer ready. Reconcile or refund this held payment.",
+      );
+      requireThat(
+        m.mediaRemaining >= j.spec.quantity &&
+          m.policy.maxQuantity >= j.spec.quantity &&
+          m.material === j.spec.material &&
+          m.policy.authorizedArtwork,
+        "POLICY_CHANGED",
+        "The owner policy or media no longer supports this job.",
+      );
+      m.activeJobId = j.id;
+      m.ready = false;
+      delete m.reservation;
+      j.attemptId = id("attempt");
+      j.productionState = "dispatched";
+      record(
+        j,
+        "dispatch_authorized",
+        "Execution attempt persisted before contacting the node. Cancellation and dispatch are resolved atomically.",
+      );
+      return { job: j, start: true };
+    });
+    if (!result.start) return result.job;
+    const s = await this.read();
+    const j = s.jobs[jobId],
+      m = s.machines[j.machineId!];
+    try {
+      const baseline = await this.node.call(
+        "camera_snapshot",
+        {
+          token: this.node.token(j, m, "camera").token,
+          machine_id: m.id,
+          job_id: j.id,
+          attempt_id: j.attemptId,
+          phase: "baseline",
+        },
+        m,
+      );
+      await mutate(this.store, (s) => {
+        s.jobs[jobId].baseline = baseline;
+      });
+    } catch (e) {
+      await mutate(this.store, (s) =>
+        record(s.jobs[jobId], "baseline_unavailable", (e as Error).message),
+      );
+    }
+    try {
+      const response = await this.node.call(
+        "run_job",
+        {
+          ...this.node.token(j, m, "dispatch"),
+          job_id: j.id,
+          attempt_id: j.attemptId,
+          machine_id: m.id,
+          artifact_url: this.assetUrl(j.artifact.id),
+          artifact_sha256: j.artifact.sha256,
+          parameters: parameters(j),
+        },
+        m,
+      );
+      if (response.status === "rejected")
+        throw new Error(response.reason ?? "Node rejected execution.");
+      await this.applyNodeStatus(jobId, response);
+    } catch (e) {
+      await this.reviewUncertain(
+        jobId,
+        `Dispatch acknowledgment uncertain: ${(e as Error).message}. Reconcile this attempt; do not print again.`,
+      );
+    }
+    return this.job(jobId);
+  }
+  async reviewUncertain(jobId: string, reason: string) {
+    await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      j.productionState = "needs_review";
+      const m = s.machines[j.machineId!];
+      m.paused = true;
+      m.ready = false;
+      m.reason = reason;
+      record(j, "execution_uncertain", reason);
+    });
+  }
+  async applyNodeStatus(jobId: string, response: any) {
+    const execution =
+      response.execution_status ?? response.executionStatus ?? response.state;
+    await mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      if (["produced", "failed"].includes(j.productionState)) return;
+      if (execution === "completed") {
+        if (response.completion_credible !== true) {
+          j.productionState = "needs_review";
+          s.machines[j.machineId!].paused = true;
+          s.machines[j.machineId!].ready = false;
+          record(
+            j,
+            "completion_review",
+            "Device completion is not independently credible; owner review required.",
+          );
+          return;
+        }
+        j.deviceCompletedAt = response.completed_at ?? now();
+        j.productionState = "verifying";
+        record(
+          j,
+          "device_completed",
+          "Node reports credible completion; fresh evidence still required.",
+        );
+      } else if (["uncertain", "unknown"].includes(execution)) {
+        j.productionState = "needs_review";
+        const m = s.machines[j.machineId!];
+        m.paused = true;
+        m.ready = false;
+        m.reason = "Execution may have started. Owner reconciliation required.";
+        record(j, "execution_uncertain", response.reason ?? m.reason);
+      } else if (execution === "failed") {
+        j.productionState = "failed";
+        const m = s.machines[j.machineId!];
+        m.paused = true;
+        m.ready = false;
+        m.reason =
+          response.reason ?? "Device failure; inspect before resuming.";
+        record(j, "device_failed", m.reason);
+      } else if (["running", "started", "accepted"].includes(execution)) {
+        const next = execution === "accepted" ? "dispatched" : "running";
+        if (j.productionState !== next) {
+          j.productionState = next;
+          record(j, "execution_progress", `Node reports ${execution}.`);
+        }
+      }
+    });
+    const j = await this.job(jobId);
+    if (j.productionState === "verifying") await this.verify(jobId);
+    if (j.productionState === "failed" && j.paymentState === "held")
+      await this.transfer(jobId, "refund");
+  }
+  async reconcile(jobId: string) {
+    let j = await this.job(jobId);
+    const s = await this.read();
+    const m = s.machines[j.machineId!];
+    for (const op of Object.values(s.operations).filter(
+      (o) => o.jobId === jobId && ["pending", "submitting"].includes(o.status),
+    )) {
+      try {
+        await this.applyPayment(op.id, await this.payment.reconcile(j, m, op));
+      } catch (e) {
+        await this.pending(op.id, (e as Error).message);
+      }
+    }
+    for (const op of Object.values((await this.read()).operations).filter(
+      (o) => o.jobId === jobId && o.status === "failed" && o.retryable === true,
+    ))
+      await this.transfer(jobId, op.kind as "release" | "refund");
+    j = await this.job(jobId);
+    if (
+      j.paymentState === "refund_pending" &&
+      !Object.values((await this.read()).operations).some(
+        (o) => o.jobId === jobId && o.kind === "refund",
+      )
+    )
+      await this.transfer(jobId, "refund");
+    if (j.attemptId && !["produced", "failed"].includes(j.productionState)) {
+      try {
+        const status = await this.node.call(
+          "get_status",
+          { machine_id: m.id, job_id: j.id, attempt_id: j.attemptId },
+          m,
+        );
+        await this.applyNodeStatus(jobId, status);
+      } catch (e) {
+        await this.reviewUncertain(
+          jobId,
+          `Node disconnected: ${(e as Error).message}`,
+        );
+      }
+    }
+    return this.job(jobId);
+  }
+  async verify(jobId: string) {
+    const j = await this.job(jobId);
+    requireThat(
+      j.productionState === "verifying",
+      "COMPLETION_REQUIRED",
+      "Fresh verification requires a credible device completion.",
+    );
+    const s = await this.read(),
+      m = s.machines[j.machineId!];
+    let evidence: any;
+    try {
+      const frame = await this.node.call(
+        "camera_snapshot",
+        {
+          token: this.node.token(j, m, "camera").token,
+          machine_id: m.id,
+          job_id: j.id,
+          attempt_id: j.attemptId,
+          phase: "result",
+        },
+        m,
+      );
+      const captured = Date.parse(frame.captured_at);
+      const fresh =
+        Number.isFinite(captured) &&
+        captured >= Date.parse(j.deviceCompletedAt ?? j.createdAt) &&
+        Date.now() - captured < 60000 &&
+        captured <= Date.now() + 1000;
+      const associated =
+        frame.machine_id === m.id &&
+        frame.job_id === j.id &&
+        frame.attempt_id === j.attemptId;
+      const credible = frame.completion_credible === true && associated;
+      let result = "review",
+        reason = "Evidence needs operator review.";
+      if (!fresh || !credible)
+        reason = "Evidence is stale, missing, or completion is not credible.";
+      else if (
+        frame.source === "simulation" &&
+        this.config.mode === "simulation"
+      ) {
+        result =
+          frame.observation === "visible"
+            ? "pass"
+            : frame.observation === "missing"
+              ? "fail"
+              : "review";
+        reason =
+          result === "pass"
+            ? "Simulated visible output after simulated completion."
+            : result === "fail"
+              ? "Simulated output is missing."
+              : "Simulated frame is ambiguous.";
+      } else {
+        reason =
+          "Camera frame captured. Claude verification is unavailable; owner review required.";
+        try {
+          requireThat(
+            this.node.fetchFrame,
+            "CAMERA_UNAVAILABLE",
+            "Camera fetch boundary unavailable.",
+          );
+          const state = await this.read();
+          const approved = await readFile(state.assets[j.artifact.id].path);
+          const bytes = await this.node.fetchFrame(frame.frame_url, m);
+          const baseline = j.baseline?.frame_url
+            ? await this.node
+                .fetchFrame(j.baseline.frame_url, m)
+                .catch(() => undefined)
+            : undefined;
+          const checked = await createClaudeProvider().verifyOutput({
+            approvedArtifact: { bytes: approved, mediaType: "image/png" },
+            resultFrame: { bytes, mediaType: "image/png" },
+            baselineFrame: baseline
+              ? { bytes: baseline, mediaType: "image/png" }
+              : undefined,
+            capturedAt: frame.captured_at,
+            completionCredible: credible,
+            jobId: j.id,
+            machineId: m.id,
+            expected: j.spec,
+          });
+          result = checked.result;
+          reason = checked.reason;
+        } catch (e) {
+          reason = (e as Error).message.includes("CLAUDE_BLOCKED")
+            ? "Claude verification is not configured; fresh camera evidence needs owner review."
+            : "Automated visual verification is unavailable; owner review required.";
+        }
+      }
+      evidence = {
+        url: frame.frame_url,
+        capturedAt: frame.captured_at,
+        machineId: m.id,
+        jobId: j.id,
+        attemptId: j.attemptId,
+        result,
+        reason,
+        source: frame.source,
+        completionCredible: credible,
+        frame,
+      };
+    } catch (e) {
+      evidence = {
+        capturedAt: now(),
+        machineId: m.id,
+        jobId: j.id,
+        result: "review",
+        reason: `Fresh evidence unavailable: ${(e as Error).message}`,
+        source: m.mode === "simulation" ? "simulation" : "camera",
+        completionCredible: false,
+      };
+    }
+    await this.resolveEvidence(jobId, evidence);
+    return this.job(jobId);
+  }
+  async resolveEvidence(jobId: string, evidence: any, operatorReason?: string) {
+    await mutate(this.store, (s) => {
+      const j = s.jobs[jobId],
+        m = s.machines[j.machineId!];
+      j.evidence = evidence;
+      j.productionState =
+        evidence.result === "pass"
+          ? "produced"
+          : evidence.result === "fail"
+            ? "failed"
+            : "needs_review";
+      j.fulfillmentState = "awaiting_owner";
+      m.ready = false;
+      m.paused = true;
+      m.reason =
+        evidence.result === "pass"
+          ? "Owner must remove, label and store the output, clear the machine, then resume."
+          : evidence.reason;
+      record(
+        j,
+        operatorReason
+          ? "operator_override"
+          : `verification_${evidence.result}`,
+        operatorReason ?? evidence.reason,
+      );
+    });
+    if (evidence.result === "pass") await this.transfer(jobId, "release");
+    if (evidence.result === "fail") await this.transfer(jobId, "refund");
+  }
+  async operatorReview(jobId: string, result: "pass" | "fail", reason: string) {
+    requireThat(
+      ["pass", "fail"].includes(result),
+      "INVALID_REVIEW",
+      "Choose pass or fail.",
+      422,
+    );
+    const j = await this.job(jobId);
+    requireThat(
+      j.productionState === "needs_review" && reason?.trim().length >= 8,
+      "REASON_REQUIRED",
+      "Resolve a review order with a specific inspection reason.",
+    );
+    if (j.spec.permission === "unclear" && !j.attemptId) {
+      return mutate(this.store, (s) => {
+        const current = s.jobs[jobId];
+        requireThat(
+          current.paymentState === "unpaid",
+          "LOCKED",
+          "Content review cannot alter a paid specification.",
+        );
+        if (result === "pass") {
+          current.spec.permission = "authorized";
+          current.specVersion++;
+          current.productionState = "specified";
+          delete current.approvedSpecHash;
+          delete current.quote;
+        } else current.productionState = "cancelled";
+        record(current, "content_review", reason);
+        return current;
+      });
+    }
+    if (!j.evidence) {
+      const s = await this.read(),
+        m = s.machines[j.machineId!];
+      requireThat(
+        j.attemptId,
+        "EXECUTION_REQUIRED",
+        "A reviewed physical attempt is required.",
+      );
+      let absent = false;
+      if (result === "fail") {
+        try {
+          await this.node.call(
+            "get_status",
+            { machine_id: m.id, job_id: j.id, attempt_id: j.attemptId },
+            m,
+          );
+        } catch (e) {
+          if (
+            e instanceof Problem &&
+            e.code === "unknown_attempt" &&
+            e.status === 404
+          )
+            absent = true;
+          else throw e;
+        }
+      }
+      if (!absent)
+        await this.node.call(
+          "/reconcile",
+          {
+            machine_id: m.id,
+            job_id: j.id,
+            attempt_id: j.attemptId,
+            inspected: true,
+            result: result === "pass" ? "completed" : "failed",
+            reason,
+          },
+          m,
+        );
+      else {
+        await this.resolveEvidence(
+          jobId,
+          {
+            capturedAt: now(),
+            machineId: m.id,
+            jobId: j.id,
+            result: "fail",
+            reason:
+              "Owner inspected failure; authenticated node confirms no recorded acceptance. " +
+              reason,
+            source: m.mode,
+            completionCredible: false,
+            operatorOverride: true,
+          },
+          reason,
+        );
+        return this.job(jobId);
+      }
+      let evidence: any;
+      try {
+        const frame = await this.node.call(
+          "camera_snapshot",
+          {
+            token: this.node.token(j, m, "camera").token,
+            machine_id: m.id,
+            job_id: j.id,
+            attempt_id: j.attemptId,
+            phase: "result",
+          },
+          m,
+        );
+        requireThat(
+          frame.machine_id === m.id &&
+            frame.job_id === j.id &&
+            frame.attempt_id === j.attemptId &&
+            Date.parse(frame.captured_at) >= Date.parse(j.createdAt) &&
+            Math.abs(Date.now() - Date.parse(frame.captured_at)) < 60000,
+          "INVALID_FRAME",
+          "The result frame is stale or belongs to another attempt.",
+        );
+        evidence = {
+          url: frame.frame_url,
+          capturedAt: frame.captured_at,
+          machineId: m.id,
+          jobId: j.id,
+          source: frame.source,
+          completionCredible: frame.completion_credible,
+          frame,
+          result,
+          reason,
+          operatorOverride: true,
+        };
+      } catch (e) {
+        requireThat(
+          result === "fail",
+          "EVIDENCE_REQUIRED",
+          "A passing override requires a usable fresh result frame.",
+        );
+        evidence = {
+          capturedAt: now(),
+          machineId: m.id,
+          jobId: j.id,
+          result: "fail",
+          source: m.mode,
+          completionCredible: false,
+          reason,
+          operatorOverride: true,
+        };
+      }
+      await this.resolveEvidence(jobId, evidence, reason);
+      return this.job(jobId);
+    }
+    await this.resolveEvidence(
+      jobId,
+      {
+        ...j.evidence,
+        result,
+        reason: `Owner inspection: ${reason}`,
+        operatorOverride: true,
+      },
+      reason,
+    );
+    return this.job(jobId);
+  }
+  async prepare(jobId: string, body: any) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.productionState === "produced",
+        "NOT_PRODUCED",
+        "Only produced items can be made ready for collection.",
+      );
+      requireThat(
+        body.removed && body.labeled && body.stored && body.cleared,
+        "HANDLING_REQUIRED",
+        "Confirm removal, labeling, safe storage and a cleared machine.",
+      );
+      if (["ready_for_pickup", "collected"].includes(j.fulfillmentState))
+        return j;
+      j.fulfillmentState = "ready_for_pickup";
+      j.pickup = {
+        code: randomBytes(6).toString("hex").toUpperCase(),
+        expiresAt: new Date(Date.now() + this.config.pickupMs).toISOString(),
+      };
+      const m = s.machines[j.machineId!];
+      m.activeJobId = null;
+      m.mediaRemaining = Math.max(0, m.mediaRemaining - j.spec.quantity);
+      m.paused = true;
+      m.ready = false;
+      m.reason =
+        "Output stored and machine cleared. Owner may resume for the next job now.";
+      record(
+        j,
+        "ready_for_pickup",
+        "Owner prepared and stored the item. Pickup is independent of machine availability.",
+      );
+      return j;
+    });
+  }
+  async recordEconomics(
+    jobId: string,
+    values: {
+      consumablesCents: number;
+      machineSeconds: number;
+      handlingSeconds: number;
+      failedAttempts: number;
+      apiCostCents: number;
+      machineCostCents: number;
+    },
+  ) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.quote && ["produced", "failed"].includes(j.productionState),
+        "TRIAL_INCOMPLETE",
+        "Record costs after a trial has a known result.",
+      );
+      const ownerPayoutCents =
+        j.paymentState === "released" ? j.quote.ownerCents : 0;
+      const platformFeeCents =
+        j.paymentState === "released" ? j.quote.platformCents : 0;
+      const ownerNetCents =
+        ownerPayoutCents - values.consumablesCents - values.machineCostCents;
+      j.economics = {
+        ...values,
+        quoteCents: j.quote.totalCents,
+        platformFeeCents,
+        ownerPayoutCents,
+        quotedOwnerPayoutCents: j.quote.ownerCents,
+        quotedPlatformFeeCents: j.quote.platformCents,
+        paymentStateAtRecording: j.paymentState,
+        ownerNetCents,
+        platformMarginCents: platformFeeCents - values.apiCostCents,
+        ownerEarningsPerHandlingMinuteCents:
+          values.handlingSeconds > 0
+            ? Math.round((ownerNetCents * 60) / values.handlingSeconds)
+            : null,
+        recordedAt: now(),
+      };
+      record(
+        j,
+        "trial_economics",
+        "Owner recorded measured costs and handling time; simulation is not physical cost evidence.",
+      );
+      return j;
+    });
+  }
+  async clearFailed(jobId: string, body: any) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.productionState === "failed",
+        "NOT_FAILED",
+        "Resolve execution and verification before clearing a failed job.",
+      );
+      requireThat(
+        body.inspected === true &&
+          body.cleared === true &&
+          typeof body.reason === "string" &&
+          body.reason.trim().length >= 8,
+        "RECOVERY_REQUIRED",
+        "Inspect and clear the machine and record the recovery reason.",
+      );
+      const m = s.machines[j.machineId!];
+      if (m.activeJobId !== j.id) return j;
+      m.activeJobId = null;
+      m.paused = true;
+      m.ready = false;
+      m.reason =
+        "Failed job inspected and cleared. Owner may explicitly resume.";
+      record(j, "owner_recovery", body.reason);
+      return j;
+    });
+  }
+  async redeem(jobId: string, code: string) {
+    return mutate(this.store, (s) => {
+      const j = s.jobs[jobId];
+      requireThat(
+        j.fulfillmentState === "ready_for_pickup" &&
+          j.pickup &&
+          !j.pickup.redeemedAt,
+        "PICKUP_USED",
+        "Pickup is unavailable or this code has already been used.",
+      );
+      requireThat(
+        Date.parse(j.pickup.expiresAt) > Date.now(),
+        "PICKUP_EXPIRED",
+        "Pickup code expired; ask the owner for a new code.",
+      );
+      requireThat(
+        typeof code === "string" && j.pickup.code === code.toUpperCase(),
+        "PICKUP_INVALID",
+        "Pickup code does not match.",
+        403,
+      );
+      j.pickup.redeemedAt = now();
+      j.fulfillmentState = "collected";
+      record(
+        j,
+        "collected",
+        "Pickup code redeemed once and owner recorded handoff.",
+      );
+      return j;
+    });
+  }
+  async abort(jobId: string) {
+    const j = await this.job(jobId),
+      s = await this.read(),
+      m = s.machines[j.machineId!];
+    requireThat(j.attemptId, "NOT_DISPATCHED", "No execution attempt exists.");
+    let response;
+    try {
+      response = await this.node.call(
+        "abort",
+        {
+          token: this.node.token(j, m, "abort").token,
+          job_id: j.id,
+          machine_id: m.id,
+          attempt_id: j.attemptId,
+        },
+        m,
+      );
+    } catch {
+      response = {
+        status: "unknown",
+        reason: "Node unavailable; physical stop is unknown.",
+      };
+    }
+    await mutate(this.store, (s) => {
+      s.jobs[jobId].abortStatus = response.status;
+      record(
+        s.jobs[jobId],
+        "abort",
+        `Stop status: ${response.status}. ${response.reason ?? ""}`,
+      );
+    });
+    return { job: await this.job(jobId), abort: response };
+  }
+  async probeAvailability() {
+    const state = await this.read();
+    const candidates = Object.values(state.machines).filter(
+      (m) => m.ready && !m.paused && !m.activeJobId,
+    );
+    const results = await Promise.allSettled(
+      candidates.map(async (machine) => {
+        const status = await this.node.call(
+          "get_status",
+          { machine_id: machine.id },
+          machine,
+        );
+        return { machine, status };
+      }),
+    );
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i],
+        machine = candidates[i];
+      const unavailable =
+        result.status === "rejected" || result.value.status.ready !== true;
+      if (unavailable)
+        await mutate(this.store, (s) => {
+          const current = s.machines[machine.id];
+          if (current.activeJobId || !current.ready) return;
+          current.ready = false;
+          current.paused = true;
+          current.reason =
+            result.status === "rejected"
+              ? "Node disconnected. Reconnect, inspect and explicitly resume."
+              : (result.value.status.reason ??
+                "Node is not ready. Owner inspection and explicit resume required.");
+        });
+    }
+  }
+  async tick() {
+    if (this.busy.has("tick")) return;
+    this.busy.add("tick");
+    try {
+      if (Date.now() - this.lastProbe >= 10000) {
+        this.lastProbe = Date.now();
+        await this.probeAvailability();
+      }
+      const s = await this.read();
+      for (const j of Object.values(s.jobs)) {
+        if (
+          ["dispatched", "running", "verifying"].includes(j.productionState) ||
+          Object.values(s.operations).some(
+            (o) =>
+              o.jobId === j.id && ["pending", "submitting"].includes(o.status),
+          ) ||
+          (j.paymentState === "refund_pending" &&
+            !Object.values(s.operations).some(
+              (o) => o.jobId === j.id && o.kind === "refund",
+            ))
+        )
+          await this.reconcile(j.id);
+      }
+    } finally {
+      this.busy.delete("tick");
+    }
+  }
+}

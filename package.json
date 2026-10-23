@@ -1,0 +1,41 @@
+{
+  "name": "fabrary",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx server/main.ts",
+    "start": "tsx server/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "build": "npm --prefix web run build",
+    "test:external": "npm --prefix integrations run test:live",
+    "check": "node scripts/check.mjs",
+    "setup": "node scripts/setup.mjs",
+    "demo": "node scripts/start.mjs",
+    "test:acceptance": "tsx scripts/acceptance.ts",
+    "diagnose": "tsx scripts/diagnose.ts",
+    "test:browser": "npm --prefix web run test:browser",
+    "spacetime": "node scripts/start-spacetime.mjs",
+    "test:calibration": "tsx scripts/calibration-acceptance.ts"
+  },
+  "dependencies": {
+    "dotenv": "18.0.9",
+    "express": "5.3.0",
+    "multer": "2.5.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/multer": "2.3.0",
+    "@types/node": "26.6.5",
+    "@types/supertest": "7.2.1",
+    "prettier": "3.9.10",
+    "supertest": "7.3.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "recordedAt": "2026-10-23T06:33:41.388477+00:00",
+  "localTime": "2026-10-22T23:33:41.388477-07:00",
+  "sourceStateSha256": "44bac2769cc9e57ecea51f282ac0ee953c48cf8a61a46a7d4c390c8d417d46db",
+  "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
+  "software": {
+    "backendApplicationAndProcessRecovery": 37,
+    "node": 45,
+    "paymentClaudeFixtures": 19,
+    "fetchBridgeUnit": 5,
+    "browserWalletUnit": 8,
+    "actualApplicationBrowser": 3,
+    "apiFixtureBrowser": 2,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "additionalActualChecks": [
+    "SpacetimeDB CAS/access isolation/subscriptions",
+    "Actual Spacetime server restart with identical state hash",
+    "10 consecutive simulated sticker jobs",
+    "3 consecutive simulated Instax jobs",
+    "pass/fail/review/lost-ack fixtures",
+    "actual signed calibration API with simulator",
+    "actual local FastMCP authorized app transaction"
+  ],
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "logHashes": {
+    ".data/backend-final.log": "ae9c6e2c1ed48d2832dbd6bdedaf87107734e3b4cf9fe383006d6ba6858de203",
+    ".data/final-checks.log": "2e3def643be7ae51ece95f24bd1f6219ef5bad533f1cb0f9e63d84ff8a9e5893",
+    "web/evidence/final-browser-report.json": "ecf64e333e95e07e3ca2f5b8c3a43e8b20e910ad88c9a3010c72d53d975c2d57"
+  }
+}

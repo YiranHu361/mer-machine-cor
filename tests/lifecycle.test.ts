@@ -1,0 +1,849 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SqliteStore, mutate } from "../server/store.ts";
+import {
+  initialState,
+  id,
+  now,
+  specSchema,
+  type Job,
+  type Machine,
+  type Operation,
+} from "../server/model.ts";
+import { Service, type Config } from "../server/service.ts";
+import {
+  MockPayment,
+  type PaymentResult,
+  type PaymentBoundary,
+} from "../server/payments.ts";
+import type { NodeBoundary } from "../server/node-client.ts";
+class Device implements NodeBoundary {
+  calls = 0;
+  outcome = "visible";
+  lost = false;
+  status = "completed";
+  token() {
+    return {
+      token: "signed-test-boundary",
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    };
+  }
+  async call(tool: string, input: any) {
+    if (tool === "camera_snapshot")
+      return {
+        frame_url: "http://127.0.0.1:8788/frames/example.png",
+        captured_at: new Date(Date.now() + 1).toISOString(),
+        completion_credible: input.phase === "result",
+        machine_id: input.machine_id,
+        job_id: input.job_id,
+        attempt_id: input.attempt_id,
+        source: "simulation",
+        observation: this.outcome,
+      };
+    if (tool === "run_job") {
+      this.calls++;
+      if (this.lost) throw new Error("ack lost");
+      return { status: "accepted", execution_status: "running" };
+    }
+    if (tool === "get_status")
+      return { execution_status: this.status, completion_credible: true };
+    if (tool === "abort")
+      return { status: "unsupported", reason: "Test boundary cannot stop." };
+    return { calibrated: true };
+  }
+}
+function fixture(payment: PaymentBoundary = new MockPayment()) {
+  const dir = mkdtempSync(join(tmpdir(), "fabrary-domain-"));
+  const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
+  const device = new Device();
+  const config: Config = {
+    mode: "simulation",
+    paymentMode: payment.mode,
+    storeMode: "sqlite-development",
+    assetOrigin: "http://127.0.0.1:4318/assets",
+    secret: "test-secret",
+    quoteMs: 120000,
+    pickupMs: 86400000,
+    ownerCode: "test-owner-code",
+    dataDir: dir,
+    nodeUrl: "http://127.0.0.1:8788",
+  };
+  const service = new Service(store, device, payment, config);
+  return {
+    dir,
+    store,
+    device,
+    service,
+    close() {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+const spec = {
+  assetIds: ["asset_test"],
+  intent: "Club sticker",
+  outputType: "sticker",
+  widthMm: 53,
+  heightMm: 50,
+  quantity: 1,
+  material: "thermal-paper",
+  permission: "authorized",
+  crop: "contain",
+};
+async function draft(
+  f: ReturnType<typeof fixture>,
+  requester = "r1",
+  extra: any = {},
+) {
+  await mutate(f.store, (s) => {
+    s.assets.asset_test = {
+      id: "asset_test",
+      ownerId: requester,
+      path: "test-boundary",
+      url: "/assets/asset_test",
+      sha256: "a".repeat(64),
+      mime: "image/png",
+      width: 20,
+      height: 20,
+      createdAt: now(),
+    };
+    const m = s.machines.phomemo_01;
+    m.calibrated = true;
+    m.listed = true;
+    m.ready = true;
+    m.paused = false;
+  });
+  return f.service.create(
+    requester,
+    { ...spec, ...extra },
+    { id: "asset_test", url: "/assets/asset_test", sha256: "a".repeat(64) },
+  );
+}
+async function approved(
+  f: ReturnType<typeof fixture>,
+  requester = "r1",
+  extra: any = {},
+) {
+  const j = await draft(f, requester, extra);
+  return f.service.approve(j.id, {
+    specVersion: j.specVersion,
+    artifactSha256: j.artifact.sha256,
+  });
+}
+async function paid(f: ReturnType<typeof fixture>) {
+  const j = await approved(f);
+  await f.service.quote(j.id);
+  await f.service.checkout(j.id, "stable-checkout-key");
+  return f.service.job(j.id);
+}
+test("spec validation rejects size/material/quantity; authorized club artwork allowed", () => {
+  assert(specSchema.safeParse(spec).success);
+  for (const change of [
+    { widthMm: 50 },
+    { material: "waterproof" },
+    { quantity: 1.5 },
+    { heightMm: 1 },
+    { quantity: 11 },
+  ])
+    assert(!specSchema.safeParse({ ...spec, ...change }).success);
+  assert(specSchema.safeParse({ ...spec, permission: "unclear" }).success);
+});
+test("approval invalidation requires reapproval and artifact hash binding", async () => {
+  const f = fixture();
+  try {
+    const j = await approved(f);
+    await assert.rejects(
+      f.service.approve(j.id, { specVersion: 1, artifactSha256: "wrong" }),
+      /current preview/,
+    );
+    await f.service.quote(j.id);
+    const revised = await f.service.revise(
+      j.id,
+      { ...spec, quantity: 2 },
+      j.artifact,
+    );
+    assert.equal(revised.approvedSpecHash, undefined);
+    assert.equal(revised.quote, undefined);
+    await assert.rejects(f.service.quote(j.id), /Approve/);
+  } finally {
+    f.close();
+  }
+});
+test("two concurrent reservations yield one winner and no double reservation", async () => {
+  const f = fixture();
+  try {
+    const a = await approved(f);
+    const b = await approved(f);
+    const results = await Promise.allSettled([
+      f.service.quote(a.id),
+      f.service.quote(b.id),
+    ]);
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    const s = await f.service.read();
+    assert.equal(
+      Object.values(s.machines).filter((m) => m.reservation).length,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+test("quote integer items sum, expiry blocks checkout, mandate requires explicit approved cap", async () => {
+  const f = fixture();
+  try {
+    const j = await approved(f);
+    await assert.rejects(f.service.quote(j.id, true), /mandate/);
+    const q = await f.service.quote(j.id);
+    assert.equal(q.quote!.totalCents, 75);
+    assert.equal(q.quote!.ownerCents, 60);
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].quote!.expiresAt = new Date(Date.now() - 1).toISOString();
+    });
+    await assert.rejects(f.service.checkout(j.id, "stable-key"), /expired/);
+    const auto = await approved(f, "r1", {
+      budgetMandate: { enabled: true, capCents: 100 },
+    });
+    await mutate(f.store, (s) => {
+      delete s.machines.phomemo_01.reservation;
+    });
+    assert.equal((await f.service.quote(auto.id, true)).quote!.accepted, true);
+  } finally {
+    f.close();
+  }
+});
+test("unpaid dispatch rejected and repeat checkout collects once", async () => {
+  const f = fixture();
+  try {
+    const j = await approved(f);
+    await assert.rejects(f.service.dispatch(j.id), /confirmed collected/);
+    await f.service.quote(j.id);
+    await Promise.all([
+      f.service.checkout(j.id, "stable-key"),
+      f.service.checkout(j.id, "stable-key"),
+    ]);
+    assert.equal((await f.service.job(j.id)).paymentState, "held");
+    assert.equal(Object.keys((await f.service.read()).operations).length, 1);
+    assert.equal(f.device.calls, 0);
+  } finally {
+    f.close();
+  }
+});
+test("cancel before payment releases reservation; paid cancellation confirms mock refund once", async () => {
+  const f = fixture();
+  try {
+    const a = await approved(f);
+    await f.service.quote(a.id);
+    await f.service.cancel(a.id);
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.reservation,
+      undefined,
+    );
+    const b = await paid(f);
+    await Promise.all([f.service.cancel(b.id), f.service.cancel(b.id)]);
+    assert.equal((await f.service.job(b.id)).paymentState, "refunded");
+    assert.equal(
+      Object.values((await f.service.read()).operations).filter(
+        (o) => o.kind === "refund",
+      ).length,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+test("cancellation racing dispatch has one atomic winner", async () => {
+  for (let i = 0; i < 8; i++) {
+    const f = fixture();
+    try {
+      const j = await paid(f);
+      const r = await Promise.allSettled(
+        i % 2
+          ? [f.service.dispatch(j.id), f.service.cancel(j.id)]
+          : [f.service.cancel(j.id), f.service.dispatch(j.id)],
+      );
+      const done = await f.service.job(j.id);
+      assert.equal(r.filter((x) => x.status === "fulfilled").length, 1);
+      assert(
+        done.attemptId
+          ? done.productionState !== "cancelled"
+          : done.productionState === "cancelled",
+      );
+      assert(f.device.calls <= 1);
+    } finally {
+      f.close();
+    }
+  }
+});
+test("dispatch retries reuse attempt and lost acknowledgment remains review without reprint", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    f.device.lost = true;
+    const first = await f.service.dispatch(j.id);
+    assert.equal(first.productionState, "needs_review");
+    const second = await f.service.dispatch(j.id);
+    assert.equal(second.attemptId, first.attemptId);
+    assert.equal(f.device.calls, 1);
+    assert.equal((await f.service.read()).machines.phomemo_01.paused, true);
+  } finally {
+    f.close();
+  }
+});
+test("complete simulated pass, owner handling, new job before collection, atomic single-use pickup", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    const produced = await f.service.job(j.id);
+    assert.equal(produced.productionState, "produced");
+    assert.equal(produced.paymentState, "released");
+    assert.equal(produced.fulfillmentState, "awaiting_owner");
+    await assert.rejects(f.service.prepare(j.id, { removed: true }), /Confirm/);
+    const ready = await f.service.prepare(j.id, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
+    assert.equal(ready.fulfillmentState, "ready_for_pickup");
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.activeJobId,
+      null,
+    );
+    const next = await approved(f);
+    assert.equal((await f.service.quote(next.id)).productionState, "quoted");
+    const attempts = await Promise.allSettled([
+      f.service.redeem(j.id, ready.pickup!.code),
+      f.service.redeem(j.id, ready.pickup!.code),
+    ]);
+    assert.equal(attempts.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal((await f.service.job(j.id)).fulfillmentState, "collected");
+  } finally {
+    f.close();
+  }
+});
+test("expired pickup rejected", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    const ready = await f.service.prepare(j.id, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].pickup!.expiresAt = new Date(Date.now() - 10).toISOString();
+    });
+    await assert.rejects(f.service.redeem(j.id, ready.pickup!.code), /expired/);
+  } finally {
+    f.close();
+  }
+});
+test("missing output refunds; ambiguity holds; visible operator override releases with reason", async () => {
+  for (const [outcome, production, payment] of [
+    ["missing", "failed", "refunded"],
+    ["ambiguous", "needs_review", "held"],
+  ]) {
+    const f = fixture();
+    try {
+      f.device.outcome = outcome;
+      const j = await paid(f);
+      await f.service.dispatch(j.id);
+      await f.service.reconcile(j.id);
+      const result = await f.service.job(j.id);
+      assert.equal(result.productionState, production);
+      assert.equal(result.paymentState, payment);
+      if (outcome === "ambiguous") {
+        await assert.rejects(
+          f.service.operatorReview(j.id, "pass", ""),
+          /reason/,
+        );
+        const reviewed = await f.service.operatorReview(
+          j.id,
+          "pass",
+          "Owner inspected visible sticker matching preview",
+        );
+        assert.equal(reviewed.paymentState, "released");
+        assert(reviewed.history.some((h) => h.event === "operator_override"));
+      }
+    } finally {
+      f.close();
+    }
+  }
+});
+test("late collection never dispatches expired reservation and refunds", async () => {
+  class Pending extends MockPayment {
+    override async collect(j: Job, o: Operation): Promise<PaymentResult> {
+      return { status: "pending", reference: "pending-ref" };
+    }
+  }
+  const f = fixture(new Pending());
+  try {
+    const j = await approved(f);
+    await f.service.quote(j.id);
+    await f.service.checkout(j.id, "stable-key");
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].quote!.expiresAt = new Date(Date.now() - 1).toISOString();
+    });
+    const op = Object.values((await f.service.read()).operations)[0];
+    await f.service.applyPayment(op.id, {
+      status: "confirmed",
+      reference: "late-collected",
+    });
+    assert.equal((await f.service.job(j.id)).paymentState, "refunded");
+    await assert.rejects(f.service.dispatch(j.id), /confirmed collected/);
+    assert.equal(f.device.calls, 0);
+  } finally {
+    f.close();
+  }
+});
+test("unknown collection stays pending across restart; callback replay cannot allocate twice", async () => {
+  class Unknown extends MockPayment {
+    override async collect(): Promise<PaymentResult> {
+      throw new Error("timeout after possible settlement");
+    }
+  }
+  const f = fixture(new Unknown());
+  try {
+    const j = await approved(f);
+    await f.service.quote(j.id);
+    await f.service.checkout(j.id, "stable-key");
+    assert.equal(
+      (await f.service.job(j.id)).paymentState,
+      "collection_pending",
+    );
+    const op = Object.values((await f.service.read()).operations)[0];
+    assert.equal(op.status, "pending");
+    const restart = new SqliteStore(
+      join(f.dir, "state.sqlite"),
+      initialState(),
+    );
+    assert.equal(
+      (await restart.read()).data.jobs[j.id].paymentState,
+      "collection_pending",
+    );
+    restart.close();
+    await f.service.applyPayment(op.id, {
+      status: "confirmed",
+      reference: "confirmed-ref",
+    });
+    await f.service.applyPayment(op.id, {
+      status: "confirmed",
+      reference: "confirmed-ref",
+    });
+    assert.equal(Object.keys((await f.service.read()).operations).length, 1);
+  } finally {
+    f.close();
+  }
+});
+test("release/refund race is exclusive and stable across replay", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].evidence = { result: "pass" };
+    });
+    await Promise.allSettled([
+      f.service.transfer(j.id, "release"),
+      f.service.transfer(j.id, "refund"),
+    ]);
+    const ops = Object.values((await f.service.read()).operations).filter(
+      (o) => o.kind !== "collection",
+    );
+    assert.equal(ops.length, 1);
+    assert.equal(ops[0].status, "confirmed");
+    await f.service.transfer(j.id, ops[0].kind as "release" | "refund");
+    assert.equal(
+      Object.values((await f.service.read()).operations).filter(
+        (o) => o.kind !== "collection",
+      ).length,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+test("abort response is honest, requester isolation prevents cross-job access", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    await assert.rejects(
+      f.service.job(j.id, { id: "stranger", role: "requester" }),
+      /different account/,
+    );
+    await f.service.dispatch(j.id);
+    const a = await f.service.abort(j.id);
+    assert.equal(a.abort.status, "unsupported");
+    assert.notEqual(a.job.productionState, "cancelled");
+  } finally {
+    f.close();
+  }
+});
+
+test("stale, mismatched or noncredible frames require review and preserve hold", async () => {
+  for (const kind of ["stale", "mismatched", "noncredible"]) {
+    const f = fixture();
+    try {
+      const original = f.device.call.bind(f.device);
+      f.device.call = async (tool, input) => {
+        const response = await original(tool, input);
+        if (tool === "camera_snapshot" && input.phase === "result") {
+          if (kind === "stale")
+            response.captured_at = "2020-01-01T00:00:00.000Z";
+          if (kind === "mismatched") response.job_id = "other-job";
+          if (kind === "noncredible") response.completion_credible = false;
+        }
+        return response;
+      };
+      const j = await paid(f);
+      await f.service.dispatch(j.id);
+      await f.service.reconcile(j.id);
+      assert.equal((await f.service.job(j.id)).productionState, "needs_review");
+      assert.equal((await f.service.job(j.id)).paymentState, "held");
+    } finally {
+      f.close();
+    }
+  }
+});
+test("definite prerequisite failure retries same transfer allocation, ambiguous submission never does", async () => {
+  class Payments extends MockPayment {
+    missing = true;
+    attempts = 0;
+    override async transfer(j: Job, m: Machine, op: Operation) {
+      this.attempts++;
+      if (this.missing) throw new Error("OWNER_ADDRESS_REQUIRED");
+      return super.transfer(j, m, op);
+    }
+  }
+  const payment = new Payments(),
+    f = fixture(payment);
+  try {
+    const j = await paid(f);
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].evidence = { result: "pass" };
+    });
+    await f.service.transfer(j.id, "release");
+    const op = Object.values((await f.service.read()).operations).find(
+      (o) => o.kind === "release",
+    )!;
+    assert.equal(op.status, "failed");
+    assert.equal(op.retryable, true);
+    assert.equal((await f.service.job(j.id)).paymentState, "release_pending");
+    payment.missing = false;
+    await f.service.reconcile(j.id);
+    assert.equal((await f.service.job(j.id)).paymentState, "released");
+    assert.equal(payment.attempts, 2);
+    assert.equal(
+      Object.values((await f.service.read()).operations).filter(
+        (o) => o.kind === "release",
+      ).length,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+test("explicit calibration intent journals once and normal jobs cannot masquerade as calibration", async () => {
+  const f = fixture();
+  try {
+    const j = await draft(f, "team_owner");
+    const artifact = j.artifact;
+    const cal = await f.service.startCalibration(
+      "phomemo_01",
+      "team_owner",
+      spec,
+      artifact,
+      "calibration-stable-key",
+      true,
+    );
+    assert.match(cal.attemptId!, /^calibration_attempt_/);
+    const again = await f.service.startCalibration(
+      "phomemo_01",
+      "team_owner",
+      spec,
+      artifact,
+      "calibration-stable-key",
+      true,
+    );
+    assert.equal(again.attemptId, cal.attemptId);
+    await assert.rejects(
+      f.service.startCalibration(
+        "phomemo_01",
+        "team_owner",
+        { ...spec, crop: "cover" },
+        artifact,
+        "calibration-stable-key",
+        true,
+      ),
+      /already binds/,
+    );
+    assert.equal(Object.keys((await f.service.read()).calibrations!).length, 1);
+    await assert.rejects(
+      f.service.startCalibration(
+        "phomemo_01",
+        "team_owner",
+        spec,
+        artifact,
+        "another-stable-key",
+        false,
+      ),
+      /Confirm loaded media/,
+    );
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.calibrated,
+      false,
+    );
+  } finally {
+    f.close();
+  }
+});
+test("failed physical result requires recorded clearing before next job", async () => {
+  const f = fixture();
+  try {
+    f.device.outcome = "missing";
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    await assert.rejects(
+      f.service.clearFailed(j.id, {
+        inspected: true,
+        cleared: false,
+        reason: "Inspected missing output",
+      }),
+      /Inspect and clear/,
+    );
+    await f.service.clearFailed(j.id, {
+      inspected: true,
+      cleared: true,
+      reason: "Inspected missing output and cleared paper path",
+    });
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.activeJobId,
+      null,
+    );
+    assert.equal((await f.service.read()).machines.phomemo_01.paused, true);
+    assert(
+      (await f.service.job(j.id)).history.some(
+        (h) => h.event === "owner_recovery",
+      ),
+    );
+  } finally {
+    f.close();
+  }
+});
+test("content review allows documented authorization and requires new requester approval", async () => {
+  const f = fixture();
+  try {
+    const j = await draft(f, "r1", { permission: "unclear" });
+    await assert.rejects(
+      f.service.approve(j.id, {
+        specVersion: 1,
+        artifactSha256: j.artifact.sha256,
+      }),
+      /operator/,
+    );
+    const reviewed = await f.service.operatorReview(
+      j.id,
+      "pass",
+      "Club officer confirmed this is their own authorized design",
+    );
+    assert.equal(reviewed.productionState, "specified");
+    assert.equal(reviewed.specVersion, 2);
+    assert.equal(reviewed.approvedSpecHash, undefined);
+    await assert.rejects(f.service.quote(j.id), /Approve/);
+  } finally {
+    f.close();
+  }
+});
+
+test("replaying an old failure recovery cannot clear a new machine execution", async () => {
+  const f = fixture();
+  try {
+    f.device.outcome = "missing";
+    const old = await paid(f);
+    await f.service.dispatch(old.id);
+    await f.service.reconcile(old.id);
+    await f.service.clearFailed(old.id, {
+      inspected: true,
+      cleared: true,
+      reason: "Inspected failed output and cleared the paper path",
+    });
+    f.device.outcome = "visible";
+    const next = await paid(f);
+    await f.service.dispatch(next.id);
+    const before = (await f.service.read()).machines.phomemo_01;
+    await f.service.clearFailed(old.id, {
+      inspected: true,
+      cleared: true,
+      reason: "Replayed old recovery must not affect new execution",
+    });
+    const after = (await f.service.read()).machines.phomemo_01;
+    assert.equal(after.activeJobId, next.id);
+    assert.equal(after.paused, before.paused);
+  } finally {
+    f.close();
+  }
+});
+test("uncertain transfer reconciliation never submits a replacement", async () => {
+  class UnknownTransfer extends MockPayment {
+    transfers = 0;
+    override async transfer(): Promise<PaymentResult> {
+      this.transfers++;
+      throw new Error("Connection lost around possible broadcast");
+    }
+    override async reconcile(
+      j: Job,
+      m: Machine,
+      o: Operation,
+    ): Promise<PaymentResult> {
+      return {
+        status: "pending",
+        reference: o.reference ?? "uncertain-existing-ref",
+        reason: "Unknown transaction; no replacement",
+      };
+    }
+  }
+  const p = new UnknownTransfer(),
+    f = fixture(p);
+  try {
+    const j = await paid(f);
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].evidence = { result: "pass" };
+    });
+    await f.service.transfer(j.id, "release");
+    assert.equal((await f.service.job(j.id)).paymentState, "release_pending");
+    await f.service.reconcile(j.id);
+    await f.service.reconcile(j.id);
+    await f.service.transfer(j.id, "release");
+    assert.equal(p.transfers, 1);
+    assert.equal((await f.service.job(j.id)).paymentState, "release_pending");
+  } finally {
+    f.close();
+  }
+});
+
+test("disconnected idle node removes availability and requires explicit owner recovery", async () => {
+  const f = fixture();
+  try {
+    await draft(f);
+    f.device.call = async () => {
+      throw new Error("Configured node disconnected");
+    };
+    await f.service.probeAvailability();
+    const m = (await f.service.read()).machines.phomemo_01;
+    assert.equal(m.ready, false);
+    assert.equal(m.paused, true);
+    assert.match(m.reason, /disconnected/);
+  } finally {
+    f.close();
+  }
+});
+
+test("operator can resolve an unknown settlement only with a confirmed matching existing transfer", async () => {
+  const knownHash = "0x" + "a".repeat(64);
+  const payment: PaymentBoundary = {
+    mode: "testnet",
+    async collect(j, op) {
+      return {
+        status: "pending",
+        reference: "test-authorization-nonce",
+        receipt: {
+          mode: "testnet",
+          kind: "collection",
+          status: "pending",
+          reference: "test-authorization-nonce",
+          payer: "test-payer",
+          amountCents: j.quote!.totalCents,
+        },
+      };
+    },
+    async transfer() {
+      throw new Error("No transfer expected in this fixture");
+    },
+    async reconcile(j, m, op) {
+      return {
+        status:
+          op.receipt?.transactionHash === knownHash ? "confirmed" : "failed",
+        reference: "test-authorization-nonce",
+        transactionHash: op.receipt?.transactionHash,
+        receipt: {
+          ...op.receipt,
+          status:
+            op.receipt?.transactionHash === knownHash ? "confirmed" : "failed",
+        },
+      };
+    },
+  };
+  const f = fixture(payment);
+  try {
+    const j = await approved(f);
+    await f.service.quote(j.id);
+    await f.service.checkout(j.id, "stable-key");
+    const op = Object.values((await f.service.read()).operations)[0];
+    await assert.rejects(
+      f.service.attachConfirmedPaymentReference(
+        j.id,
+        op.id,
+        "0x" + "b".repeat(64),
+        "Operator supplied a candidate settlement transaction",
+      ),
+      /not confirmed/,
+    );
+    assert.equal(
+      (await f.service.job(j.id)).paymentState,
+      "collection_pending",
+    );
+    assert.equal(
+      (await f.service.read()).operations[op.id].transactionHash,
+      undefined,
+    );
+    const confirmed = await f.service.attachConfirmedPaymentReference(
+      j.id,
+      op.id,
+      knownHash,
+      "Facilitator provided the confirmed matching transfer",
+    );
+    assert.equal(confirmed.paymentState, "held");
+    assert(
+      confirmed.history.some(
+        (h) => h.event === "operator_payment_reconciliation",
+      ),
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("failed trial economics never count quoted owner payout or platform fee as received", async () => {
+  const f = fixture();
+  try {
+    f.device.outcome = "missing";
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    const measured = await f.service.recordEconomics(j.id, {
+      consumablesCents: 20,
+      machineSeconds: 30,
+      handlingSeconds: 60,
+      failedAttempts: 1,
+      apiCostCents: 1,
+      machineCostCents: 2,
+    });
+    assert.equal(measured.economics!.paymentStateAtRecording, "refunded");
+    assert.equal(measured.economics!.ownerPayoutCents, 0);
+    assert.equal(measured.economics!.platformFeeCents, 0);
+    assert.equal(measured.economics!.quotedOwnerPayoutCents, 60);
+    assert.equal(measured.economics!.ownerNetCents, -22);
+    assert.equal(measured.economics!.platformMarginCents, -1);
+  } finally {
+    f.close();
+  }
+});

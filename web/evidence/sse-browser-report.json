@@ -1,0 +1,155 @@
+{
+  "config": {
+    "argv": [
+      "/opt/homebrew/Cellar/node/25.8.1_1/bin/node",
+      "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/node_modules/.bin/playwright",
+      "test",
+      "--grep",
+      "live subscription"
+    ],
+    "configFile": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/playwright.config.ts",
+    "rootDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "snapshotDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+        "timeout": 90000,
+        "use": {
+          "baseURL": "http://127.0.0.1:4317",
+          "trace": "off",
+          "actionTimeout": 20000,
+          "navigationTimeout": 20000,
+          "screenshot": "only-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "evidence/sse-browser-report.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "workflow.spec.ts",
+      "file": "workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "live subscription updates the open owner dashboard with polling disabled",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 446,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T06:04:54.019Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-121331f264c95c8918d3",
+          "file": "workflow.spec.ts",
+          "line": 462,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-23T06:04:53.770Z",
+    "duration": 799.2639999999999,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

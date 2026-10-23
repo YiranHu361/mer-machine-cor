@@ -1,0 +1,13 @@
+{
+  "id": "owner-reviewed-calibration-model",
+  "sha256": "REPLACE_WITH_THE_ACTUAL_PREPARED_3MF_SHA256",
+  "machineModel": "Bambu Lab A1 mini",
+  "reviewed": false,
+  "widthMm": 30,
+  "heightMm": 20,
+  "depthMm": 10,
+  "color": "white",
+  "material": "pla",
+  "plateNumber": 1,
+  "estimatedSeconds": 300
+}

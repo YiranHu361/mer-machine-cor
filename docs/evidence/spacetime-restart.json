@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-23T06:10:07.539Z",
+  "status": "PASS",
+  "version": "2.13.0",
+  "scope": "Actual Spacetime standalone stop, persistent data/runtime relocation, restart and identical authoritative state",
+  "before": {
+    "version": 867,
+    "stateSha256": "af8ca05fae1e5d5a9d5ff07e10e210823e881dc82f067d0e0b6900e53269241c",
+    "jobs": 51,
+    "machines": 3
+  },
+  "after": {
+    "version": 867,
+    "stateSha256": "af8ca05fae1e5d5a9d5ff07e10e210823e881dc82f067d0e0b6900e53269241c",
+    "jobs": 51,
+    "machines": 3
+  },
+  "privateStateExposed": false
+}

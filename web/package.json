@@ -1,0 +1,31 @@
+{
+  "name": "fabrary-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4317 --strictPort",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test:browser": "playwright test",
+    "format": "prettier --write src tests unit vite.config.ts playwright.config.ts",
+    "test:unit": "node --test unit/*.test.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "5.3.0",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "viem": "2.57.10"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/react": "19.1.13",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.3",
+    "prettier": "3.9.10",
+    "typescript": "5.9.2",
+    "vite": "7.3.7"
+  }
+}

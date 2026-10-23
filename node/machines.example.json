@@ -1,0 +1,46 @@
+{
+  "machines": [
+    {
+      "id": "phomemo_01",
+      "model": "Phomemo M02Pro",
+      "mode": "hardware",
+      "paired": false,
+      "ownerReady": false,
+      "bluetoothAddress": "",
+      "rfcommChannel": null,
+      "maxJobSeconds": 120,
+      "cameraCommand": []
+    },
+    {
+      "id": "instax_01",
+      "model": "Instax Mini Link 3",
+      "mode": "hardware",
+      "paired": false,
+      "ownerReady": false,
+      "bluetoothAddress": "",
+      "serviceUUID": "",
+      "writeCharUUID": "",
+      "notifyCharUUID": "",
+      "compatibilityValidated": false,
+      "flipVertical": true,
+      "developmentSeconds": 90,
+      "maxJobSeconds": 240,
+      "cameraCommand": []
+    },
+    {
+      "id": "bambu_01",
+      "model": "Bambu Lab A1 mini",
+      "mode": "hardware",
+      "paired": false,
+      "ownerReady": false,
+      "host": "",
+      "serial": "",
+      "accessCodeEnv": "FABRARY_BAMBU_ACCESS_CODE",
+      "lanOnly": false,
+      "developerMode": false,
+      "maxJobSeconds": 900,
+      "cameraCommand": [],
+      "catalog": []
+    }
+  ]
+}

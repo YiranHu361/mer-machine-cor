@@ -1,0 +1,16 @@
+[
+  {
+    "id": "team_prepared_object",
+    "name": "Owner inspected decorative model",
+    "reviewed": true,
+    "file": "/absolute/private/path/to/inspected.3mf",
+    "previewFile": "/absolute/private/path/to/matching-preview.png",
+    "sha256": "REPLACE_WITH_SHA256_OF_INSPECTED_3MF",
+    "widthMm": 30,
+    "heightMm": 30,
+    "depthMm": 5,
+    "material": "pla",
+    "color": "Loaded single color",
+    "estimatedSeconds": 180
+  }
+]
