@@ -301,12 +301,25 @@ Private baseline diagnostics reproduced older callbacks, identical acknowledgeme
 
 [Current checkpoint](evidence/overnight-eighth-qa.json), [full report](test-report.md), [320px fresh calibration preparation](../web/evidence/overnight-calibration-retry-320.png), [320px requester drafts](../web/evidence/overnight-requester-drafts-320.png), [reconnected actual owner view](../web/evidence/overnight-eighth-sse-reconnected.png). Final browser reports are `web/evidence/overnight-eighth-*-browser.json`.
 
+## Verified ninth checkpoint, 05:39 Pacific
+
+Continuation from `a8d46f3` binds new device authorizations to explicit simulation/hardware mode and private device configuration. Source fingerprint: `a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89`.
+
+- The TypeScript signer includes authenticated `expected_mode` for dispatch, calibration, camera and abort; malformed saved mode cannot mint an authorization. Python rejects new missing/malformed/mismatched mode before artifact fetch, capture or stop, rechecks after asynchronous I/O, and fences the queued worker before any adapter call.
+- Camera/stop for a journaled attempt also require its saved private device/capture configuration. An old same-mode attempt cannot capture a replacement camera or stop a replacement transport. Changed capture context cannot publish frames under old metadata. Exact authenticated durable legacy acceptance replay remains read-only without a new fetch, worker or output.
+- **180 backend cases and 89 Python node cases pass**, including 12 new signing and 22 node regressions. Hardware in these regressions is a fake adapter, with zero physical I/O. Backend strict types pass.
+- Actual retained Spacetime/simulation/mock backend and node were restarted together. Native SSE reconnected with polling disabled; one explicit signed simulation calibration, exact replay, bound pixels, inspection and resume passed. Three actual-app workflow cases then passed in each of Chromium, Firefox and WebKit.
+- Web source, integrations and bundle are unchanged from checkpoint eight. Its 182 full browser cases per engine, 45 accessibility scans, 29 web units and 25+5 integration fixtures remain retained evidence; they were not rerun for volume. Across current backend/node and unchanged retained suites, **510 unique cases** pass. Nine affected workflow reruns are supplemental, not new cases. Served bundle bytes match; configured-secret scan passes and private configuration remains ignored/0600.
+
+[Checkpoint and provenance](evidence/overnight-ninth-qa.json), [signed simulation calibration](evidence/overnight-ninth-calibration-api.json), [actual reconnect](evidence/overnight-ninth-sse-reconnect.json), [reconnected view](../web/evidence/overnight-ninth-sse-reconnected.png). Current workflow reports are `web/evidence/overnight-ninth-*-workflow.json`; unchanged full UI reports remain checkpoint eight.
+
+This is partial software completion. The isolated customer404/refund race and truthful calibration retirement/error-focus gaps below remain actionable; work continues through 9:00 a.m. Pacific. No physical job, funded transaction or live provider is claimed.
+
 ## Next useful audits
 
-1. Ninth repair is proven and privately prepared: current simulation tokens can reach independently ready hardware-mode fake adapters, and an old same-mode attempt can use a replacement camera/stop configuration. Bind every new authorization to explicit mode, recheck after asynchronous work and before the adapter, and gate old-attempt camera/stop by its saved private configuration. Preserve exact durable legacy replay as read-only. Proofs: `.data/cross-mode-token-audit.json` and `.data/node-configuration-side-effect-audit.json`; no physical I/O occurred.
-2. Tenth recovery gaps are proven in isolated node/UI fixtures: completed execution with unusable output cannot truthfully resolve as execution failure; saved intent with a node404 cannot retire; and a held artifact fetch can accept after that404. Customer operator-review absence inference needs the same atomic cancellation barrier. Add a distinct rejected inspection disposition and durable signed cancellation before acceptance, preserving immutable execution and uncertainty. Scope error recovery focus so newer owner input is respected. Proofs: `.data/calibration-node-recovery-audit.json`, `.data/calibration-finalize-focus-audit.json`; no physical I/O occurred.
-3. Preserve new conservative unknown-request guards, independently review any concrete repair, rerun affected checks, and retain screenshots/evidence. Avoid unchanged reruns for volume.
-4. At 9:00 a.m. Pacific perform final relevant health/source/evidence checks, leave the morning handoff and disable heartbeat. Do not archive.
+1. Tenth recovery gaps are proven in isolated node/UI fixtures: completed execution with unusable output cannot truthfully resolve as execution failure; saved intent with a node404 cannot retire; and a held artifact fetch can accept after that404. Customer operator-review absence inference needs the same atomic cancellation barrier. Add a distinct rejected inspection disposition and durable signed cancellation before acceptance, preserving immutable execution and uncertainty. Scope error recovery focus so newer owner input is respected. Proofs: `.data/calibration-node-recovery-audit.json`, `.data/calibration-finalize-focus-audit.json`; no physical I/O occurred.
+2. Preserve new conservative unknown-request guards, independently review any concrete repair, rerun affected checks, and retain screenshots/evidence. Avoid unchanged reruns for volume.
+3. At 9:00 a.m. Pacific perform final relevant health/source/evidence checks, leave the morning handoff and disable heartbeat. Do not archive.
 
 ## Morning handoff requirements
 

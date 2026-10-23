@@ -1,0 +1,163 @@
+{
+  "recordedAt": "2026-10-23T12:39:55.418Z",
+  "sourceStateSha256": "a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "cutoff": "2026-10-23T16:00:00Z",
+  "software": {
+    "backend": 180,
+    "node": 89,
+    "newSigningCases": 12,
+    "newNodeCases": 22,
+    "currentActualBrowserWorkflow": [
+      {
+        "engine": "chromium",
+        "report": "web/evidence/overnight-ninth-chromium-workflow.json",
+        "reportSha256": "52639104914759b2f0a8df500497988eb0aba831db888953bcb657db1e53343c",
+        "startTime": "2026-10-23T12:37:46.152Z",
+        "duration": 10162.446,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      {
+        "engine": "firefox",
+        "report": "web/evidence/overnight-ninth-firefox-workflow.json",
+        "reportSha256": "8df86483ff8f30e3c65d51e1a505b6c32be62f8e13675a490f0019cdc2a1d33c",
+        "startTime": "2026-10-23T12:38:37.716Z",
+        "duration": 14613.412,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      {
+        "engine": "webkit",
+        "report": "web/evidence/overnight-ninth-webkit-workflow.json",
+        "reportSha256": "2ba18d7470dd55d4fe48b6d2da98fdda312b4a94d7b68eface8e87c847d30a72",
+        "startTime": "2026-10-23T12:38:52.693Z",
+        "duration": 11743.971000000001,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      }
+    ],
+    "retainedPaymentClaude": 25,
+    "retainedFetch": 5,
+    "retainedWebUnits": 29,
+    "retainedFullBrowserCasesPerEngine": 182,
+    "retainedFullBrowserCheckpoint": "docs/evidence/overnight-eighth-qa.json",
+    "uniqueCasesAcrossCurrentAndUnchangedRetainedSuites": 510,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "provenance": "Ninth source changes only TypeScript signer, Python mode/private configuration gates and their tests/fixture tokens. Final complete backend and node suites ran after freeze. Web, integrations and production bundle remain identical to the eighth checkpoint; unchanged full182-case UI suites/45 accessibility scans are retained. Three actual-app workflow cases were rerun in each engine after real backend/node activation. Supplemental runs do not add unique cases.",
+  "actualLocalChecks": {
+    "runtime": {
+      "checkedAt": "2026-10-23T12:39:19.230Z",
+      "sourceStateSha256": "a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "calibration": {
+      "at": "2026-10-23T12:37:45.806Z",
+      "status": "PASS",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "machineId": "phomemo_01",
+      "calibrationId": "calibration_4e3f21e3-675b-4840-b034-e83a8ace0f05",
+      "attemptId": "calibration_attempt_b3104c07-86a1-4ba9-bb5d-1321de9eef8a",
+      "scope": "Actual API upload/preparation, signed mode-bound finite simulation calibration accepted by the newly strict Python node, exact replay/status/frame pixels/inspection and explicit resume",
+      "explicitSimulationCalibrations": 1,
+      "physicalJobs": 0,
+      "paymentOperations": 0,
+      "physicalCalibration": "NOT_RUN"
+    },
+    "reconnect": {
+      "at": "2026-10-23T12:37:38.429Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 3681,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    }
+  },
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 273,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "finalBuild": {
+    "indexSha256": "0b8e46aebccdbac56a9b7951037aa54b63f54cdef80b47c8cefee684b4ecb473",
+    "script": "/assets/index-D06aCYYz.js",
+    "stylesheet": "/assets/index-BohYXjuw.css"
+  },
+  "logHashes": {
+    ".data/overnight-ninth-backend-final.log": "33ecb700648a6d7f7401c018e4bcc74cf9cbf1803b44a2ac8da993c6f5eb18aa",
+    ".data/node-mode-binding-production.log": "04921ec86b6b92773702c88174b258b937610a761cba65a41b53a86f15affb20",
+    ".data/overnight-ninth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-ninth-calibration-acceptance-final.log": "ffe34ee39a72e58b8085da7d0555b42ce9d529884c8e253fbef84acc81bede7f",
+    ".data/overnight-ninth-chromium-workflow.log": "a466836221cf9d8f12f3267b05d732b2a0bd0677ae5bdfef656316d28ee0f3be",
+    ".data/overnight-ninth-firefox-workflow.log": "d2d24f236028bc7a92d0d1372ae14ba0ef6e43328dee6e82ada2dcbaf75b7dfd",
+    ".data/overnight-ninth-webkit-workflow.log": "1a0bf728f935c07eef40dcbe79b9d101fff89e9fc5e56cf27a4c66fb5be372fa"
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "changes": [
+    "Signed explicit expected_mode for every new dispatch/calibration/camera/abort authorization; malformed stored mode cannot mint a token.",
+    "Python requires exact current mode before new acceptance/capture/stop, after artifact/camera awaits and before queued adapter execution.",
+    "Old-attempt camera/stop require the journaled private device/capture configuration; stale frames cannot publish after context changes.",
+    "Exact authenticated durable legacy acceptance replay remains read-only with no new worker, fetch or output."
+  ],
+  "remainingScope": [
+    "Repair proven transient node404/refund race with atomic signed cancellation tombstones.",
+    "Provide truthful completed-but-unusable calibration rejection and scoped local error focus.",
+    "Required physical devices, funded testnet, Agentverse and live Claude remain unavailable."
+  ]
+}

@@ -16,7 +16,7 @@ import httpx
 from PIL import Image, ImageDraw, ImageFilter
 from .adapters import Bambu, adapter_for, capture_camera, normalized_catalog_color
 from .journal import Journal, now
-from .security import NodeError, canonical, validate_artifact_url, verify_token
+from .security import NodeError, canonical, require_expected_mode, validate_artifact_url, verify_token
 
 DEFAULT_MACHINES = [
     {"id": "phomemo_01", "model": "Phomemo M02Pro", "outputType": "sticker", "material": "thermal-paper"},
@@ -119,6 +119,11 @@ class NodeService:
         if not isinstance(machine_id, str) or machine_id not in self.machines:
             raise NodeError("unknown_machine", "Machine is not configured on this node", 404)
         return self.machines[machine_id]
+
+    def require_configuration_binding(self, machine_id: str, binding: str | None) -> None:
+        current = self.journal.machine(machine_id).get("configurationBinding")
+        if not isinstance(binding, str) or not binding or binding != current:
+            raise NodeError("configuration_binding", "Attempt belongs to another device or capture configuration; this authorization cannot be applied to the current setup", 403)
 
     def stop_pending(self, machine_id: str) -> bool:
         stop = self.stop_tasks.get(machine_id)
@@ -268,7 +273,7 @@ class NodeService:
             raise NodeError("request", "Run request fields have invalid types", 422)
         request = {"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id,
                    "artifact_sha256": artifact_sha256, "parameters": parameters, "expires_at": expires_at}
-        verify_token(token, self.token_secret, scope=_scope, expected=request)
+        payload = verify_token(token, self.token_secret, scope=_scope, expected=request)
         config = self.machine(machine_id)
         if not all(isinstance(value, str) and 1 <= len(value) <= 128 for value in (job_id, attempt_id)) or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
             raise NodeError("request", "Invalid job, attempt or artifact hash", 422)
@@ -278,11 +283,13 @@ class NodeService:
             if existing["binding"] != binding or existing["scope"] != _scope:
                 raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
             return self.acceptance(existing, False)
-        self.validate_acceptance_policy(machine_id, parameters, _scope)
+        expected_mode = require_expected_mode(payload, config["mode"])
+        state = self.validate_acceptance_policy(machine_id, parameters, _scope)
+        configuration_binding = state["configurationBinding"]
         if config["outputType"] == "3d" and config["mode"] == "hardware":
             self.adapters[machine_id].catalog_entry(artifact_sha256, parameters)
         path = await self.fetch_artifact(artifact_url, artifact_sha256, config, parameters)
-        verify_token(token, self.token_secret, scope=_scope, expected=request)
+        payload = verify_token(token, self.token_secret, scope=_scope, expected=request)
         # Another identical request may have finished downloading first. Replay
         # its durable acceptance before checking the now-busy machine policy.
         existing = self.journal.get(attempt_id)
@@ -291,6 +298,12 @@ class NodeService:
             if existing["binding"] != binding or existing["scope"] != _scope:
                 raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
             return self.acceptance(existing, False)
+        # Mode and the private device/camera binding must still describe the
+        # configuration authorized before download. Exact durable replay above
+        # stays read-only, including for older tokens and configurations.
+        config = self.machine(machine_id)
+        require_expected_mode(payload, config["mode"])
+        self.require_configuration_binding(machine_id, configuration_binding)
         # Re-read every policy after the network await. Acceptance and saving
         # this fresh state are synchronous in one event-loop turn.
         state = self.validate_acceptance_policy(machine_id, parameters, _scope)
@@ -300,7 +313,7 @@ class NodeService:
             if _scope == "calibration":
                 state.update(calibrated=False, paused=True, ready=False, reason="Calibration attempt in progress; owner inspection required")
             self.journal.save_machine(machine_id, state)
-            self.tasks[attempt_id] = asyncio.create_task(self._execute(row, path, parameters))
+            self.tasks[attempt_id] = asyncio.create_task(self._execute(row, path, parameters, expected_mode))
             if row["outcome"] == "lost_ack":
                 raise NodeError("simulated_lost_ack", "Simulation: acknowledgment lost after durable acceptance; reconcile this attempt", 503)
         return self.acceptance(row, created)
@@ -310,8 +323,16 @@ class NodeService:
         return {"status": "accepted" if created else "already_accepted", "execution_status": row["status"],
             "attempt_id": row["attempt_id"], "reason": row["reason"], "completion_credible": bool(row["completion_credible"])}
 
-    async def _execute(self, row: dict, path: Path, parameters: dict) -> None:
+    async def _execute(self, row: dict, path: Path, parameters: dict, expected_mode: str) -> None:
         machine_id, attempt_id = row["machine_id"], row["attempt_id"]
+        if self.journal.get(attempt_id)["status"] != "accepted":
+            return
+        try:
+            require_expected_mode({"expected_mode": expected_mode}, self.machine(machine_id)["mode"])
+            self.require_configuration_binding(machine_id, row["configuration_binding"])
+        except NodeError:
+            self.journal.update(attempt_id, "failed", reason="Device or capture configuration changed before any physical start; no device operation was issued")
+            return
         # FULL-sync commit MUST complete before anything can reach hardware.
         self.journal.update(attempt_id, "running", artifact_path=str(path))
         if self.journal.get(attempt_id)["status"] != "running":
@@ -334,13 +355,17 @@ class NodeService:
 
     async def camera_snapshot(self, *, token: str, machine_id: str, job_id: str,
                               attempt_id: str, phase: str = "result") -> dict:
-        verify_token(token, self.token_secret, scope="camera", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
+        payload = verify_token(token, self.token_secret, scope="camera", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
         config = self.machine(machine_id)
+        require_expected_mode(payload, config["mode"])
+        configuration_binding = self.journal.machine(machine_id).get("configurationBinding")
         if not isinstance(phase, str) or phase not in {"baseline", "result"}:
             raise NodeError("camera_phase", "Camera phase must be baseline or result", 422)
         row = self.journal.get(attempt_id)
         if row and (row["machine_id"] != machine_id or row["job_id"] != job_id):
             raise NodeError("attempt_binding", "Camera context is not associated with this attempt", 403)
+        if row:
+            self.require_configuration_binding(machine_id, row["configuration_binding"])
         if phase == "result" and not row:
             raise NodeError("unknown_attempt", "Result capture requires a journaled attempt", 404)
         if phase == "result" and row["status"] not in {"completed", "failed", "uncertain"}:
@@ -373,6 +398,10 @@ class NodeService:
         else:
             data = await capture_camera(config)
             result["captured_at"] = now()
+        # A capture may finish after a configuration change. Never publish its
+        # bytes under metadata for a different mode, device, or camera setup.
+        require_expected_mode(payload, self.machine(machine_id)["mode"])
+        self.require_configuration_binding(machine_id, configuration_binding)
         frame_id = uuid.uuid4().hex + ".png"
         # Normalize camera bytes after validation; source metadata stays truthful.
         with Image.open(io.BytesIO(data)) as image:
@@ -385,13 +414,15 @@ class NodeService:
         return result
 
     async def abort(self, *, token: str, machine_id: str, job_id: str, attempt_id: str) -> dict:
-        verify_token(token, self.token_secret, scope="abort", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
+        payload = verify_token(token, self.token_secret, scope="abort", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
         config = self.machine(machine_id)
+        require_expected_mode(payload, config["mode"])
         row = self.journal.get(attempt_id)
         if not row or row["machine_id"] != machine_id or row["job_id"] != job_id:
             raise NodeError("attempt_binding", "Abort context is not associated with this attempt", 403)
         if row["status"] in {"completed", "failed"}:
             return {"status": "unknown", "reason": "Recorded execution is already terminal; no stop was issued"}
+        self.require_configuration_binding(machine_id, row["configuration_binding"])
         if row["status"] == "accepted":
             # No worker has committed a possible physical start. Fence it before
             # yielding, and never send a stop for a different device operation.

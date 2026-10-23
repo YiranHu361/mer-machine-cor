@@ -21,8 +21,8 @@ async def wait_done(service, attempt="attempt_1"):
     return service.get_status("phomemo_01", "job_1", attempt)
 
 
-def camera_args(scope="camera", machine="phomemo_01", job="job_1", attempt="attempt_1"):
-    payload = {"scope": scope, "machine_id": machine, "job_id": job, "attempt_id": attempt, "expires_at": int(time.time())+300}
+def camera_args(scope="camera", machine="phomemo_01", job="job_1", attempt="attempt_1", mode="simulation"):
+    payload = {"scope": scope, "expected_mode": mode, "machine_id": machine, "job_id": job, "attempt_id": attempt, "expires_at": int(time.time())+300}
     return {k: payload[k] for k in ("machine_id", "job_id", "attempt_id")} | {"token": sign_token(payload, KEY)}
 
 
@@ -327,13 +327,13 @@ async def test_transport_only_calibration_requires_physical_inspection_context(t
     assert service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected the physical test pattern")["status"] == "blocked"
     async def camera(config): return artifact
     monkeypatch.setattr(service_module,"capture_camera",camera)
-    frame=await service.camera_snapshot(**camera_args())
+    frame=await service.camera_snapshot(**camera_args(mode="hardware"))
     assert frame["source"] == "camera"  # mocked boundary, never counted as live.
     assert service.calibrate("phomemo_01",True,"attempt_1",reason="ok")["status"] == "blocked"
     with service.journal.transaction():
         service.journal.db.execute("UPDATE frames SET captured_at='2000-01-01T00:00:00Z'")
     assert service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected the physical test pattern")["status"] == "blocked"
-    await service.camera_snapshot(**camera_args())
+    await service.camera_snapshot(**camera_args(mode="hardware"))
     result=service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected print, verified alignment and all four image corners")
     assert result["status"] == "passed" and result["source"] == "owner-inspection"
     assert service.journal.machine("phomemo_01")["calibrated"]
@@ -515,7 +515,7 @@ async def test_hardware_abort_before_worker_starts_cannot_start_later(service, a
     request = request_for(artifact)
     await service.run_job(**request)
     service.machines["phomemo_01"]["mode"] = "hardware"
-    result = await service.abort(**camera_args(scope="abort"))
+    result = await service.abort(**camera_args(scope="abort", mode="hardware"))
     await asyncio.gather(service.tasks["attempt_1"], return_exceptions=True)
     assert service.adapters["phomemo_01"].executions == 0
     assert service.get_status("phomemo_01")["execution_status"] == "failed"
@@ -539,7 +539,7 @@ async def test_abort_for_old_failed_attempt_cannot_stop_new_worker(service, arti
         aborts.append(True)
         return {"status": "requested", "reason": "test-only stop"}
     monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
-    result = await service.abort(**camera_args(scope="abort"))
+    result = await service.abort(**camera_args(scope="abort", mode="hardware"))
     assert aborts == []
     assert result["status"] == "unknown"
     assert service.journal.get("attempt_2")["status"] == "running"
@@ -571,7 +571,7 @@ async def test_uncertain_worker_cannot_be_manually_released_while_still_active(s
     service.machines["phomemo_01"]["mode"] = "hardware"
     async def stop(): return {"status": "requested", "reason": "Fixture stop request; worker has not returned yet"}
     monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
-    await service.abort(**camera_args(scope="abort"))
+    await service.abort(**camera_args(scope="abort", mode="hardware"))
     assert service.journal.get("attempt_1")["status"] == "uncertain"
     resolution = {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": "failed", "reason": "Owner inspected the stopped device and found no complete item"}
     with pytest.raises(NodeError) as error:
@@ -622,7 +622,7 @@ async def test_pending_stop_transport_fences_reconciliation_resume_and_new_execu
     await service.run_job(**request_for(artifact))
     await asyncio.sleep(0)
     service.machines["phomemo_01"]["mode"] = "hardware"
-    abort_call = asyncio.create_task(service.abort(**camera_args(scope="abort")))
+    abort_call = asyncio.create_task(service.abort(**camera_args(scope="abort", mode="hardware")))
     try:
         await stop_entered.wait()
         if cancel_caller:
@@ -640,7 +640,7 @@ async def test_pending_stop_transport_fences_reconciliation_resume_and_new_execu
                 operation()
             assert error.value.code == "stop_pending"
         with pytest.raises(NodeError) as error:
-            await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2"))
+            await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2", mode="hardware"))
         assert error.value.code == "stop_pending"
         assert executions == ["attempt_1"] and stops == ["entered"]
         stop_gate.set()
@@ -649,7 +649,7 @@ async def test_pending_stop_transport_fences_reconciliation_resume_and_new_execu
         assert not service.stop_pending("phomemo_01")
         service.reconcile(**resolution)
         service.update_policy("phomemo_01", resume)
-        await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2"))
+        await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2", mode="hardware"))
         await service.tasks["attempt_2"]
         assert executions == ["attempt_1", "attempt_2"]
         assert stops == ["entered", "returned"]
@@ -689,7 +689,6 @@ async def test_shutdown_keeps_journal_ownership_until_error_stop_transport_retur
     monkeypatch.setattr(service.adapters["phomemo_01"], "run", run)
     monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
     await service.run_job(**request_for(artifact))
-    service.machines["phomemo_01"]["mode"] = "hardware"
     await stop_entered.wait()
     closing = asyncio.create_task(service.close())
     try:

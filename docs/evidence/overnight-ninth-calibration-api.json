@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-23T12:37:45.806Z",
+  "status": "PASS",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "machineId": "phomemo_01",
+  "calibrationId": "calibration_4e3f21e3-675b-4840-b034-e83a8ace0f05",
+  "attemptId": "calibration_attempt_b3104c07-86a1-4ba9-bb5d-1321de9eef8a",
+  "scope": "Actual API upload/preparation, signed mode-bound finite simulation calibration accepted by the newly strict Python node, exact replay/status/frame pixels/inspection and explicit resume",
+  "explicitSimulationCalibrations": 1,
+  "physicalJobs": 0,
+  "paymentOperations": 0,
+  "physicalCalibration": "NOT_RUN"
+}

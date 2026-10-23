@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { Job, Machine } from "./model.ts";
-import { parameters, Problem } from "./model.ts";
+import { parameters, Problem, requireThat } from "./model.ts";
 export interface NodeBoundary {
   call(tool: string, input: any, machine?: Machine): Promise<any>;
   token(
@@ -17,9 +17,16 @@ export class HttpNode implements NodeBoundary {
     public secret: string,
   ) {}
   token(job: Job, machine: Machine, scope: string) {
+    requireThat(
+      machine.mode === "simulation" || machine.mode === "hardware",
+      "INVALID_MACHINE_MODE",
+      "The saved machine mode could not be confirmed. Ask the owner to register the current device before authorizing work.",
+      409,
+    );
     const expires_at = Math.floor(Date.now() / 1000) + 300;
     const payload = {
       machine_id: machine.id,
+      expected_mode: machine.mode,
       job_id: job.id,
       attempt_id: job.attemptId ?? "calibration",
       artifact_sha256: job.artifact.sha256,

@@ -51,6 +51,13 @@ def verify_token(token: str, key: str, *, scope: str, expected: dict) -> dict:
         raise NodeError("invalid_token", "Invalid signed authorization", 403) from None
 
 
+def require_expected_mode(payload: dict, configured_mode: str) -> str:
+    expected_mode = payload.get("expected_mode")
+    if not isinstance(expected_mode, str) or expected_mode not in {"simulation", "hardware"} or expected_mode != configured_mode:
+        raise NodeError("mode_binding", "Authorization does not match the configured machine mode", 403)
+    return expected_mode
+
+
 def validate_artifact_url(url: str, origin: str) -> None:
     try:
         candidate, allowed = urlsplit(url), urlsplit(origin)

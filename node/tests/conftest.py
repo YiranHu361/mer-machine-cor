@@ -27,11 +27,11 @@ def service(tmp_path, artifact):
     return NodeService(key=KEY, data_dir=tmp_path, artifact_transport=httpx.MockTransport(serve))
 
 
-def request_for(artifact, *, job="job_1", attempt="attempt_1", machine="phomemo_01", params=None, scope="dispatch", expiration=None):
+def request_for(artifact, *, job="job_1", attempt="attempt_1", machine="phomemo_01", params=None, scope="dispatch", expiration=None, mode="simulation"):
     exp = expiration or int(time.time()) + 300
     payload = {"machine_id": machine, "job_id": job, "attempt_id": attempt,
         "artifact_sha256": hashlib.sha256(artifact).hexdigest(), "parameters": params or dict(PARAMS),
-        "expires_at": exp, "scope": scope}
+        "expires_at": exp, "scope": scope, "expected_mode": mode}
     token = sign_token(payload, KEY)
-    return {**{k:v for k,v in payload.items() if k != "scope"}, "token": token,
+    return {**{k:v for k,v in payload.items() if k not in {"scope", "expected_mode"}}, "token": token,
             "artifact_url": "http://127.0.0.1:4318/assets/approved.png?expires=" + str(int(time.time())+300) + "&sig=checked-by-backend"}

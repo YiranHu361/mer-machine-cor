@@ -1,6 +1,6 @@
 # Verification report
 
-Recorded 2026-10-23 05:35 Pacific (America/Los_Angeles). Overnight work continues until 9:00 a.m. Pacific. Machine-readable timestamps are UTC.
+Recorded 2026-10-23 05:39 Pacific (America/Los_Angeles). Overnight work continues until 9:00 a.m. Pacific. Machine-readable timestamps are UTC.
 
 **Partial completion.** The software is runnable and the measured checks pass. Required physical and live-service acceptance remains blocked; the entire PRD is not complete. No physical output, onchain transaction, live Claude call, ASI:One discovery, interview, sponsor eligibility or shipping event is claimed.
 
@@ -10,7 +10,11 @@ Working source-state identifier:
 
 Reproduce with `node scripts/state-id.mjs`: application/node/integrations/tests/configuration/runtime pins are hashed, while private data/builds/reports are excluded. The complete shared software check, strict types, node/integration fixtures, production build and API/storage/wallet units followed all eighth application changes. One later browser-only fixture correction supplies required lifecycle/machine identity metadata; application and bundle bytes are unchanged. Final three-engine browser suites used the corrected fixture and that built origin. [Ongoing log](overnight-qa.md), [machine-readable checkpoint](evidence/overnight-eighth-qa.json).
 
-## Checks actually executed
+## Ninth follow-up, 05:39 Pacific
+
+Current device-authorization source: `a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89`. **180 backend and 89 Python cases pass**; backend strict types pass. After actual backend/node restart, native SSE, one signed finite simulation calibration and three actual-app workflows per engine pass. Web/integration source and bundle are unchanged: the detailed eighth table below remains retained evidence for 182 full UI cases per engine, 45 accessibility scans and unchanged fixture/unit checks. This yields **510 unique cases across current and unchanged suites**; affected repeat runs are not additional unique cases. [Ninth checkpoint](evidence/overnight-ninth-qa.json) records exact provenance. The transient404/refund race and calibration retirement/focus findings remain open until the next repair.
+
+## Eighth full UI and unchanged-suite evidence
 
 | Suite                                            | Result                                     | Boundary and evidence                                                                                                                                                               |
 | ------------------------------------------------ | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

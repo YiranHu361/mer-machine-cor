@@ -1,19 +1,19 @@
 {
-  "recordedAt": "2026-10-23T12:35:45.449Z",
-  "sourceStateSha256": "b5354691a924db51c84ea3bf896aa316db06c4d0eb950e17c38bf78c8fe79523",
+  "recordedAt": "2026-10-23T12:39:19.514Z",
+  "sourceStateSha256": "a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 168,
-    "node": 67,
+    "backendApplicationAndProcessRecovery": 180,
+    "node": 89,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
     "browserScenarios": 182,
     "browserEngines": 3,
-    "uniqueTestCases": 476,
-    "testExecutionsIncludingThreeEngines": 840,
+    "uniqueTestCases": 510,
     "failedFinalTests": 0,
-    "skippedFinalTests": 0
+    "skippedFinalTests": 0,
+    "browserProvenance": "Eighth182perengine retained unchanged; ninth actual-app workflow3perengine rerun"
   },
   "additionalActualChecks": [
     "SpacetimeDB CAS/access isolation/subscriptions",
@@ -85,7 +85,7 @@
     ".data/overnight-eighth-firefox-browser.log": "0c69f6ccd44dd317d2128dfbb850cceb1b4d1279b23753e4a63073a655baa981",
     ".data/overnight-eighth-webkit-browser.log": "972039e58abe9a1c102f8705932332b831b9c710b83eaaab546ea502dcebaf2d"
   },
-  "notes": "October 23 eighth overnight checkpoint; see overnight-eighth-qa.json for current evidence. First through seventh checkpoint JSON files are historical. Audits continue until 9 a.m. Pacific.",
+  "notes": "Ninth authorization follow-up; full UI/unchanged integration evidence retained from eighth. See overnight-ninth-qa.json for exact provenance. Work continues through9a.m.Pacific; physical/live acceptance blocked.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",

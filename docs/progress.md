@@ -2,7 +2,7 @@
 
 Working directory: `fabrary/` beside read-only project references. Contract is [working-prd.md](working-prd.md). Status vocabulary: implemented/tested in simulation, live verified, partial, blocked, planned. Required physical work remains required even while blocked.
 
-October 23 overnight checkpoint: **476 unique software cases pass**, including 182 browser scenarios in Chromium, Firefox and WebKit (546 browser executions), plus 45 automated accessibility scans. Interface polish and additional recovery/privacy regressions are recorded in [overnight QA](overnight-qa.md). Scheduled follow-ups continue until 9:00 a.m. Pacific; physical/live prerequisites remain unchanged.
+October 23 overnight checkpoint: **510 unique software cases pass across current backend/node and unchanged retained suites**. Current backend/node counts are 180/89; device tokens bind explicit mode and old attempts cannot capture/stop replacement configurations. The eighth full UI suites retain 182 scenarios per engine and 45 accessibility scans; three actual-app workflows per engine were rerun after ninth activation. [Ninth evidence](evidence/overnight-ninth-qa.json), [ongoing QA](overnight-qa.md). Work continues through 9:00 a.m. Pacific, including the proven404/refund and calibration recovery gaps. Physical/live prerequisites remain unchanged.
 
 ## Decisions
 
