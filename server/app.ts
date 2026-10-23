@@ -23,6 +23,13 @@ import {
 } from "../integrations/src/payments.ts";
 import { mutate } from "./store.ts";
 import {
+  machineSettingsFingerprint,
+  machineInspectionFingerprint,
+  machineDeviceFingerprint,
+  ownerMachineView,
+  machinePatchQueue,
+} from "./machine-settings.ts";
+import {
   Problem,
   requireThat,
   id,
@@ -98,6 +105,7 @@ export function createApp(
   webDirectory = resolve("web/dist"),
 ) {
   const app = express();
+  const serializeMachinePatch = machinePatchQueue();
   app.disable("x-powered-by");
   // Built UI bundles are public; uploaded job artwork stays behind /assets/:id authorization.
   app.use(
@@ -609,6 +617,23 @@ export function createApp(
       "Cancelled, paid or dispatched orders cannot change.",
     );
     const observed = { version: old.version, specVersion: old.specVersion };
+    const condition = req.headers["if-match"];
+    if (condition !== undefined) {
+      const match =
+        typeof condition === "string" && /^"([1-9]\d{0,15})"$/.exec(condition);
+      requireThat(
+        match && Number.isSafeInteger(Number(match[1])),
+        "INVALID_IF_MATCH",
+        "If-Match must contain one quoted positive job version.",
+        400,
+      );
+      requireThat(
+        Number(match[1]) === old.version,
+        "STALE_SPECIFICATION",
+        "This order changed after editing began. Your draft was not saved. Load the saved specification before editing again.",
+        409,
+      );
+    }
     res.json({
       job: view(
         await service.revise(
@@ -780,7 +805,7 @@ export function createApp(
     const { version: revision, data: s } = await service.store.read();
     res.json({
       revision,
-      machines: Object.values(s.machines).map(({ nodeUrl, ...m }) => m),
+      machines: Object.values(s.machines).map(ownerMachineView),
       jobs: Object.values(s.jobs).map(view),
       ledger: Object.values(s.operations),
     });
@@ -860,92 +885,210 @@ export function createApp(
   app.patch("/api/owner/machines/:id", async (req, res) => {
     await owner(req);
     const body = machineSchema.parse(req.body);
-    const before = ownValue(
-      (await service.read()).machines,
+    const ifMatch = req.get("If-Match");
+    requireThat(
+      ifMatch === undefined || /^"[0-9a-f]{64}"$/.test(ifMatch),
+      "INVALID_SETTINGS_PRECONDITION",
+      "Refresh the saved machine settings before submitting this change.",
+      400,
+    );
+    const machine = await serializeMachinePatch(
       String(req.params.id),
-    );
-    requireThat(before, "NOT_FOUND", "Machine not found.", 404);
-    if (body.paused === false) {
-      requireThat(
-        before.calibrated &&
-          body.inspected &&
-          body.cleared &&
-          !before.activeJobId,
-        "OWNER_RECOVERY_REQUIRED",
-        "A calibrated machine needs explicit inspection and clearance before resuming.",
-      );
-    }
-    const nodePolicy = {
-      listed: body.listed,
-      paused: body.paused,
-      ready:
-        body.paused === false ? true : body.paused === true ? false : undefined,
-      mediaRemaining: body.mediaRemaining,
-      material: body.material,
-      maxJobSeconds: body.maxJobSeconds,
-      maxQuantity: body.policy?.maxQuantity,
-      hours: body.hours,
-      inspected: body.inspected,
-      cleared: body.cleared,
-    };
-    await service.node.call(
-      `/machines/${before.id}/policy`,
-      Object.fromEntries(
-        Object.entries(nodePolicy).filter(([, v]) => v !== undefined),
-      ),
-      before,
-    );
-    const machine = await mutate(service.store, (s) => {
-      const m = s.machines[before.id];
-      if (body.paused === false)
-        requireThat(
-          !m.activeJobId,
-          "MACHINE_BUSY",
-          "Machine started an order during configuration.",
+      async () => {
+        const before = ownValue(
+          (await service.read()).machines,
+          String(req.params.id),
         );
-      const card = body.priceCard;
-      const priceChanged =
-        card !== undefined &&
-        (card.consumables !== m.priceCard.consumables ||
-          card.machine !== m.priceCard.machine ||
-          card.handling !== m.priceCard.handling ||
-          card.platform !== m.priceCard.platform);
-      const { inspected, cleared, ownerAddress, ...patch } = body;
-      Object.assign(m, patch);
-      if (ownerAddress === null) delete m.ownerAddress;
-      else if (ownerAddress !== undefined) m.ownerAddress = ownerAddress;
-      if (body.paused !== undefined) {
-        m.ready = !body.paused;
-        m.reason = body.paused
-          ? "Paused by owner."
-          : "Owner inspected and cleared the machine.";
-      }
-      if (priceChanged) {
-        for (const j of Object.values(s.jobs).filter(
-          (j) =>
-            j.machineId === m.id &&
-            j.paymentState === "unpaid" &&
-            j.productionState !== "cancelled" &&
-            j.quote,
-        )) {
-          delete j.quote;
-          delete j.approvedSpecHash;
-          j.productionState = "specified";
-          record(
-            j,
-            "price_changed",
-            "Owner changed pricing; preview and quote approval required again.",
+        requireThat(before, "NOT_FOUND", "Machine not found.", 404);
+        const observed = machineSettingsFingerprint(before);
+        const inspectedContext = machineInspectionFingerprint(before);
+        const deviceContext = machineDeviceFingerprint(before);
+        requireThat(
+          ifMatch === undefined || ifMatch === `"${observed}"`,
+          "STALE_MACHINE_SETTINGS",
+          "The saved machine settings changed. Your draft was not applied. Load the newer saved settings before saving again.",
+          412,
+        );
+        if (body.paused === false) {
+          requireThat(
+            !before.policyReconciliationRequired,
+            "MACHINE_POLICY_RECONCILIATION",
+            "Save the current machine settings to synchronize its policy, then inspect the machine before resuming.",
+          );
+          requireThat(
+            before.calibrated &&
+              body.inspected &&
+              body.cleared &&
+              !before.activeJobId,
+            "OWNER_RECOVERY_REQUIRED",
+            "A calibrated machine needs explicit inspection and clearance before resuming.",
           );
         }
-        if (
-          m.reservation &&
-          s.jobs[m.reservation.jobId]?.paymentState === "unpaid"
-        )
-          delete m.reservation;
-      }
-      return m;
-    });
-    res.json({ machine });
+        const nodePolicy = Object.fromEntries(
+          Object.entries({
+            listed: body.listed,
+            paused: body.paused,
+            ready:
+              body.paused === false
+                ? true
+                : body.paused === true
+                  ? false
+                  : undefined,
+            mediaRemaining: body.mediaRemaining,
+            material: body.material,
+            maxJobSeconds: body.maxJobSeconds,
+            maxQuantity: body.policy?.maxQuantity,
+            hours: body.hours,
+            inspected: body.inspected,
+            cleared: body.cleared,
+          }).filter(([, value]) => value !== undefined),
+        );
+        const hasNodePolicy = Object.keys(nodePolicy).length > 0;
+        const pauseForReconciliation = async () => {
+          try {
+            // Preserve the current editable configuration even if another
+            // workflow changed it or the preceding write committed ambiguously.
+            await mutate(service.store, (s) => {
+              const m = s.machines[before.id];
+              m.policyReconciliationRequired = true;
+              m.ready = false;
+              m.paused = true;
+              m.reason =
+                "Machine policy may differ from saved settings. Synchronize current settings, inspect and resume.";
+            });
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const uncertainPolicy = async () => {
+          const paused = await pauseForReconciliation();
+          return new Problem(
+            "MACHINE_POLICY_RECONCILIATION",
+            `The machine policy update or saved settings could not be confirmed. ${paused ? "Machine availability is paused." : "Machine availability could not be confirmed."} Refresh and save the current settings to synchronize policy, then inspect before resuming.`,
+            503,
+          );
+        };
+        try {
+          await service.node.call(
+            `/machines/${before.id}/policy`,
+            nodePolicy,
+            before,
+          );
+        } catch (error) {
+          // An acknowledgement can be lost after the node applied the policy.
+          // Never automatically replay it or retain ready availability.
+          if (hasNodePolicy) throw await uncertainPolicy();
+          throw error;
+        }
+        try {
+          return await mutate(service.store, (s) => {
+            const m = s.machines[before.id];
+            requireThat(
+              machineSettingsFingerprint(m) === observed,
+              "MACHINE_SETTINGS_CHANGED_DURING_SAVE",
+              "The machine settings changed while its policy was being applied.",
+            );
+            if (body.paused === false)
+              requireThat(
+                machineInspectionFingerprint(m) === inspectedContext,
+                "MACHINE_CLEARANCE_CHANGED_DURING_SAVE",
+                "The machine changed after the owner inspected it.",
+              );
+            if (hasNodePolicy)
+              requireThat(
+                machineDeviceFingerprint(m) === deviceContext,
+                "MACHINE_DEVICE_CHANGED_DURING_SAVE",
+                "The registered device changed while its policy was being applied.",
+              );
+            const card = body.priceCard;
+            const priceChanged =
+              card !== undefined &&
+              (card.consumables !== m.priceCard.consumables ||
+                card.machine !== m.priceCard.machine ||
+                card.handling !== m.priceCard.handling ||
+                card.platform !== m.priceCard.platform);
+            const { inspected, cleared, ownerAddress, ...patch } = body;
+            Object.assign(m, patch);
+            if (ownerAddress === null) delete m.ownerAddress;
+            else if (ownerAddress !== undefined) m.ownerAddress = ownerAddress;
+            if (body.paused !== undefined) {
+              m.ready = !body.paused;
+              m.reason = body.paused
+                ? "Paused by owner."
+                : "Owner inspected and cleared the machine.";
+            }
+            if (
+              m.policyReconciliationRequired &&
+              [
+                "listed",
+                "mediaRemaining",
+                "material",
+                "maxJobSeconds",
+                "maxQuantity",
+                "hours",
+              ].every((key) => nodePolicy[key] !== undefined)
+            ) {
+              delete m.policyReconciliationRequired;
+              m.ready = false;
+              m.paused = true;
+              m.reason =
+                "Current machine settings were synchronized. Inspect and explicitly resume.";
+            }
+            if (priceChanged) {
+              for (const j of Object.values(s.jobs).filter(
+                (j) =>
+                  j.machineId === m.id &&
+                  j.paymentState === "unpaid" &&
+                  j.productionState !== "cancelled" &&
+                  j.quote,
+              )) {
+                delete j.quote;
+                delete j.approvedSpecHash;
+                j.productionState = "specified";
+                record(
+                  j,
+                  "price_changed",
+                  "Owner changed pricing; preview and quote approval required again.",
+                );
+              }
+              if (
+                m.reservation &&
+                s.jobs[m.reservation.jobId]?.paymentState === "unpaid"
+              )
+                delete m.reservation;
+            }
+            return m;
+          });
+        } catch (error) {
+          const settingsChanged =
+            error instanceof Problem &&
+            error.code === "MACHINE_SETTINGS_CHANGED_DURING_SAVE";
+          const clearanceChanged =
+            error instanceof Problem &&
+            error.code === "MACHINE_CLEARANCE_CHANGED_DURING_SAVE";
+          const deviceChanged =
+            error instanceof Problem &&
+            error.code === "MACHINE_DEVICE_CHANGED_DURING_SAVE";
+          if (!settingsChanged && !clearanceChanged && !deviceChanged) {
+            if (hasNodePolicy) throw await uncertainPolicy();
+            throw error;
+          }
+          const availabilityPaused =
+            hasNodePolicy && (await pauseForReconciliation());
+          throw new Problem(
+            hasNodePolicy
+              ? "MACHINE_POLICY_RECONCILIATION"
+              : "STALE_MACHINE_SETTINGS",
+            hasNodePolicy
+              ? `${deviceChanged ? "The registered device changed; its newer configuration was preserved" : clearanceChanged ? "The machine changed after inspection; its newer state was preserved" : "Newer saved settings were preserved"}, but the node may already have applied a different policy. ${availabilityPaused ? "Machine availability is paused." : "Machine availability could not be confirmed."} Refresh and save the current settings to synchronize policy, then inspect before resuming.`
+              : "The saved machine settings changed. Your draft was not applied. Load the newer saved settings before saving again.",
+            hasNodePolicy ? 409 : 412,
+          );
+        }
+      },
+    );
+    res.json({ machine: ownerMachineView(machine) });
   });
   app.post("/api/owner/machines/:id/calibration/start", async (req, res) => {
     const a = await owner(req);

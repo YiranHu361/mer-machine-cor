@@ -140,6 +140,7 @@ export interface Machine {
   nodeUrl?: string;
   policy: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
+  policyReconciliationRequired?: boolean;
   calibrationAt?: string;
 }
 export interface Quote {

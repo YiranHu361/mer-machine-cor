@@ -134,3 +134,31 @@ test("a mutation server error preserves its details and explicitly reports an un
     globalThis.fetch = original;
   }
 });
+
+test("optional edit headers retain JSON content type and leave multipart boundaries to the browser", async () => {
+  const original = globalThis.fetch;
+  const received: RequestInit[] = [];
+  globalThis.fetch = async (_path, init) => {
+    received.push(init!);
+    return Response.json({ ok: true });
+  };
+  try {
+    await api("/jobs/id/spec", { intent: "Updated" }, "PATCH", {
+      headers: { "If-Match": '"7"' },
+    });
+    const jsonHeaders = new Headers(received[0].headers);
+    assert.equal(jsonHeaders.get("If-Match"), '"7"');
+    assert.equal(jsonHeaders.get("Content-Type"), "application/json");
+    const form = new FormData();
+    form.set("name", "fixture");
+    await api("/uploads", form, undefined, {
+      headers: new Headers({ "X-Fixture": "safe" }),
+    });
+    const multipart = new Headers(received[1].headers);
+    assert.equal(multipart.get("Content-Type"), null);
+    assert.equal(multipart.get("X-Fixture"), "safe");
+    assert.equal(received[1].body, form);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

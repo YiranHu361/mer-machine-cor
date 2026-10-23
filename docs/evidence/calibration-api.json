@@ -1,11 +1,11 @@
 {
-  "at": "2026-10-23T07:35:14.360Z",
+  "at": "2026-10-23T11:20:21.942Z",
   "status": "PASS",
   "mode": "simulation",
   "store": "spacetimedb",
   "machineId": "phomemo_01",
-  "calibrationId": "calibration_9dc73993-2ae2-4f71-986c-d7ba50f0a8b7",
-  "attemptId": "calibration_attempt_7e943924-c77c-444a-a1ca-4ede2b57eb9b",
+  "calibrationId": "calibration_5fefa97c-766a-4dec-8001-8094315a30db",
+  "attemptId": "calibration_attempt_d31a4e2e-c62e-4365-980a-29853d3f277e",
   "scope": "Actual owner upload, prepare, signed calibration attempt, durable duplicate, status/evidence, inspection and explicit resume",
   "physicalCalibration": "NOT_RUN"
 }

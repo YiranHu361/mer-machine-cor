@@ -1045,15 +1045,11 @@ test("owner payout address updates distinguish omission, valid replacement and e
   }
 });
 
-test("unchanged full settings preserve quoted approval and reservation using the current price card after concurrent saves", async () => {
+test("unchanged full settings preserve the quoted approval, exact history and reservation", async () => {
   const f = fixture();
   try {
-    let interleave: (() => Promise<void>) | undefined;
     f.service.node.call = async (path) => {
       assert.equal(path, "/machines/phomemo_01/policy");
-      const concurrentSave = interleave;
-      interleave = undefined;
-      await concurrentSave?.();
       return { updated: true };
     };
     const owner = request.agent(f.app),
@@ -1122,56 +1118,7 @@ test("unchanged full settings preserve quoted approval and reservation using the
     assert.deepEqual(unchanged.jobs[jobId], before.jobs[jobId]);
     assert.deepEqual(unchanged.machines.phomemo_01.reservation, m.reservation);
 
-    // Another save changes prices and quotes again while the first request is
-    // awaiting the node. Its newly quoted current card matches this request.
-    const nextCard = {
-      ...m.priceCard,
-      consumables: m.priceCard.consumables + 7,
-    };
-    let concurrent: Awaited<ReturnType<typeof f.service.read>> | undefined;
-    interleave = async () => {
-      await owner
-        .patch("/api/owner/machines/phomemo_01")
-        .send({ priceCard: nextCard })
-        .expect(200);
-      await approveAndQuote();
-      concurrent = await f.service.read();
-    };
-    await owner
-      .patch("/api/owner/machines/phomemo_01")
-      .send({ ...settings, priceCard: nextCard })
-      .expect(200);
-    assert(concurrent);
-    const preserved = await f.service.read();
-    assert.deepEqual(preserved.jobs[jobId], concurrent.jobs[jobId]);
-    assert.deepEqual(
-      preserved.machines.phomemo_01.reservation,
-      concurrent.machines.phomemo_01.reservation,
-    );
-
-    // The inverse race is a real change: a request matching its old preflight
-    // snapshot must invalidate a newly quoted card that changed in the meantime.
-    interleave = async () => {
-      await owner
-        .patch("/api/owner/machines/phomemo_01")
-        .send({ priceCard: { ...nextCard, handling: nextCard.handling + 9 } })
-        .expect(200);
-      await approveAndQuote();
-      concurrent = await f.service.read();
-    };
-    await owner
-      .patch("/api/owner/machines/phomemo_01")
-      .send({ ...settings, priceCard: nextCard })
-      .expect(200);
-    const changed = await f.service.read(),
-      job = changed.jobs[jobId];
-    assert.equal(job.quote, undefined);
-    assert.equal(job.approvedSpecHash, undefined);
-    assert.equal(job.productionState, "specified");
-    assert.equal(changed.machines.phomemo_01.reservation, undefined);
-    assert.equal(job.history.length, concurrent.jobs[jobId].history.length + 1);
-    assert.equal(job.history.at(-1)?.event, "price_changed");
-    assert.deepEqual(changed.operations, {});
+    assert.deepEqual(unchanged.operations, {});
   } finally {
     f.close();
   }

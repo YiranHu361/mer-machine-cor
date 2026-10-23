@@ -1,0 +1,378 @@
+{
+  "softwareProvenance": {
+    "completeSharedCheck": ".data/overnight-sixth-software-before-device-fence.log",
+    "completeSharedSourceStateSha256": "dfcd990b15408c05aacaaaeab2945b7d8b529882a23a64b0cccae22856510603",
+    "finalBackendCheck": ".data/overnight-sixth-backend-final.log",
+    "finalBackendSourceStateSha256": "faa4bdbcbece1b4027bc31ba084efba6cf790a15ff4dc73cbc2e9c9c232e1288",
+    "subsequentBrowserFixtureOnly": [
+      "web/tests/workflow.spec.ts"
+    ],
+    "finalSourceStateSha256": "3229ea03eaec73a7bbe65c21c9a84c1f6a890e485ead27724f81d644474b5ce0",
+    "lastChangeOnly": [
+      "server/app.ts",
+      "server/machine-settings.ts",
+      "tests/machine-settings.test.ts"
+    ],
+    "retainedUnchangedChecks": [
+      "Python node",
+      "payment/Claude fixtures",
+      "Fetch fixtures",
+      "web build/types",
+      "web API/storage/wallet units"
+    ],
+    "note": "The full shared check passed before one final server-only device identity guard. Backend types and all backend tests were rerun after it. Unchanged non-backend results were retained. A subsequent workflow-only test change explicitly asserts fresh clearance after calibration; application/build bytes remain unchanged. software-final.log clearly consolidates the two raw logs."
+  },
+  "recordedAt": "2026-10-23T11:30:24.496Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "3229ea03eaec73a7bbe65c21c9a84c1f6a890e485ead27724f81d644474b5ce0",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 106,
+    "node": 67,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserStorageAndWallet": 29,
+    "browserScenarios": 146,
+    "uniqueCases": 378,
+    "checksIncludingThreeBrowserEngines": 670,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 146,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T11:23:58.288Z",
+      "durationMs": 95391.442,
+      "report": "web/evidence/overnight-sixth-chromium-browser.json",
+      "reportSha256": "a8fbdf0e312f71fac073b831fabb8bc7133c2a136d4ccaa12565b73ce5752783",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 146,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T11:25:34.184Z",
+      "durationMs": 116296.44,
+      "report": "web/evidence/overnight-sixth-firefox-browser.json",
+      "reportSha256": "f10a33959700bbe7deec3f07b0db9c91f2c8d08fe201e0439e36e98cfd6a82bc",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 146,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T11:27:30.964Z",
+      "durationMs": 103973.65800000001,
+      "report": "web/evidence/overnight-sixth-webkit-browser.json",
+      "reportSha256": "0e7fe8f4c57276d9548d05c35e3ce8c544613efe98224a2fc854131793f0280c",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "actualLocalChecks": {
+    "finalRuntime": {
+      "checkedAt": "2026-10-23T11:30:24.204Z",
+      "sourceStateSha256": "3229ea03eaec73a7bbe65c21c9a84c1f6a890e485ead27724f81d644474b5ce0",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "signedSimulationCalibrationApi": {
+      "at": "2026-10-23T11:20:21.942Z",
+      "status": "PASS",
+      "mode": "simulation",
+      "store": "spacetimedb",
+      "machineId": "phomemo_01",
+      "calibrationId": "calibration_5fefa97c-766a-4dec-8001-8094315a30db",
+      "attemptId": "calibration_attempt_d31a4e2e-c62e-4365-980a-29853d3f277e",
+      "scope": "Actual owner upload, prepare, signed calibration attempt, durable duplicate, status/evidence, inspection and explicit resume",
+      "physicalCalibration": "NOT_RUN"
+    },
+    "backendRestartSseReconnect": {
+      "at": "2026-10-23T11:19:53.093Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 2961,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "earlierAcceptance": "First-checkpoint Spacetime CAS/access/subscriptions, 10 sticker + 3 Instax simulation jobs, failure/review/lost-ack, actual local FastMCP application loop remain retained; signed simulation calibration API was rerun after its changes; unchanged finite loops were not rerun this pass."
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 231,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-sixth-software-final.log": "2cc22cdf5b4646041e1574d637b369213700e79ad815fb724008540ffad7fb73",
+    ".data/overnight-sixth-software-before-device-fence.log": "0419d6eb7088bd94ab2742a277e72462349ed234401a4e47b898ea70e3a090ac",
+    ".data/overnight-sixth-backend-final.log": "3cc0500fd8832e6962fb7fdd2ca2d7d82c3c3394c0c0cd92afb886abb8df25af",
+    ".data/overnight-sixth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-sixth-calibration-acceptance-final.log": "17c10fb19033c4e6cd393d04dce6a2c1350180faef96ac047866b500e348320b",
+    ".data/overnight-sixth-chromium-browser.log": "cb39f28a5ecb2b7b1a21665d86e2ae9b66329a1837f6ee2d81aa646c66c3e817",
+    ".data/overnight-sixth-firefox-browser.log": "4bf56239b8dc5ddafa11e3ae96b9ca19b896b5b66194f3fd4475b19871a6e5c8",
+    ".data/overnight-sixth-webkit-browser.log": "5e5909ba25bba3def21cd66ec4988da73482e94e029249de5e4bb802574cbe17"
+  },
+  "finalBuild": {
+    "indexSha256": "2a45b9d437676be03d24aaf71dbad455bca26e0c1937124fbec4d12d843bf45a",
+    "script": "/assets/index-BrdglIzP.js",
+    "stylesheet": "/assets/index-B26mZzWc.css"
+  },
+  "notes": "The complete shared check passed before the final server-only device-identity fence; final backend type/tests follow that fence. Unchanged node/integration/web/unit results and the identical production bundle were retained with explicit raw-log provenance. New coverage includes conditional requester and owner-settings saves, preserved conflicting drafts, mobile saved-order and calibration retry focus, malformed status recovery, fresh machine-clearance confirmations and atomic calibration observation/frame fencing. All new browser cases intercept APIs; HTTP faults use isolated stores and files. No automatic mutation/signature/physical retries are added. Actual local backend/node activation preserves data/journals and checks native SSE reconnection with polling disabled. Earlier finite simulation/database/dependency acceptance remains historical. Physical and live-service acceptance remains blocked."
+}

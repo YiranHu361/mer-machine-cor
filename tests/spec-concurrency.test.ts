@@ -8,6 +8,7 @@ import {
   writeFileSync,
   existsSync,
   readFileSync,
+  readdirSync,
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -136,6 +137,7 @@ for (const newerEdit of [true, false])
       process.env.PATH = `${join(f.dir, "bin")}:${originalPath ?? ""}`;
       pending = f.agent
         .patch(`/api/jobs/${f.job.id}/spec`)
+        .set("If-Match", `"${f.job.version}"`)
         .send({
           ...spec,
           intent: "Older preparation A must not win",
@@ -264,6 +266,79 @@ test("an unrelated state conflict retries without rejecting or losing the curren
     );
     assert(existsSync((await f.store.read()).data.assets.concurrent_art.path));
   } finally {
+    f.close();
+  }
+});
+
+test("optional If-Match rejects stale or malformed edit baselines before any preview is prepared", async () => {
+  const f = await fixture();
+  try {
+    const originalVersion = f.job.version;
+    await f.service.approve(f.job.id, {
+      specVersion: f.job.specVersion,
+      artifactSha256: f.job.artifact.sha256,
+    });
+    const before = await f.store.read();
+    const files = readdirSync(join(f.dir, "assets")).sort();
+    // Approval changes job.version without changing specVersion; an editor's
+    // older observation must not silently invalidate that newer approval.
+    assert.equal(before.data.jobs[f.job.id].specVersion, f.job.specVersion);
+    const stale = await f.agent
+      .patch(`/api/jobs/${f.job.id}/spec`)
+      .set("If-Match", `"${originalVersion}"`)
+      .send({ ...spec, heightMm: 75 })
+      .expect(409);
+    assert.equal(stale.body.error.code, "STALE_SPECIFICATION");
+    for (const invalid of [
+      "*",
+      "2",
+      'W/"2"',
+      '"0"',
+      '"-1"',
+      '"2", "3"',
+      '"9007199254740992"',
+      '"1.5"',
+      '"02"',
+    ]) {
+      const response = await f.agent
+        .patch(`/api/jobs/${f.job.id}/spec`)
+        .set("If-Match", invalid)
+        .send({ ...spec, heightMm: 75 })
+        .expect(400);
+      assert.equal(response.body.error.code, "INVALID_IF_MATCH");
+    }
+    assert.deepEqual(await f.store.read(), before);
+    assert.deepEqual(readdirSync(join(f.dir, "assets")).sort(), files);
+    assert.equal(existsSync(f.entered), false);
+  } finally {
+    f.close();
+  }
+});
+
+test("a matching If-Match baseline saves once and cannot be replayed over the new specification", async () => {
+  const f = await fixture(),
+    originalPath = process.env.PATH;
+  try {
+    process.env.PATH = `${join(f.dir, "bin")}:${originalPath ?? ""}`;
+    const header = `"${f.job.version}"`;
+    const saved = await f.agent
+      .patch(`/api/jobs/${f.job.id}/spec`)
+      .set("If-Match", header)
+      .send({ ...spec, heightMm: 75 })
+      .expect(200);
+    assert.equal(saved.body.job.spec.heightMm, 75);
+    const before = await f.store.read();
+    const files = readdirSync(join(f.dir, "assets")).sort();
+    await f.agent
+      .patch(`/api/jobs/${f.job.id}/spec`)
+      .set("If-Match", header)
+      .send({ ...spec, heightMm: 60 })
+      .expect(409);
+    assert.deepEqual(await f.store.read(), before);
+    assert.deepEqual(readdirSync(join(f.dir, "assets")).sort(), files);
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
     f.close();
   }
 });

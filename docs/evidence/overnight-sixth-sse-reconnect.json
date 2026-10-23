@@ -1,0 +1,34 @@
+{
+  "at": "2026-10-23T11:19:53.093Z",
+  "mode": "simulation",
+  "paymentMode": "mock",
+  "store": "spacetimedb",
+  "physicalJobs": 0,
+  "before": {
+    "opens": 1,
+    "errors": 0,
+    "refreshes": 1,
+    "blocked": [
+      15000,
+      3000
+    ]
+  },
+  "recoveredRevision": 2961,
+  "after": {
+    "opens": 2,
+    "errors": 1,
+    "refreshes": 4,
+    "blocked": [
+      15000,
+      3000
+    ]
+  },
+  "status": "PASS",
+  "assertions": [
+    "Actual backend/node restart with durable journals preserved",
+    "EventSource error/disconnected notice followed by native reconnect",
+    "Open owner view receives new database mutations after reconnect",
+    "Dashboard and health polling disabled throughout",
+    "No replacement job or payment submitted"
+  ]
+}

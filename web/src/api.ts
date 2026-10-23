@@ -100,15 +100,19 @@ export async function api<T>(
   path: string,
   body?: unknown,
   method?: string,
+  options: { headers?: HeadersInit } = {},
 ): Promise<T> {
   const verb = (method || (body === undefined ? "GET" : "POST")).toUpperCase();
+  const headers = new Headers(
+    body instanceof FormData
+      ? undefined
+      : { "Content-Type": "application/json" },
+  );
+  new Headers(options.headers).forEach((value, key) => headers.set(key, value));
   const { response, value } = await requestJson(`/api${path}`, {
     method: verb,
     credentials: "same-origin",
-    headers:
-      body instanceof FormData
-        ? undefined
-        : { "Content-Type": "application/json" },
+    headers,
     body:
       body === undefined
         ? undefined

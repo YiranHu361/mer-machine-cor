@@ -164,6 +164,30 @@ export class Service {
     if (accepted.start) {
       const c = accepted.calibration,
         m = (await this.read()).machines[machineId];
+      const deviceContext = (machine: Machine) =>
+        JSON.stringify([
+          machine.mode,
+          machine.adapterVersion,
+          machine.nodeUrl,
+          machine.material,
+          machine.paired,
+          machine.configured,
+          machine.calibrated,
+        ]);
+      const observedContext = deviceContext(m);
+      const stillCurrent = (state: State) => {
+        const current = state.calibrations?.[c.id];
+        const machine = state.machines[machineId];
+        return (
+          current !== undefined &&
+          current.attemptId === c.attemptId &&
+          current.version === c.version &&
+          current.productionState === c.productionState &&
+          JSON.stringify(current.evidence) === JSON.stringify(c.evidence) &&
+          machine.activeJobId === c.id &&
+          deviceContext(machine) === observedContext
+        );
+      };
       try {
         const result = await this.node.call(
           "/calibrate",
@@ -183,6 +207,7 @@ export class Service {
           m,
         );
         await mutate(this.store, (s) => {
+          if (!stillCurrent(s)) return;
           const current = s.calibrations![c.id];
           current.productionState =
             result.execution_status === "running" ? "running" : "dispatched";
@@ -194,6 +219,7 @@ export class Service {
         });
       } catch (e) {
         await mutate(this.store, (s) => {
+          if (!stillCurrent(s)) return;
           const current = s.calibrations![c.id];
           current.productionState = "needs_review";
           record(current, "calibration_uncertain", (e as Error).message);
@@ -212,17 +238,100 @@ export class Service {
       "Machine not found.",
       404,
     );
-    const c = Object.values(s.calibrations ?? {})
-      .filter((c) => c.machineId === machineId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    const latest = (state: State) => {
+      const active = ownValue(
+        state.calibrations ?? {},
+        state.machines[machineId]?.activeJobId ?? "",
+      );
+      return active?.machineId === machineId
+        ? active
+        : Object.values(state.calibrations ?? {})
+            .filter((item) => item.machineId === machineId)
+            .reverse()
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    };
+    const savedStatus = (calibration: Job, reason?: string) => ({
+      execution_status:
+        (
+          {
+            produced: "completed",
+            failed: "failed",
+            needs_review: "uncertain",
+            running: "running",
+            dispatched: "accepted",
+          } as Record<string, string>
+        )[calibration.productionState] ?? "unknown",
+      ...(reason ? { reason } : {}),
+    });
+    const c = latest(s);
     if (!c) return { calibration: null, status: null };
+    if (s.machines[machineId].activeJobId !== c.id)
+      return {
+        calibration: c,
+        status: savedStatus(
+          c,
+          "Showing the saved calibration; it is no longer the active machine attempt.",
+        ),
+      };
+    const context = (state: State) => {
+      const machine = state.machines[machineId];
+      return JSON.stringify([
+        machine.activeJobId,
+        machine.mode,
+        machine.adapterVersion,
+        machine.nodeUrl,
+        machine.material,
+        machine.paired,
+        machine.configured,
+        machine.calibrated,
+      ]);
+    };
+    const observedContext = context(s);
+    const snapshot = (calibration: Job) =>
+      JSON.stringify([
+        calibration.version,
+        calibration.productionState,
+        calibration.evidence,
+      ]);
+    let observedSnapshot = snapshot(c);
     let status: any;
     try {
-      status = await this.node.call(
-        "get_status",
-        { machine_id: machineId, job_id: c.id, attempt_id: c.attemptId },
-        s.machines[machineId],
+      // The durable owner resolution is authoritative for this attempt. A later
+      // read may capture fresh evidence, but cannot undo the observed outcome.
+      status = c.history.some(
+        (entry) => entry.event === "calibration_operator_resolution",
+      )
+        ? savedStatus(
+            c,
+            "Showing the outcome recorded by the owner after inspection.",
+          )
+        : await this.node.call(
+            "get_status",
+            { machine_id: machineId, job_id: c.id, attempt_id: c.attemptId },
+            s.machines[machineId],
+          );
+      const state =
+        status &&
+        typeof status === "object" &&
+        !Array.isArray(status) &&
+        typeof status.execution_status === "string"
+          ? ownValue(
+              {
+                completed: "produced",
+                failed: "failed",
+                uncertain: "needs_review",
+                running: "running",
+                accepted: "dispatched",
+              } as const,
+              status.execution_status,
+            )
+          : undefined;
+      requireThat(
+        state,
+        "INVALID_STATUS",
+        "The node did not confirm this calibration status. The saved record is unchanged.",
       );
+      let evidence: Job["evidence"];
       if (
         ["completed", "failed", "uncertain"].includes(status.execution_status)
       ) {
@@ -251,35 +360,73 @@ export class Service {
             "INVALID_FRAME",
             "Calibration evidence does not match this attempt or capture time.",
           );
-          await mutate(this.store, (s) => {
-            s.calibrations![c.id].evidence = {
-              url: frame.frame_url,
-              capturedAt: frame.captured_at,
-              machineId,
-              jobId: c.id,
-              frame,
-            };
-          });
+          evidence = {
+            url: frame.frame_url,
+            capturedAt: frame.captured_at,
+            machineId,
+            jobId: c.id,
+            frame,
+          };
         } catch {}
       }
-      await mutate(this.store, (s) => {
-        const current = s.calibrations![c.id];
-        const state = status.execution_status;
-        current.productionState =
-          state === "completed"
-            ? "produced"
-            : state === "failed"
-              ? "failed"
-              : state === "uncertain"
-                ? "needs_review"
-                : state === "running"
-                  ? "running"
-                  : "dispatched";
+      const applied = await mutate(this.store, (currentState) => {
+        const current = currentState.calibrations?.[c.id];
+        // Check inside every CAS retry: another status read, owner resolution,
+        // final inspection or device change may have won while I/O was pending.
+        if (
+          !current ||
+          latest(currentState)?.id !== c.id ||
+          context(currentState) !== observedContext ||
+          current.version !== c.version ||
+          current.productionState !== c.productionState ||
+          JSON.stringify(current.evidence) !== JSON.stringify(c.evidence)
+        )
+          return false;
+        const freshEvidence =
+          evidence &&
+          (!current.evidence ||
+            Date.parse(evidence.capturedAt) >=
+              Date.parse(current.evidence.capturedAt))
+            ? evidence
+            : undefined;
+        if (
+          current.productionState !== state ||
+          (freshEvidence &&
+            JSON.stringify(freshEvidence) !== JSON.stringify(current.evidence))
+        ) {
+          current.productionState = state;
+          if (freshEvidence) current.evidence = freshEvidence;
+          record(
+            current,
+            "calibration_status",
+            "Saved the current node observation and matching result evidence.",
+          );
+        }
+        return snapshot(current);
       });
+      if (!applied) status = null;
+      else observedSnapshot = applied;
     } catch (e) {
       status = { execution_status: "unknown", reason: (e as Error).message };
     }
-    return { calibration: (await this.read()).calibrations![c.id], status };
+    const finalState = await this.read();
+    const current = latest(finalState);
+    return {
+      calibration: current ?? null,
+      status:
+        current &&
+        (!status ||
+          current.id !== c.id ||
+          snapshot(current) !== observedSnapshot ||
+          context(finalState) !== observedContext ||
+          (status.execution_status !== "unknown" &&
+            status.execution_status !== savedStatus(current).execution_status))
+          ? savedStatus(
+              current,
+              "The calibration changed while its status was checked. Showing the newer saved record.",
+            )
+          : status,
+    };
   }
   async resolveCalibration(machineId: string, body: any) {
     requireThat(
@@ -413,7 +560,11 @@ export class Service {
   ) {
     const spec = specSchema.parse(input);
     if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
-    const expected = observed ?? (await this.job(jobId));
+    const baseline = observed ?? (await this.job(jobId));
+    const expected = {
+      version: baseline.version,
+      specVersion: baseline.specVersion,
+    };
     return mutate(this.store, (s) => {
       const j = s.jobs[jobId];
       requireThat(

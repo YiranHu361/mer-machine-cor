@@ -211,14 +211,45 @@ Calibration diagnostics initially assumed enabled upload controls before upload 
 
 [Current machine-readable checkpoint](evidence/overnight-fifth-qa.json), [full report](test-report.md), [owner action drafts at 320px](../web/evidence/overnight-owner-action-drafts-320.png), [mobile image recovery](../web/evidence/overnight-evidence-recovery-320.png), [reconnected owner view](../web/evidence/overnight-fifth-sse-reconnected.png). Final browser reports are `web/evidence/overnight-fifth-*-browser.json`.
 
+## Verified sixth checkpoint, 04:30 Pacific
+
+Continuation from commit `0551d73` completed stale-form conflicts, clearance context, keyboard recovery and calibration concurrency. The overnight task remains active through 9:00 a.m. Pacific. Source fingerprint:
+
+`3229ea03eaec73a7bbe65c21c9a84c1f6a890e485ead27724f81d644474b5ce0`
+
+- Requester edits retain an immutable version from when editing begins. Conditional saves reject stale forms before preview preparation and recheck after I/O. Conflicts preserve the exact draft and disable repeated stale saves; explicit Use saved specification loads a validated current record for reapplying desired changes. The saved-response check now rejects malformed nested artifacts/history instead of allowing a render crash.
+- Owner machine forms retain their base editable-settings fingerprint. A newer saved configuration shows a conflict while preserving the draft; explicit Load newer saved settings adopts it. Readiness/job/ledger-only refreshes do not cause configuration conflicts. Stale saves reject before node policy I/O, and same-machine PATCH requests serialize. A changed configuration or uncertain policy acknowledgement preserves newer values and conservatively pauses availability until a deliberate current-policy synchronization and fresh inspection/resume. No rollback or automatic mutation retry is claimed.
+- Machine clearance is a fresh confirmation of device/configuration/execution context. A changed adapter, material, pairing, calibration, attempt/reservation or policy-reconciliation state clears the old checkbox. Accepted pause/resume/calibration also clears it; unrelated refreshes preserve it.
+- Explicit Check saved orders recovery focuses and scrolls the recovered order (or empty-list heading) into narrow-screen view while respecting newer user focus/input. Calibration retry restores focus only after the rendered control is enabled; failed retries remain usable. Optional calibration status containers/strings are validated, and malformed responses show recovery text instead of crashing. New cases cover 320px keyboard paths and newer-focus preservation.
+- Backend calibration observations save status and matching evidence atomically against the captured attempt, device context, version and evidence on every CAS retry. Older replies/frames/errors cannot replace newer owner decisions, completed observations or attempts. Durable operator resolutions remain authoritative, archived attempts use their saved record, and unknown/non-string node statuses cannot reset known outcomes. Late start acknowledgements and errors have the same fencing. Unchanged polls do not add history or change the calibration version. Twelve new isolated cases cover these boundaries.
+- Actual local backend/node activation retained Spacetime data/assets/journals. The already-open owner dashboard natively reconnected with polling disabled. The signed simulation calibration API acceptance was rerun because its implementation changed: upload, preparation, one durable attempt/replay, status/frame, inspection and explicit resume. No physical job, payment or live provider was used. [Reconnect proof](evidence/overnight-sixth-sse-reconnect.json), [simulation calibration proof](evidence/overnight-sixth-calibration-api.json).
+
+| Check                                | Result                                        |
+| ------------------------------------ | --------------------------------------------- |
+| Backend/application/process/realtime | 106 passed                                    |
+| Python node                          | 67 passed in 5.53s                            |
+| Payment/Claude and Fetch fixtures    | 25+5 passed                                   |
+| API/storage/wallet unit              | 29 passed (8+6+15)                            |
+| Built-application browser scenarios  | 146 passed in each of Chromium/Firefox/WebKit |
+| Automated accessibility              | 39 A/AA scans, no detected violations         |
+| Build/strict types/secret scan       | Passed                                        |
+| Actual local restart/SSE reconnect   | Passed; polling disabled                      |
+
+That is 378 unique software cases or 670 canonical executions including the three browser engines, with no final failed/skipped/flaky cases. The full shared check passed before the last server-only identity guard; final backend types/tests followed it. Unchanged node/integration/web/unit checks and the identical bundle were retained, with both raw logs and source fingerprints recorded. Final browser suites used the final backend and built origin. New tests use isolated stores/files and intercepted browser APIs. Actual retained runtime was restarted, not fault-injected. Earlier unchanged finite simulation, database restart/CAS and dependency evidence remains historical. No physical/live acceptance is substituted.
+
+A WebKit affected run initially passed 14/15 because focus restoration could run before busy controls re-enabled. The helper now waits for the rendered completion state; four affected cases passed five diagnostic repetitions and the final three-engine suite below passed once per unique case. A previously reentrant nested-PATCH fake was replaced with controlled overlapping external requests because same-machine serialization intentionally prevents nested policy calls. The first built Chromium run passed 143/146: an old workflow tried to reuse clearance after calibration, leaving the machine paused and cascading into its quote/live-update follow-ups. The workflow now asserts the cleared checkbox and disabled Resume, then explicitly checks again. This final test-only update leaves application/build bytes unchanged; final browser results below use the corrected fixture. Earlier private diagnostics and repeated timing checks do not inflate unique-case counts.
+
+[Current machine-readable checkpoint](evidence/overnight-sixth-qa.json), [full report](test-report.md), [requester conflict at 320px](../web/evidence/overnight-requester-edit-conflict-320.png), [owner settings conflict at 320px](../web/evidence/overnight-machine-settings-conflict-320.png), [mobile image recovery](../web/evidence/overnight-evidence-recovery-320.png), [reconnected owner view](../web/evidence/overnight-sixth-sse-reconnected.png). Final browser reports are `web/evidence/overnight-sixth-*-browser.json`.
+
 ## Next useful audits
 
-Continue with a reproduced boundary or unresolved diagnostic rather than unchanged suite reruns:
+Continue the three concrete, privately reproduced seventh-pass repairs after committing this checkpoint:
 
-1. Independently inspect two-tab stale requester edits and owner settings. The new server fence protects changes while preparation is running; determine whether an editor opened before another session's save can still silently overwrite newer state. Use isolated data and preserve newer work if conflict handling is needed.
-2. Fix a newly reproduced malformed calibration status boundary: an object-valued execution_status reaches the display formatter and crashes rendering. Validate optional status strings, keep unknown status recoverable, and add a regression. Also repair explicit calibration-retry focus dropping to the document and saved-order recovery leaving its result far below the mobile viewport; both have isolated keyboard diagnostics. Continue reviewing bounded recovery for concrete stale callback/busy-state defects; no physical job, signer retry or live provider calls.
-3. Verify responsive/keyboard clarity for any newly reproduced issue, update affected checks and evidence, and commit the reviewed result. Keep external blockers and simulation/mock labels visible.
-4. At 9:00 a.m. Pacific perform the final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Do not archive this chat.
+1. Bind evidence metadata URLs to the exact saved frame/attempt and explicit calibration identity. Actual isolated HTTP tests show frame replacement between metadata/image fetch, and equal calibration timestamps selecting different images. Reject stale bindings before fetching; never substitute newer bytes under an older caption. Keep legacy URL behavior documented.
+2. Preserve requester drafts across in-page order selection. All three engines reproduced loss of exact intent, numeric blanks, budget and uploaded replacements without a discard warning. Keep per-order/new drafts in private session memory with explicit Resume/Discard controls, original conditional-edit baseline, hidden-draft leave warnings and session expiry clearing.
+3. Add exact creation correlation/idempotency. An aborted first POST and identical second POST prove body/new-id/time cannot identify the original request; replay currently creates a third job. Use an optional scoped request key, immutable original binding, pre-prepare and atomic replay checks, and returned creationRequestId. Reconcile only that exact identity; preserve newer local edits and never automatically retry a mutation.
+4. Independently review the new boundaries, verify narrow/mobile/keyboard recovery, and retain measured affected/integration checks before the next combined checkpoint. Avoid unchanged suite reruns for volume. Physical/live blockers remain unchanged.
+5. At 9:00 a.m. Pacific perform final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Do not archive this chat.
 
 ## Morning handoff requirements
 

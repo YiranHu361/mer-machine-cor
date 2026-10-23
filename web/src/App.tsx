@@ -17,6 +17,7 @@ import {
   type TrialEconomics,
 } from "./OwnerRecords";
 import { useOwnerFormGuard } from "./owner-form-guard";
+import { settingsSnapshot } from "./machine-settings";
 import { ResultImage, retryImageSource, useImageAttempt } from "./ResultImage";
 import {
   OwnerDraftProvider,
@@ -71,6 +72,10 @@ type Machine = {
   activeJobId?: string;
   policy?: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
+  settingsFingerprint?: string;
+  policyReconciliationRequired?: boolean;
+  calibrationAt?: string;
+  reservation?: { jobId: string; expiresAt: string };
 };
 type Spec = {
   assetIds: string[];
@@ -583,6 +588,14 @@ function RequesterApp({
   const [busy, setBusy] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [unresolvedCreation, setUnresolvedCreation] = useState(false);
+  const [editingBaseline, setEditingBaseline] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
+  const [editConflict, setEditConflict] = useState(false);
+  const recoveryContext = useRef(0);
+  const recoveryInteraction = useRef(0);
+  const ordersSection = useRef<HTMLElement>(null);
   // Keep empty and incomplete native number input text until submission.
   // Converting every keystroke turns a cleared field (or "5e") into zero.
   type SpecDraft = Omit<Spec, "widthMm" | "heightMm" | "quantity"> & {
@@ -696,7 +709,7 @@ function RequesterApp({
     });
   };
   const refresh = useCallback(async () => {
-    if (!mounted.current || session?.role !== "requester") return;
+    if (!mounted.current || session?.role !== "requester") return false;
     const request = ++jobsGate.current.issued;
     machinesGate.current.issued = Math.max(
       machinesGate.current.issued,
@@ -707,14 +720,14 @@ function RequesterApp({
         api<{ machines: Machine[]; revision?: number }>("/machines"),
         api<{ jobs: Job[]; revision?: number }>("/jobs"),
       ]);
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
       const freshMachines = acceptSnapshot(
         machinesGate.current,
         request,
         m.revision,
       );
       const freshJobs = acceptSnapshot(jobsGate.current, request, j.revision);
-      if (!freshMachines && !freshJobs) return;
+      if (!freshMachines && !freshJobs) return true;
       if (freshMachines) setMachines(m.machines);
       if (freshJobs) setJobs(j.jobs);
       setConnected(true);
@@ -725,9 +738,10 @@ function RequesterApp({
             old?.id === found.id && old.version > found.version ? old : found,
           );
       }
+      return true;
     } catch (error) {
       if (!mounted.current || !currentSnapshotError(jobsGate.current, request))
-        return;
+        return false;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
         selectedId.current = null;
         removeStoredValue("local", "fabrary-current-job");
@@ -739,6 +753,7 @@ function RequesterApp({
         );
       }
       setConnected(false);
+      return false;
     } finally {
       if (mounted.current) setRefreshing(false);
     }
@@ -768,6 +783,9 @@ function RequesterApp({
   }, []);
   const select = (job: Job) => {
     if (!mounted.current) return;
+    recoveryContext.current++;
+    setEditingBaseline(null);
+    setEditConflict(false);
     setPreviewVisit((visit) => visit + 1);
     invalidateSnapshots(jobsGate.current);
     selectedId.current = job.id;
@@ -790,6 +808,32 @@ function RequesterApp({
     setEditing(false);
     setError("");
     setUnresolvedCreation(false);
+  };
+  const checkSavedOrders = async () => {
+    const initiatingElement = document.activeElement;
+    const context = recoveryContext.current;
+    const interaction = recoveryInteraction.current;
+    if (!(await refresh())) return;
+    requestAnimationFrame(() => {
+      if (
+        !mounted.current ||
+        context !== recoveryContext.current ||
+        interaction !== recoveryInteraction.current
+      )
+        return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement !== initiatingElement &&
+        activeElement !== document.body
+      )
+        return;
+      const target =
+        ordersSection.current?.querySelector<HTMLElement>(
+          ".order-row:not(:disabled)",
+        ) || ordersSection.current?.querySelector<HTMLElement>("h2");
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: "center", behavior: "instant" });
+    });
   };
   const act = async (name: string, fn: () => Promise<void>) => {
     invalidateSnapshots(jobsGate.current);
@@ -938,9 +982,59 @@ function RequesterApp({
       setBusy("");
     }
   };
+  const validSavedJob = (value: unknown): value is Job => {
+    const returned = value as Job | null | undefined;
+    return !(
+      !returned ||
+      typeof returned.id !== "string" ||
+      !returned.id ||
+      !Number.isSafeInteger(returned.version) ||
+      returned.version < 1 ||
+      !Number.isSafeInteger(returned.specVersion) ||
+      returned.specVersion < 1 ||
+      !returned.artifact ||
+      ![
+        returned.artifact.id,
+        returned.artifact.url,
+        returned.artifact.sha256,
+      ].every(
+        (field) => typeof field === "string" && field.trim().length > 0,
+      ) ||
+      (returned.artifact.previewUrl !== undefined &&
+        typeof returned.artifact.previewUrl !== "string") ||
+      !Array.isArray(returned.history) ||
+      !returned.history.every(
+        (event) =>
+          event &&
+          typeof event === "object" &&
+          [event.at, event.event].every((field) => typeof field === "string") &&
+          (event.reason === undefined || typeof event.reason === "string"),
+      ) ||
+      !returned.spec ||
+      !Array.isArray(returned.spec.assetIds) ||
+      !returned.spec.assetIds.every((id) => typeof id === "string") ||
+      typeof returned.spec.intent !== "string" ||
+      typeof returned.spec.material !== "string" ||
+      !["contain", "cover"].includes(returned.spec.crop) ||
+      !["authorized", "unclear"].includes(returned.spec.permission) ||
+      !Object.hasOwn(outputLabels, returned.spec.outputType) ||
+      ![
+        returned.spec.widthMm,
+        returned.spec.heightMm,
+        returned.spec.quantity,
+      ].every((value) => Number.isFinite(value) && value > 0) ||
+      ![
+        returned.productionState,
+        returned.paymentState,
+        returned.fulfillmentState,
+        returned.createdAt,
+        returned.updatedAt,
+      ].every((value) => typeof value === "string")
+    );
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (unresolvedCreation) return;
+    if (unresolvedCreation || editConflict) return;
     if (spec.outputType !== "3d" && !spec.assetIds.length) {
       setError("Add at least one image before making a production preview.");
       return;
@@ -985,32 +1079,11 @@ function RequesterApp({
           editing && current ? `/jobs/${current.id}/spec` : "/jobs",
           value,
           editing ? "PATCH" : undefined,
+          editing && current && editingBaseline?.id === current.id
+            ? { headers: { "If-Match": `"${editingBaseline.version}"` } }
+            : undefined,
         );
-        const returned = result?.job;
-        if (
-          !returned ||
-          typeof returned.id !== "string" ||
-          !returned.id ||
-          !Number.isInteger(returned.version) ||
-          !Number.isInteger(returned.specVersion) ||
-          !returned.spec ||
-          !Array.isArray(returned.spec.assetIds) ||
-          !returned.spec.assetIds.every((id) => typeof id === "string") ||
-          typeof returned.spec.intent !== "string" ||
-          !Object.hasOwn(outputLabels, returned.spec.outputType) ||
-          ![
-            returned.spec.widthMm,
-            returned.spec.heightMm,
-            returned.spec.quantity,
-          ].every((value) => Number.isFinite(value) && value > 0) ||
-          ![
-            returned.productionState,
-            returned.paymentState,
-            returned.fulfillmentState,
-            returned.createdAt,
-            returned.updatedAt,
-          ].every((value) => typeof value === "string")
-        )
+        if (!validSavedJob(result?.job))
           throw new ApiError(
             "The order response could not be read. Its result is unknown; check saved orders before trying again.",
             "invalid_response",
@@ -1018,6 +1091,14 @@ function RequesterApp({
             true,
           );
       } catch (error) {
+        if (
+          editing &&
+          error instanceof ApiError &&
+          error.code === "STALE_SPECIFICATION"
+        ) {
+          setEditConflict(true);
+          void refresh();
+        }
         if (!editing && error instanceof ApiError && error.outcomeUnknown) {
           setUnresolvedCreation(true);
           void refresh();
@@ -1030,6 +1111,9 @@ function RequesterApp({
     });
   };
   const newOrder = () => {
+    recoveryContext.current++;
+    setEditingBaseline(null);
+    setEditConflict(false);
     setUnresolvedCreation(false);
     selectedId.current = null;
     removeStoredValue("local", "fabrary-current-job");
@@ -1054,6 +1138,9 @@ function RequesterApp({
     focusProduction();
   };
   const cancelEdit = () => {
+    recoveryContext.current++;
+    setEditingBaseline(null);
+    setEditConflict(false);
     setAssets([]);
     setIntakeDraft(null);
     setIntakeError("");
@@ -1061,18 +1148,36 @@ function RequesterApp({
     setEditing(false);
     setError("");
   };
-  const edit = () => {
-    if (!current) return;
+  const beginEdit = (job: Job) => {
+    if (!mounted.current) return;
+    recoveryContext.current++;
+    setEditingBaseline({ id: job.id, version: job.version });
+    setEditConflict(false);
     setPreviewVisit((visit) => visit + 1);
     setAssets([]);
     setIntakeDraft(null);
     setIntakeError("");
-    setSpec(current.spec);
-    setBudgetEnabled(Boolean(current.spec.budgetMandate?.enabled));
-    setBudget(String((current.spec.budgetMandate?.capCents || 300) / 100));
+    setSpec(job.spec);
+    setBudgetEnabled(Boolean(job.spec.budgetMandate?.enabled));
+    setBudget(String((job.spec.budgetMandate?.capCents || 300) / 100));
     setEditing(true);
     setError("");
     focusProduction();
+  };
+  const edit = () => {
+    if (current) beginEdit(current);
+  };
+  const useSavedSpecification = () => {
+    if (!current) return;
+    void act("load-specification", async () => {
+      const { job } = await api<{ job: Job }>(`/jobs/${current.id}`);
+      if (!validSavedJob(job) || job.id !== current.id)
+        throw new Error(
+          "The saved specification could not be confirmed. Your draft is kept; refresh before adopting it.",
+        );
+      select(job);
+      beginEdit(job);
+    });
   };
   const readyCount = machines.filter(available).length;
   if (session?.role !== "requester")
@@ -1101,7 +1206,15 @@ function RequesterApp({
       </div>
     );
   return (
-    <div className="requester">
+    <div
+      className="requester"
+      onFocusCapture={() => {
+        recoveryInteraction.current++;
+      }}
+      onInputCapture={() => {
+        recoveryInteraction.current++;
+      }}
+    >
       <section className="intro">
         <div>
           <p className="quiet">
@@ -1148,6 +1261,20 @@ function RequesterApp({
           {error}
         </Notice>
       )}
+      {editConflict && (
+        <Notice>
+          A newer version of this order is saved. Your draft is kept here. Load
+          the saved specification, then reapply the changes you want.
+          <button
+            type="button"
+            className="text-button"
+            disabled={Boolean(busy)}
+            onClick={useSavedSpecification}
+          >
+            Use saved specification
+          </button>
+        </Notice>
+      )}
       {unresolvedCreation && (
         <Notice>
           The earlier order request may still finish. Check your saved orders
@@ -1158,7 +1285,7 @@ function RequesterApp({
               type="button"
               className="secondary"
               onClick={() => {
-                void refresh();
+                void checkSavedOrders();
               }}
             >
               Check saved orders
@@ -1574,6 +1701,7 @@ function RequesterApp({
                   disabled={
                     Boolean(busy) ||
                     unresolvedCreation ||
+                    editConflict ||
                     (spec.outputType === "3d" && !catalog.length)
                   }
                 >
@@ -1695,9 +1823,9 @@ function RequesterApp({
           </div>
         )}
       </section>
-      <section className="orders-section">
+      <section className="orders-section" ref={ordersSection}>
         <div className="section-heading">
-          <h2>Your orders</h2>
+          <h2 tabIndex={-1}>Your orders</h2>
           <span>
             {jobs.length} {jobs.length === 1 ? "order" : "orders"}
           </span>
@@ -2996,14 +3124,38 @@ function OwnerApp({
                         key={machine.id}
                         machine={machine}
                         busy={busy}
-                        action={(action, body) =>
-                          act(`${machine.id}-${action}`, () =>
-                            request(
-                              `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
-                              body,
-                              action === "calibrate" ? undefined : "PATCH",
-                            ),
-                          )
+                        action={(action, body, options) =>
+                          act(`${machine.id}-${action}`, async () => {
+                            try {
+                              const result = await api<{ machine?: Machine }>(
+                                `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
+                                body,
+                                action === "calibrate" ? undefined : "PATCH",
+                                {
+                                  headers: options?.fingerprint
+                                    ? { "If-Match": `"${options.fingerprint}"` }
+                                    : undefined,
+                                },
+                              );
+                              if (result.machine)
+                                options?.onAccepted?.(result.machine);
+                              setMessage(
+                                "The saved workshop state is shown below.",
+                              );
+                            } catch (error) {
+                              if (
+                                error instanceof ApiError &&
+                                [
+                                  "STALE_MACHINE_SETTINGS",
+                                  "MACHINE_POLICY_RECONCILIATION",
+                                ].includes(error.code)
+                              ) {
+                                options?.onConflict?.();
+                                await refresh();
+                              }
+                              throw error;
+                            }
+                          })
                         }
                       />
                     ))}
@@ -3114,37 +3266,74 @@ function OwnerMachine({
 }: {
   machine: Machine;
   busy: string;
-  action: (name: string, body: unknown) => Promise<boolean>;
+  action: (
+    name: string,
+    body: unknown,
+    options?: {
+      fingerprint?: string;
+      onAccepted?: (machine: Machine) => void;
+      onConflict?: () => void;
+    },
+  ) => Promise<boolean>;
 }) {
-  const settingsFromMachine = (m: Machine) => ({
-    mediaRemaining: String(m.mediaRemaining),
-    material: m.material,
-    collectionPoint: m.collectionPoint,
-    listed: m.listed,
-    priceCard: {
-      consumables: String(m.priceCard.consumables),
-      machine: String(m.priceCard.machine),
-      handling: String(m.priceCard.handling),
-      platform: String(m.priceCard.platform),
-    },
-    hours: { ...m.hours },
-    maxJobSeconds: String(m.maxJobSeconds),
-    policy: {
-      authorizedArtwork: m.policy?.authorizedArtwork ?? true,
-      maxQuantity: String(m.policy?.maxQuantity ?? 10),
-    },
-    ownerAddress: m.ownerAddress || "",
-  });
-  const [settings, setSettings] = useState(() => settingsFromMachine(m));
+  const [saved, setSaved] = useState(() => settingsSnapshot(m));
+  const [base, setBase] = useState(saved);
+  const [settings, setSettings] = useState(saved.settings);
   const [inspected, setInspected] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [rejectedSave, setRejectedSave] = useState(false);
+  const dirtyRef = useRef(false);
+  const rejectedRef = useRef(false);
+  const hasNewerSaved = saved.identity !== base.identity;
+  const conflict = rejectedSave || (dirty && hasNewerSaved);
+  const canAdoptSaved =
+    hasNewerSaved || (rejectedSave && saved.reconciliationRequired);
   useOwnerFormGuard(dirty || busy === `${m.id}-settings`);
   useEffect(() => {
-    if (!dirty) setSettings(settingsFromMachine(m));
+    const next = settingsSnapshot(m);
+    setSaved(next);
+    if (!dirtyRef.current && !rejectedRef.current) {
+      setSettings(next.settings);
+      setBase(next);
+    }
   }, [m]);
+  const inspectionContext = JSON.stringify([
+    m.id,
+    m.adapterVersion,
+    m.mode,
+    m.outputType,
+    m.material,
+    m.paired,
+    m.configured,
+    m.calibrated,
+    m.calibrationAt,
+    m.activeJobId,
+    m.reservation?.jobId,
+    m.reservation?.expiresAt,
+    m.paused,
+    m.ready,
+    m.policyReconciliationRequired,
+  ]);
+  useEffect(() => {
+    setInspected(false);
+  }, [inspectionContext]);
   const update = (value: Partial<typeof settings>) => {
+    dirtyRef.current = true;
     setDirty(true);
     setSettings((s) => ({ ...s, ...value }));
+  };
+  const adopt = (next: typeof saved) => {
+    setSettings(next.settings);
+    setBase(next);
+    dirtyRef.current = false;
+    rejectedRef.current = false;
+    setDirty(false);
+    setRejectedSave(false);
+  };
+  const checkedAction = async (name: string, body: unknown) => {
+    const accepted = await action(name, body);
+    if (accepted) setInspected(false);
+    return accepted;
   };
   return (
     <article className="owner-machine">
@@ -3172,9 +3361,12 @@ function OwnerMachine({
         </div>
         <button
           className={m.paused ? "secondary" : "danger-outline"}
-          disabled={Boolean(busy) || (m.paused && !inspected)}
+          disabled={
+            Boolean(busy) ||
+            (m.paused && (!inspected || m.policyReconciliationRequired))
+          }
           onClick={() => {
-            void action("settings", {
+            void checkedAction("settings", {
               paused: !m.paused,
               ...(m.paused ? { inspected, cleared: inspected } : {}),
             });
@@ -3221,7 +3413,7 @@ function OwnerMachine({
             busy={busy === `${m.id}-calibrate`}
             disabled={!inspected || Boolean(busy)}
             onClick={() => {
-              void action("calibrate", { inspected: true });
+              void checkedAction("calibrate", { inspected: true });
             }}
           >
             Run simulation calibration
@@ -3231,7 +3423,7 @@ function OwnerMachine({
       {m.mode === "hardware" && (
         <PhysicalCalibration
           machine={m}
-          finalize={(body) => action("calibrate", body)}
+          finalize={(body) => checkedAction("calibrate", body)}
         />
       )}
       <details className="machine-settings">
@@ -3240,28 +3432,58 @@ function OwnerMachine({
           aria-busy={Boolean(busy)}
           onSubmit={async (e) => {
             e.preventDefault();
+            if (conflict) return;
             if (
-              await action("settings", {
-                ...settings,
-                mediaRemaining: Number(settings.mediaRemaining),
-                maxJobSeconds: Number(settings.maxJobSeconds),
-                policy: {
-                  ...settings.policy,
-                  maxQuantity: Number(settings.policy.maxQuantity),
+              await action(
+                "settings",
+                {
+                  ...settings,
+                  mediaRemaining: Number(settings.mediaRemaining),
+                  maxJobSeconds: Number(settings.maxJobSeconds),
+                  policy: {
+                    ...settings.policy,
+                    maxQuantity: Number(settings.policy.maxQuantity),
+                  },
+                  priceCard: {
+                    consumables: Number(settings.priceCard.consumables),
+                    machine: Number(settings.priceCard.machine),
+                    handling: Number(settings.priceCard.handling),
+                    platform: Number(settings.priceCard.platform),
+                  },
+                  ownerAddress: settings.ownerAddress || null,
                 },
-                priceCard: {
-                  consumables: Number(settings.priceCard.consumables),
-                  machine: Number(settings.priceCard.machine),
-                  handling: Number(settings.priceCard.handling),
-                  platform: Number(settings.priceCard.platform),
+                {
+                  fingerprint: base.fingerprint,
+                  onAccepted: (machine) => {
+                    const next = settingsSnapshot(machine);
+                    setSaved(next);
+                    adopt(next);
+                  },
+                  onConflict: () => {
+                    rejectedRef.current = true;
+                    setRejectedSave(true);
+                  },
                 },
-                ownerAddress: settings.ownerAddress || null,
-              })
-            )
+              )
+            ) {
+              dirtyRef.current = false;
               setDirty(false);
+            }
           }}
         >
           <fieldset disabled={Boolean(busy)}>
+            {conflict && (
+              <Notice kind="error">
+                {saved.reconciliationRequired
+                  ? "The machine policy needs synchronization. Your draft is kept."
+                  : "Saved machine settings changed while you were editing. Your draft is kept."}
+                {hasNewerSaved
+                  ? " Load the newer saved settings before saving again. This discards your unsaved machine edits."
+                  : canAdoptSaved
+                    ? " Load the saved settings before synchronizing the machine. This discards your unsaved machine edits."
+                    : " Refresh the workshop to load the newer settings before saving again."}
+              </Notice>
+            )}
             <div className="form-grid">
               <Field label="Media remaining (estimated)">
                 <input
@@ -3428,22 +3650,23 @@ function OwnerMachine({
             <Button
               className="primary"
               busy={busy === `${m.id}-settings`}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || conflict}
               type="submit"
             >
               Save machine settings
             </Button>
-            {dirty && (
+            {(dirty || conflict) && (
               <button
                 className="secondary"
                 type="button"
-                disabled={Boolean(busy)}
-                onClick={() => {
-                  setSettings(settingsFromMachine(m));
-                  setDirty(false);
-                }}
+                disabled={Boolean(busy) || (conflict && !canAdoptSaved)}
+                onClick={() => adopt(saved)}
               >
-                Discard machine edits
+                {conflict
+                  ? hasNewerSaved
+                    ? "Load newer saved settings"
+                    : "Load saved settings for synchronization"
+                  : "Discard machine edits"}
               </button>
             )}
           </fieldset>
@@ -3487,6 +3710,13 @@ function PhysicalCalibration({
   const [error, setError] = useState("");
   const [lookupKnown, setLookupKnown] = useState(false);
   const [lookupBusy, setLookupBusy] = useState(false);
+  const recoveryControl = useRef<HTMLElement | null>(null);
+  const pendingRecoveryFocus = useRef<{
+    initiator: HTMLButtonElement;
+    recovered: boolean;
+    generation: number;
+  } | null>(null);
+  const [recoverySequence, setRecoverySequence] = useState(0);
   const mounted = useRef(true);
   const readGate = useRef<{
     generation: number;
@@ -3551,6 +3781,7 @@ function PhysicalCalibration({
           }>(`/owner/machines/${m.id}/calibration`);
           if (!mounted.current || generation !== gate.generation) return false;
           const saved = value.calibration;
+          const status = value.status;
           if (
             !Object.prototype.hasOwnProperty.call(value, "calibration") ||
             (saved !== null &&
@@ -3559,7 +3790,17 @@ function PhysicalCalibration({
                 ![saved.id, saved.attemptId, saved.productionState].every(
                   (field) =>
                     typeof field === "string" && field.trim().length > 0,
-                )))
+                ))) ||
+            (status != null &&
+              (typeof status !== "object" ||
+                Array.isArray(status) ||
+                [status.execution_status, status.state].some(
+                  (field) =>
+                    field !== undefined &&
+                    (typeof field !== "string" || field.trim().length === 0),
+                ) ||
+                (status.reason !== undefined &&
+                  typeof status.reason !== "string")))
           )
             throw new Error(
               "The saved calibration response could not be confirmed. Refresh its status before starting or confirming a physical job.",
@@ -3665,6 +3906,48 @@ function PhysicalCalibration({
       if (mounted.current) setBusy("");
     }
   };
+  const recoverLookup = (initiator: HTMLButtonElement) => {
+    void run("refresh", async (isCurrent) => {
+      const recovered = await refresh();
+      if (!isCurrent()) return;
+      pendingRecoveryFocus.current = {
+        initiator,
+        recovered,
+        generation: readGate.current.generation,
+      };
+      setRecoverySequence((value) => value + 1);
+    });
+  };
+  useEffect(() => {
+    const request = pendingRecoveryFocus.current;
+    if (!request || busy) return;
+    const target = request.recovered
+      ? recoveryControl.current
+      : request.initiator;
+    if (target?.matches(":disabled")) return;
+    pendingRecoveryFocus.current = null;
+    // Focus after the pending controls have re-enabled in the committed DOM.
+    requestAnimationFrame(() => {
+      if (
+        !mounted.current ||
+        request.generation !== readGate.current.generation
+      )
+        return;
+      const active = document.activeElement;
+      if (active !== request.initiator && active !== document.body) return;
+      if (
+        !target?.isConnected ||
+        !target.getClientRects().length ||
+        target.matches(":disabled")
+      )
+        return;
+      target.focus({ preventScroll: true });
+      (target.closest(".field, .check") || target).scrollIntoView({
+        block: "nearest",
+        behavior: "instant",
+      });
+    });
+  }, [recoverySequence, busy, lookupBusy]);
   return (
     <details className="physical-calibration">
       <summary>Physical calibration job & inspection</summary>
@@ -3685,8 +3968,8 @@ function PhysicalCalibration({
             className="text-button"
             type="button"
             disabled={lookupBusy || Boolean(busy)}
-            onClick={() => {
-              void run("refresh", refresh);
+            onClick={(event) => {
+              recoverLookup(event.currentTarget);
             }}
           >
             Refresh saved calibration status
@@ -3767,6 +4050,9 @@ function PhysicalCalibration({
                 )}
                 <Field label="Calibration prepared model">
                   <select
+                    ref={(node) => {
+                      recoveryControl.current = node;
+                    }}
                     required
                     disabled={Boolean(busy)}
                     value={modelId}
@@ -3787,6 +4073,9 @@ function PhysicalCalibration({
                 hint="One PNG, JPEG or WebP. Use artwork whose output you can inspect."
               >
                 <input
+                  ref={(node) => {
+                    recoveryControl.current = node;
+                  }}
                   required={!assets.length}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
@@ -3932,6 +4221,9 @@ function PhysicalCalibration({
             >
               <label className="check">
                 <input
+                  ref={(node) => {
+                    recoveryControl.current = node;
+                  }}
                   required
                   type="checkbox"
                   disabled={Boolean(busy) || !lookupKnown}

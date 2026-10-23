@@ -17,7 +17,8 @@ const calibration = (suffix = "one") => ({
 async function fixture(
   page: Page,
   existing = true,
-  lookup: "ready" | "held" | "failed" | "malformed" = "ready",
+  lookup:
+    "ready" | "held" | "failed" | "malformed" | "malformed-status" = "ready",
 ) {
   const state = {
     calibration: existing
@@ -31,6 +32,9 @@ async function fixture(
     heldLookups: [] as Route[],
     lookupStatus: lookup === "failed" ? 503 : 200,
     malformedLookup: lookup === "malformed",
+    statusValue: (lookup === "malformed-status"
+      ? { execution_status: { malformed: true } }
+      : { execution_status: "completed" }) as unknown,
   };
   const machine = {
     id: "calibration_recovery_fixture",
@@ -101,7 +105,7 @@ async function fixture(
         });
       body = {
         calibration: state.calibration,
-        status: { execution_status: "completed" },
+        status: state.statusValue,
       };
     } else if (path === "/api/uploads" && method === "POST")
       body = {
@@ -489,5 +493,139 @@ test("a device change fences a pending old calibration reply before the queued c
       ),
     ),
   ).toBe(false);
+  expect(state.mutations).toEqual([]);
+});
+
+test("a malformed optional calibration status stays recoverable instead of blanking the app, then focuses the fresh unchecked inspection (offline fixture)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 664 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const state = await fixture(page, true, "malformed-status");
+  const region = page.locator(".physical-calibration");
+  await expect(region.getByRole("alert")).toContainText(
+    "could not be confirmed",
+  );
+  await expect(
+    page.getByRole("heading", {
+      name: "Keep the counter moving.",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    region.getByRole("button", {
+      name: "Start physical calibration",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  state.statusValue = { execution_status: "completed" };
+  const retry = region.getByRole("button", {
+    name: "Refresh saved calibration status",
+    exact: true,
+  });
+  await retry.focus();
+  await retry.press("Enter");
+  const inspected = page.getByLabel(
+    "I inspected the physical output and fresh result evidence after this attempt completed.",
+    { exact: true },
+  );
+  await expect(inspected).toBeFocused();
+  await expect(inspected).not.toBeChecked();
+  await expect(region.getByRole("alert")).toHaveCount(0);
+  const labelBox = await inspected.locator("..").boundingBox();
+  expect(
+    labelBox && labelBox.y >= 0 && labelBox.y + labelBox.height <= 664,
+  ).toBe(true);
+  expect(errors).toEqual([]);
+  expect(state.mutations).toEqual([]);
+});
+
+test("explicit calibration retry puts a keyboard user in the recovered start form at320px (offline fixture)", async ({
+  page,
+  browserName,
+}) => {
+  await page.setViewportSize({ width: 320, height: 664 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const state = await fixture(page, false, "failed");
+  const retry = page.getByRole("button", {
+    name: "Refresh saved calibration status",
+    exact: true,
+  });
+  await retry.focus();
+  state.lookupStatus = 200;
+  await retry.press("Enter");
+  const artwork = page.getByLabel("Calibration artwork", { exact: true });
+  await expect(artwork).toBeFocused();
+  const fieldBox = await artwork.locator("..").boundingBox();
+  expect(
+    fieldBox && fieldBox.y >= 0 && fieldBox.y + fieldBox.height <= 664,
+  ).toBe(true);
+  await page.keyboard.press(
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab",
+  );
+  await expect(
+    page.getByLabel("Calibration width (mm)", { exact: true }),
+  ).toBeFocused();
+  expect(state.mutations).toEqual([]);
+});
+
+test("failed calibration retry restores its usable keyboard recovery control without starting a physical job (offline fixture)", async ({
+  page,
+}) => {
+  const state = await fixture(page, false, "failed");
+  const retry = page.getByRole("button", {
+    name: "Refresh saved calibration status",
+    exact: true,
+  });
+  await retry.focus();
+  await retry.press("Enter");
+  await expect(
+    page.locator(".physical-calibration").getByRole("alert"),
+  ).toContainText("temporarily unavailable");
+  await expect(retry).toBeEnabled();
+  await expect(retry).toBeFocused();
+  await expect(
+    page.getByLabel("Calibration artwork", { exact: true }),
+  ).toHaveCount(0);
+  expect(state.mutations).toEqual([]);
+});
+
+test("a recovered calibration lookup respects a newer owner focus choice while its reply was pending (offline fixture)", async ({
+  page,
+}) => {
+  const state = await fixture(page, false, "failed");
+  state.lookupStatus = 200;
+  state.holdLookup = true;
+  const retry = page.getByRole("button", {
+    name: "Refresh saved calibration status",
+    exact: true,
+  });
+  await retry.focus();
+  await retry.press("Enter");
+  await expect.poll(() => state.heldLookups.length).toBe(1);
+  const newFocus = page.getByRole("tab", {
+    name: "Payment records",
+    exact: true,
+  });
+  await newFocus.focus();
+  state.holdLookup = false;
+  await state.heldLookups[0].fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ calibration: null, status: null }),
+  });
+  await expect(
+    page.getByLabel("Calibration artwork", { exact: true }),
+  ).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await expect(newFocus).toBeFocused();
   expect(state.mutations).toEqual([]);
 });

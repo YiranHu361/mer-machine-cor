@@ -81,6 +81,14 @@ test("requester and owner complete an honest simulated order, independent handli
     .click();
   expect((await saved).status()).toBe(200);
   await expect(ownerPage.getByRole("alert")).toHaveCount(0);
+  const clearance = machine.getByLabel(
+    "I inspected the output area, loaded media and cleared the machine.",
+  );
+  await expect(clearance).not.toBeChecked();
+  await expect(
+    machine.getByRole("button", { name: "Resume machine", exact: true }),
+  ).toBeDisabled();
+  await clearance.check();
   await machine
     .getByRole("button", { name: "Resume machine", exact: true })
     .click();
