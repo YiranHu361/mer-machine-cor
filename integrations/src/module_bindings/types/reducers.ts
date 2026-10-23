@@ -9,4 +9,3 @@ import { type Infer as __Infer } from "spacetimedb";
 import CompareAndSetReducer from "../compare_and_set_reducer";
 
 export type CompareAndSetParams = __Infer<typeof CompareAndSetReducer>;
-

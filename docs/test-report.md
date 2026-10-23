@@ -6,9 +6,9 @@ Recorded 2026-10-22 23:33 PDT (America/Los_Angeles). Machine-readable timestamps
 
 Working source-state identifier:
 
-`44bac2769cc9e57ecea51f282ac0ee953c48cf8a61a46a7d4c390c8d417d46db`
+`df79eeaa51dc73755f3b807324d1c4cfbe8d977ef7911625d0c05ea7fa9889e2`
 
-Reproduce with `node scripts/state-id.mjs`. It hashes application, node, integrations, web, tests, setup scripts and dependency/runtime pins; private data, generated builds and report files are excluded. Evidence was collected as features were implemented, then affected checks were rerun after fixes. The final backend and built-browser checks followed the last functional changes. Final Python pin files match the tested interpreter. [Machine-readable summary](evidence/verification-summary.json).
+Reproduce with `node scripts/state-id.mjs`. It hashes application, node, integrations, web, tests, setup scripts and dependency/runtime pins; private data, generated builds and report files are excluded. Evidence was collected as features were implemented, then affected checks were rerun after fixes. The final backend and built-browser checks followed the last functional changes. Final Python pin files match the tested interpreter. Trailing empty lines in generated bindings were normalized after testing; executable behavior is unchanged. [Machine-readable summary](evidence/verification-summary.json).
 
 ## Checks actually executed
 

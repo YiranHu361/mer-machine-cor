@@ -26,4 +26,3 @@ export const Config = __t.object("Config", {
   owner: __t.identity(),
 });
 export type Config = __Infer<typeof Config>;
-

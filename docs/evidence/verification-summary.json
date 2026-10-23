@@ -1,7 +1,7 @@
 {
   "recordedAt": "2026-10-23T06:33:41.388477+00:00",
   "localTime": "2026-10-22T23:33:41.388477-07:00",
-  "sourceStateSha256": "44bac2769cc9e57ecea51f282ac0ee953c48cf8a61a46a7d4c390c8d417d46db",
+  "sourceStateSha256": "df79eeaa51dc73755f3b807324d1c4cfbe8d977ef7911625d0c05ea7fa9889e2",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
     "backendApplicationAndProcessRecovery": 37,
@@ -31,5 +31,6 @@
     ".data/backend-final.log": "ae9c6e2c1ed48d2832dbd6bdedaf87107734e3b4cf9fe383006d6ba6858de203",
     ".data/final-checks.log": "2e3def643be7ae51ece95f24bd1f6219ef5bad533f1cb0f9e63d84ff8a9e5893",
     "web/evidence/final-browser-report.json": "ecf64e333e95e07e3ca2f5b8c3a43e8b20e910ad88c9a3010c72d53d975c2d57"
-  }
+  },
+  "notes": "Final post-test source normalization removed trailing empty lines in generated bindings only; no executable behavior changed."
 }
