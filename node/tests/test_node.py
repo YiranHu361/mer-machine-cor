@@ -703,3 +703,37 @@ async def test_shutdown_keeps_journal_ownership_until_error_stop_transport_retur
     restarted = NodeService(key=KEY, data_dir=tmp_path)
     assert restarted.get_status("phomemo_01")["execution_status"] == "uncertain"
     await restarted.close()
+
+
+def test_bambu_catalog_color_uses_backend_normalization_without_weakening_exact_binding():
+    from fabrary_node.adapters import Bambu
+    digest = "a" * 64
+    entry = {"id": "color_fixture", "sha256": digest, "machineModel": "Bambu Lab A1 mini", "reviewed": True,
+        "widthMm": 30, "heightMm": 20, "depthMm": 5, "color": "\ufeff  青色 blue\u00a0", "material": "pla", "estimatedSeconds": 180}
+    adapter = Bambu({"catalog": [entry], "maxJobSeconds": 900})
+    params = {"widthMm": 30, "heightMm": 20, "depthMm": 5, "color": "青色 blue", "material": "pla", "estimatedSeconds": 180}
+    assert adapter.catalog_entry(digest, params)["color"] == "青色 blue"
+    for changed in ({"color": "red"}, {"depthMm": 6}, {"estimatedSeconds": 181}):
+        with pytest.raises(NodeError):
+            adapter.catalog_entry(digest, params | changed)
+    with pytest.raises(NodeError):
+        adapter.catalog_entry("b" * 64, params)
+    for color in ("   ", "\ufeff\u00a0", "x" * 61, "😀" * 61):
+        with pytest.raises(NodeError) as error:
+            Bambu({"catalog": [entry | {"color": color}], "maxJobSeconds": 900})
+        assert error.value.code == "catalog_color"
+    assert Bambu({"catalog": [entry | {"color": "😀" * 60}]}).config["catalog"][0]["color"] == "😀" * 60
+
+
+@pytest.mark.asyncio
+async def test_signed_3d_color_is_bounded_and_normalized_before_artifact_retrieval(service):
+    params = PARAMS | {"outputType": "3d", "widthMm": 30, "heightMm": 20, "depthMm": 5,
+        "color": "青色 blue", "material": "pla", "estimatedSeconds": 180}
+    service.validate_parameters("bambu_01", params)
+    service.validate_parameters("bambu_01", params | {"color": "😀" * 60})
+    for color in (" blue ", "\ufeffblue", "x" * 61, "😀" * 61):
+        with pytest.raises(NodeError) as error:
+            service.validate_parameters("bambu_01", params | {"color": color})
+        assert error.value.code == "catalog_color"
+    assert service.journal.latest("bambu_01") is None
+    await service.close()

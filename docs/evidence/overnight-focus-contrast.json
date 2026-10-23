@@ -1,0 +1,158 @@
+{
+  "date": "2026-10-23",
+  "scope": "Measured opaque CSS focus-indicator colors against declared interface surfaces; not a full accessibility or WCAG conformance claim.",
+  "before": {
+    "color": "#eb9a30",
+    "relative_luminance": 0.409867702
+  },
+  "after": {
+    "color": "#a05b00",
+    "token": "--focus",
+    "relative_luminance": 0.14955754,
+    "outline_declarations_changed": 7,
+    "outline_width_px": 3
+  },
+  "method": {
+    "color_space": "sRGB",
+    "normalized_channel": "c = channel_8_bit / 255",
+    "linearized_channel": "c_linear = c / 12.92 when c <= 0.04045; otherwise ((c + 0.055) / 1.055) ** 2.4",
+    "relative_luminance": "L = 0.2126 * R_linear + 0.7152 * G_linear + 0.0722 * B_linear",
+    "contrast_ratio": "(max(L_focus, L_surface) + 0.05) / (min(L_focus, L_surface) + 0.05)",
+    "rounding": "Ratios are stored to six decimal places; threshold comparison uses unrounded values."
+  },
+  "surfaces": [
+    {
+      "name": "White controls and order ticket",
+      "color": "#ffffff",
+      "css_source": "input/select/textarea, .order-panel",
+      "before_ratio": 2.283265,
+      "after_ratio": 5.26164,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Paper panels",
+      "color": "#fcfdff",
+      "css_source": "--paper: .intake-panel, .owner-job, .owner-machine, .owner-login form",
+      "before_ratio": 2.243384,
+      "after_ratio": 5.169737,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Page and header",
+      "color": "#edf3f7",
+      "css_source": ":root and transparent header/navigation surroundings",
+      "before_ratio": 2.040176,
+      "after_ratio": 4.701457,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Queue tools",
+      "color": "#e5edf5",
+      "css_source": ".queue-tools",
+      "before_ratio": 1.931402,
+      "after_ratio": 4.450794,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Selected order row",
+      "color": "#e3ecff",
+      "css_source": ".order-row.active",
+      "before_ratio": 1.925375,
+      "after_ratio": 4.436906,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Standard order row",
+      "color": "#f8fbff",
+      "css_source": ".order-row",
+      "before_ratio": 2.199998,
+      "after_ratio": 5.069757,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Blue notice",
+      "color": "#eaf0ff",
+      "css_source": ".notice",
+      "before_ratio": 2.001284,
+      "after_ratio": 4.611833,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Error notice",
+      "color": "#fff0ed",
+      "css_source": ".notice.error",
+      "before_ratio": 2.059171,
+      "after_ratio": 4.745228,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Success notice",
+      "color": "#e4f2e9",
+      "css_source": ".notice.success",
+      "before_ratio": 1.976252,
+      "after_ratio": 4.554147,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Preparation and review forms",
+      "color": "#f2f6fd",
+      "css_source": ".preparation, .redeem-form, .review-form",
+      "before_ratio": 2.106707,
+      "after_ratio": 4.854772,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Simulation disclosure",
+      "color": "#fff4e3",
+      "css_source": ".simulation-controls",
+      "before_ratio": 2.098591,
+      "after_ratio": 4.83607,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Machine registration form",
+      "color": "#e2eaf5",
+      "css_source": ".register-form",
+      "before_ratio": 1.883302,
+      "after_ratio": 4.339949,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Empty-state action surroundings",
+      "color": "#f7faff",
+      "css_source": ".empty",
+      "before_ratio": 2.182484,
+      "after_ratio": 5.029395,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Mode bar palette surface",
+      "color": "#dde7f6",
+      "css_source": ".modebar",
+      "before_ratio": 1.830479,
+      "after_ratio": 4.218222,
+      "after_at_least_3_to_1": true
+    },
+    {
+      "name": "Common panel border palette surface",
+      "color": "#d0dbe7",
+      "css_source": "--line",
+      "before_ratio": 1.627478,
+      "after_ratio": 3.75042,
+      "after_at_least_3_to_1": true
+    }
+  ],
+  "primary_button": {
+    "fill": "#2049cb",
+    "outline_offset_px": 4,
+    "light_gap_note": "The existing positive 4px outline offset leaves the surrounding light page/panel/form surface between the blue button and amber outline. Evaluate the separated outline against that light surrounding surface; the blue fill is not its immediate adjacent background.",
+    "fill_vs_after_focus_ratio_for_reference_only": 1.387362
+  },
+  "preserved": [
+    "Orange accent --orange:#ffb457",
+    "All outline widths and offsets",
+    "Control dimensions and layout",
+    "Existing focus and keyboard behavior"
+  ],
+  "verification_boundary": "This measurement checks declared opaque colors, not rasterized edge pixels, focus obscuration, browser default outlines or every indicator state. Existing keyboard/reflow/accessibility browser checks are separate verification."
+}

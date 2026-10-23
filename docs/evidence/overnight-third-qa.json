@@ -1,0 +1,352 @@
+{
+  "recordedAt": "2026-10-23T09:29:59.890Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "3b8b53e7e46b781a03722fcb644a2be6786bdbeae811e1fab891df2c3d8eceae",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 61,
+    "node": 67,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserStorageAndWallet": 20,
+    "browserScenarios": 56,
+    "uniqueCases": 234,
+    "checksIncludingThreeBrowserEngines": 346,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T09:28:58.101Z",
+      "durationMs": 44529.532,
+      "report": "web/evidence/overnight-third-chromium-browser.json",
+      "reportSha256": "2bb7f10d6c29553447290bef7078df822f8cf58198a74698f5392f6181e4857b",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T09:27:11.718Z",
+      "durationMs": 56387.141,
+      "report": "web/evidence/overnight-third-firefox-browser.json",
+      "reportSha256": "758fa6772b343d0b2accc4f1ad2989d33e1d507454854ad9845fecb555ff845b",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T09:28:08.496Z",
+      "durationMs": 49220.534,
+      "report": "web/evidence/overnight-third-webkit-browser.json",
+      "reportSha256": "44e0f60c1605c166a9ac1e753cb3f8a46e5db9041e99b178060843f7aa10723a",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "actualLocalChecks": {
+    "backendRestartSseReconnect": {
+      "at": "2026-10-23T09:09:27.125Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 2264,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "earlierAcceptance": "First-checkpoint Spacetime CAS/access/subscriptions, 10 sticker + 3 Instax simulation jobs, failure/review/lost-ack, signed simulation calibration API and actual local FastMCP application loop remain retained; unchanged finite loops were not rerun this pass.",
+    "activationPhase": "The restart activated the latest API/node code and initial UI repairs; final static web build and all three browser suites followed the last focus/input refinements."
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 184,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-third-web-final.log": "b29f71ae801eb01bc37445682b3cc2477bb2a16d09f2db44c04980c46d001e1d",
+    ".data/overnight-third-software-final.log": "20e76f89d6790d2ecdc901c829b37e437ecf398eb74be0b80d11588eda90ecf7",
+    ".data/overnight-third-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-third-chromium-browser.log": "c2218fdd08da05c56b4065899cdb92a596ce09d4d16bc52bb7437102b33c0762",
+    ".data/overnight-third-firefox-browser.log": "4b7514946dfb4db7b9437367d1731f9c948db904af769c10e1b5eef4830ca46c",
+    ".data/overnight-third-webkit-browser.log": "839bfbe20955bbc5a42d0f701d6ffc7fc52e0cf375b5cfdb16d43b7937ab5924"
+  },
+  "finalBuild": {
+    "indexSha256": "36369476c46df84bb642bca0d098a769021b0060fbe6e7b77ebde25611dd4fda",
+    "script": "/assets/index-BeI9yxhi.js",
+    "stylesheet": "/assets/index-cIU2u0Iz.css"
+  },
+  "notes": "The complete shared software check followed the API/node validation and initial UI repairs. Final web build, strict web TypeScript and the three-engine browser suite followed the last focus-contrast and input/focus-preservation repairs. All new browser recovery cases intercept API boundaries; lost-response reload checks accept intended beforeunload prompts and assert a changed document. Actual local service restart activated this code while preserving data/journals; SSE reconnection was checked with polling disabled. Native iOS, complete accessibility conformance, physical timings and live service acceptance remain unverified.",
+  "diagnosticEvidence": [
+    {
+      "path": "docs/evidence/overnight-focus-contrast.json",
+      "sha256": "e36d97c2c2f790683c304b87cb96929905e3bf7812eccf1b331a8453bd68c985"
+    },
+    {
+      "path": "docs/evidence/overnight-focus-recovery.json",
+      "sha256": "86f23125437c6615903a0f3e0993b20b676f977953e90316266085da7c7aa162"
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "web/evidence/overnight-owner-queue-live-draft-320.png",
+      "engine": "chromium",
+      "viewport": {
+        "width": 320,
+        "height": 664
+      },
+      "boundary": "Offline owner queue fixture on the final production bundle; retained input remains visible after live insertion."
+    }
+  ]
+}

@@ -639,13 +639,61 @@ function RequesterApp({
   });
   const [budgetEnabled, setBudgetEnabled] = useState(false);
   const [budget, setBudget] = useState("3.00");
+  const pristineDraft = useRef(spec);
+  const draftSignature = (value: Spec) =>
+    JSON.stringify([
+      value.assetIds,
+      value.intent,
+      value.outputType,
+      value.widthMm,
+      value.heightMm,
+      value.quantity,
+      value.material,
+      value.permission,
+      value.crop,
+      value.budgetMandate?.enabled === true,
+      value.budgetMandate?.capCents ?? null,
+      value.preparedModelId ?? null,
+      value.depthMm ?? null,
+      value.color ?? null,
+      value.estimatedSeconds ?? null,
+    ]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [editing, setEditing] = useState(false);
+  const unsavedDraft =
+    (!current || editing) &&
+    draftSignature({
+      ...spec,
+      budgetMandate: budgetEnabled
+        ? { enabled: true, capCents: Math.round(Number(budget) * 100) }
+        : undefined,
+    }) !==
+      draftSignature(editing && current ? current.spec : pristineDraft.current);
+  const confirmLeaving = Boolean(busy) || unsavedDraft;
+  useEffect(() => {
+    if (!confirmLeaving || session?.role !== "requester") return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [confirmLeaving, session?.role]);
   const [intakeDraft, setIntakeDraft] = useState<IntakeDraft | null>(null);
   const [intakeError, setIntakeError] = useState("");
-  const [previewHash, setPreviewHash] = useState<string | null>(null);
+  const [loadedPreview, setLoadedPreview] = useState<string | null>(null);
+  const [previewVisit, setPreviewVisit] = useState(0);
+  const previewContext = current?.artifact
+    ? JSON.stringify([
+        current.id,
+        current.artifact.id,
+        current.artifact.sha256,
+        current.artifact.previewUrl || current.artifact.url,
+        previewVisit,
+      ])
+    : null;
   const previewReady = Boolean(
-    current?.artifact?.sha256 && previewHash === current.artifact.sha256,
+    current?.artifact?.sha256 && loadedPreview === previewContext,
   );
   const selectedId = useRef<string | null>(
     readStoredValue("local", "fabrary-current-job"),
@@ -665,7 +713,17 @@ function RequesterApp({
   }, []);
   const productionHeading = useRef<HTMLHeadingElement>(null);
   const focusProduction = () => {
-    requestAnimationFrame(() => productionHeading.current?.focus());
+    const initiatingElement = document.activeElement;
+    requestAnimationFrame(() => {
+      if (!mounted.current) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement !== initiatingElement &&
+        activeElement !== document.body
+      )
+        return;
+      productionHeading.current?.focus();
+    });
   };
   const refresh = useCallback(async () => {
     if (!mounted.current || session?.role !== "requester") return;
@@ -740,6 +798,7 @@ function RequesterApp({
   }, []);
   const select = (job: Job) => {
     if (!mounted.current) return;
+    setPreviewVisit((visit) => visit + 1);
     invalidateSnapshots(jobsGate.current);
     selectedId.current = job.id;
     writeStoredValue("local", "fabrary-current-job", job.id);
@@ -983,6 +1042,7 @@ function RequesterApp({
   };
   const edit = () => {
     if (!current) return;
+    setPreviewVisit((visit) => visit + 1);
     setAssets([]);
     setIntakeDraft(null);
     setIntakeError("");
@@ -1090,11 +1150,10 @@ function RequesterApp({
           {current && !editing ? (
             <>
               <ProductionPreview
+                key={previewContext}
                 job={current}
                 onReady={(ready) =>
-                  setPreviewHash(
-                    ready ? current.artifact?.sha256 || null : null,
-                  )
+                  setLoadedPreview(ready ? previewContext : null)
                 }
               />
               {current.spec.outputType === "3d" && (
@@ -1264,8 +1323,9 @@ function RequesterApp({
                     maxLength={600}
                     value={spec.intent}
                     onChange={(e) => {
+                      const intent = e.currentTarget.value;
                       setIntakeDraft(null);
-                      setSpec((s) => ({ ...s, intent: e.target.value }));
+                      setSpec((s) => ({ ...s, intent }));
                     }}
                     placeholder="A club sticker for our next tabling event"
                   />
@@ -1329,12 +1389,13 @@ function RequesterApp({
                       max="300"
                       disabled={spec.outputType !== "sticker"}
                       value={spec.widthMm}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const widthMm = Number(e.currentTarget.value);
                         setSpec((s) => ({
                           ...s,
-                          widthMm: Number(e.target.value),
-                        }))
-                      }
+                          widthMm,
+                        }));
+                      }}
                     />
                   </Field>
                   <Field label="Height (mm)">
@@ -1345,12 +1406,13 @@ function RequesterApp({
                       max="300"
                       disabled={spec.outputType !== "sticker"}
                       value={spec.heightMm}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const heightMm = Number(e.currentTarget.value);
                         setSpec((s) => ({
                           ...s,
-                          heightMm: Number(e.target.value),
-                        }))
-                      }
+                          heightMm,
+                        }));
+                      }}
                     />
                   </Field>
                   <Field label="Quantity">
@@ -1367,23 +1429,25 @@ function RequesterApp({
                       }
                       step="1"
                       value={spec.quantity}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const quantity = Number(e.currentTarget.value);
                         setSpec((s) => ({
                           ...s,
-                          quantity: Number(e.target.value),
-                        }))
-                      }
+                          quantity,
+                        }));
+                      }}
                     />
                   </Field>
                   <Field label="Image placement">
                     <select
                       value={spec.crop}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const crop = e.currentTarget.value as Spec["crop"];
                         setSpec((s) => ({
                           ...s,
-                          crop: e.target.value as Spec["crop"],
-                        }))
-                      }
+                          crop,
+                        }));
+                      }}
                       disabled={spec.outputType === "3d"}
                     >
                       <option value="contain">Fit whole image</option>
@@ -1394,9 +1458,10 @@ function RequesterApp({
                 <Field label="Material">
                   <select
                     value={spec.material}
-                    onChange={(e) =>
-                      setSpec((s) => ({ ...s, material: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const material = e.currentTarget.value;
+                      setSpec((s) => ({ ...s, material }));
+                    }}
                   >
                     <option
                       value={
@@ -1418,12 +1483,14 @@ function RequesterApp({
                 <Field label="Artwork permission">
                   <select
                     value={spec.permission}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const permission = e.currentTarget
+                        .value as Spec["permission"];
                       setSpec((s) => ({
                         ...s,
-                        permission: e.target.value as Spec["permission"],
-                      }))
-                    }
+                        permission,
+                      }));
+                    }}
                   >
                     <option value="authorized">
                       I own this artwork or have permission to print it
@@ -2270,8 +2337,24 @@ function OwnerApp({
   const [orderFilter, setOrderFilter] = useState("action");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderPage, setOrderPage] = useState(1);
+  const [retainedOrderId, setRetainedOrderId] = useState<string | null>(null);
+  const focusedOrder = useRef<{ id: string; target: HTMLElement } | null>(null);
   const queueStart = useRef<HTMLDivElement>(null);
+  const queueHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => setOrderPage(1), [orderFilter, orderSearch]);
+  useEffect(() => {
+    const previous = focusedOrder.current;
+    if (!previous || previous.target.isConnected) return;
+    focusedOrder.current = null;
+    if (
+      tab !== "queue" ||
+      (document.activeElement && document.activeElement !== document.body)
+    )
+      return;
+    const next = queueStart.current || queueHeading.current;
+    next?.focus({ preventScroll: true });
+    next?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [dashboard, tab, orderFilter, orderSearch, orderPage]);
   const [connected, setConnected] = useState(true);
   const dashboardGate = useRef(snapshotGate());
   const ownerMounted = useRef(true);
@@ -2355,49 +2438,6 @@ function OwnerApp({
       setAccessCode("");
     });
   };
-  if (session?.role !== "owner")
-    return (
-      <div className="owner-login">
-        <div className="login-intro">
-          <span className="workshop-symbol">✳</span>
-          <h1>
-            The other side
-            <br />
-            of the counter.
-          </h1>
-          <p>
-            Keep devices ready, check results and prepare each item for
-            collection.
-          </p>
-          <a href="/">Back to making</a>
-        </div>
-        <form onSubmit={login}>
-          <h2>Open your workshop</h2>
-          <p>
-            Use the owner access code from your local setup. Requester sessions
-            cannot access machine controls or other people’s orders.
-          </p>
-          <Field label="Owner access code">
-            <input
-              required
-              autoComplete="current-password"
-              type="password"
-              value={accessCode}
-              onChange={(e) => setAccessCode(e.target.value)}
-            />
-          </Field>
-          <Button
-            className="primary full"
-            type="submit"
-            busy={busy === "login"}
-          >
-            Open owner workshop
-          </Button>
-          {error && <Notice kind="error">{error}</Notice>}
-          <small>The access code stays out of the requester interface.</small>
-        </form>
-      </div>
-    );
   const machines = dashboard?.machines || [];
   const jobs = dashboard?.jobs || [];
   const handling = jobs.filter(
@@ -2446,17 +2486,108 @@ function OwnerApp({
   const pageCount = Math.max(1, Math.ceil(matchingJobs.length / pageSize));
   const currentPage = Math.min(orderPage, pageCount);
   const pageStart = (currentPage - 1) * pageSize;
-  const visibleJobs = matchingJobs.slice(pageStart, pageStart + pageSize);
+  const pageJobs = matchingJobs.slice(pageStart, pageStart + pageSize);
+  const retainedOrder =
+    retainedOrderId && !pageJobs.some((job) => job.id === retainedOrderId)
+      ? matchingJobs.find((job) => job.id === retainedOrderId)
+      : undefined;
+  const visibleJobs = retainedOrder
+    ? [...pageJobs.slice(0, pageSize - 1), retainedOrder]
+    : pageJobs;
+  const visibleOrderIds = visibleJobs.map((job) => job.id).join(",");
+  useEffect(() => {
+    const target = focusedOrder.current?.target;
+    if (!retainedOrder || !target || document.activeElement !== target) return;
+    const bounds = target.getBoundingClientRect();
+    if (bounds.top < 24 || bounds.bottom > window.innerHeight - 24)
+      target.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [retainedOrder?.id, visibleOrderIds]);
+  useEffect(() => {
+    setOrderPage((page) => Math.min(page, pageCount));
+  }, [pageCount]);
+  const retainedMatches = matchingJobs.some(
+    (job) => job.id === retainedOrderId,
+  );
+  useEffect(() => {
+    if (retainedOrderId && !retainedMatches) setRetainedOrderId(null);
+  }, [retainedOrderId, retainedMatches]);
   const moveOrderPage = (page: number) => {
+    const initiatingElement = document.activeElement;
+    focusedOrder.current = null;
+    setRetainedOrderId(null);
     setOrderPage(page);
-    requestAnimationFrame(() => queueStart.current?.focus());
+    requestAnimationFrame(() => {
+      if (!ownerMounted.current) return;
+      const activeElement = document.activeElement;
+      if (
+        activeElement !== initiatingElement &&
+        activeElement !== document.body
+      )
+        return;
+      queueStart.current?.focus();
+    });
   };
   const resetOrderFilters = () => {
+    setRetainedOrderId(null);
     setOrderFilter("all");
     setOrderSearch("");
   };
+  if (session?.role !== "owner")
+    return (
+      <div className="owner-login">
+        <div className="login-intro">
+          <span className="workshop-symbol">✳</span>
+          <h1>
+            The other side
+            <br />
+            of the counter.
+          </h1>
+          <p>
+            Keep devices ready, check results and prepare each item for
+            collection.
+          </p>
+          <a href="/">Back to making</a>
+        </div>
+        <form onSubmit={login}>
+          <h2>Open your workshop</h2>
+          <p>
+            Use the owner access code from your local setup. Requester sessions
+            cannot access machine controls or other people’s orders.
+          </p>
+          <Field label="Owner access code">
+            <input
+              required
+              autoComplete="current-password"
+              type="password"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value)}
+            />
+          </Field>
+          <Button
+            className="primary full"
+            type="submit"
+            busy={busy === "login"}
+          >
+            Open owner workshop
+          </Button>
+          {error && <Notice kind="error">{error}</Notice>}
+          <small>The access code stays out of the requester interface.</small>
+        </form>
+      </div>
+    );
   return (
-    <div className="owner-workshop">
+    <div
+      className="owner-workshop"
+      onFocusCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        const order = target.closest<HTMLElement>("[data-owner-order]");
+        if (order?.dataset.ownerOrder) {
+          focusedOrder.current = { id: order.dataset.ownerOrder, target };
+          setRetainedOrderId(order.dataset.ownerOrder);
+        } else focusedOrder.current = null;
+      }}
+    >
       <section className="owner-intro">
         <div>
           <p className="quiet">Owner workshop</p>
@@ -2551,7 +2682,7 @@ function OwnerApp({
             {tab === "queue" ? (
               <>
                 <div className="queue-summary">
-                  <h2>
+                  <h2 ref={queueHeading} tabIndex={-1}>
                     {active.length
                       ? "Production in progress"
                       : handling.length
@@ -2592,18 +2723,20 @@ function OwnerApp({
                         <input
                           type="search"
                           value={orderSearch}
-                          onChange={(event) =>
-                            setOrderSearch(event.target.value)
-                          }
+                          onChange={(event) => {
+                            setRetainedOrderId(null);
+                            setOrderSearch(event.target.value);
+                          }}
                           placeholder="Order, artwork or machine"
                         />
                       </Field>
                       <Field label="Show orders">
                         <select
                           value={orderFilter}
-                          onChange={(event) =>
-                            setOrderFilter(event.target.value)
-                          }
+                          onChange={(event) => {
+                            setRetainedOrderId(null);
+                            setOrderFilter(event.target.value);
+                          }}
                         >
                           <option value="all">
                             All orders ({jobs.length})
@@ -2640,37 +2773,44 @@ function OwnerApp({
                         </select>
                       </Field>
                       <p className="queue-count" role="status">
-                        {matchingJobs.length > pageSize
-                          ? `${pageStart + 1}–${pageStart + visibleJobs.length} of ${matchingJobs.length} matching`
-                          : `${matchingJobs.length} of ${jobs.length}`}{" "}
-                        {jobs.length === 1 ? "order" : "orders"} shown
+                        {retainedOrder
+                          ? `${visibleJobs.length} of ${matchingJobs.length} matching orders shown. Your selected order stays on this page.`
+                          : matchingJobs.length > pageSize
+                            ? `${pageStart + 1}–${pageStart + visibleJobs.length} of ${matchingJobs.length} matching`
+                            : `${matchingJobs.length} of ${jobs.length}`}{" "}
+                        {!retainedOrder &&
+                          `${jobs.length === 1 ? "order" : "orders"} shown`}
                       </p>
                     </div>
                     {matchingJobs.length ? (
                       <div className="owner-job-list">
                         {visibleJobs.map((job) => (
-                          <OwnerJob
-                            key={job.id}
-                            job={job}
-                            ledger={dashboard.ledger}
-                            busy={busy}
-                            health={health}
-                            action={(action, body) =>
-                              act(`${job.id}-${action}`, () =>
-                                request(
-                                  `/owner/jobs/${job.id}/${action}`,
-                                  body || {},
-                                ),
-                              )
-                            }
-                            simulation={(outcome) =>
-                              act(`${job.id}-simulation`, () =>
-                                request(`/owner/simulation/${job.machineId}`, {
-                                  outcome,
-                                }),
-                              )
-                            }
-                          />
+                          <div key={job.id} data-owner-order={job.id}>
+                            <OwnerJob
+                              job={job}
+                              ledger={dashboard.ledger}
+                              busy={busy}
+                              health={health}
+                              action={(action, body) =>
+                                act(`${job.id}-${action}`, () =>
+                                  request(
+                                    `/owner/jobs/${job.id}/${action}`,
+                                    body || {},
+                                  ),
+                                )
+                              }
+                              simulation={(outcome) =>
+                                act(`${job.id}-simulation`, () =>
+                                  request(
+                                    `/owner/simulation/${job.machineId}`,
+                                    {
+                                      outcome,
+                                    },
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -3647,9 +3787,10 @@ function OwnerJob({
                   type="checkbox"
                   required
                   checked={prepared[key]}
-                  onChange={(e) =>
-                    setPrepared((s) => ({ ...s, [key]: e.target.checked }))
-                  }
+                  onChange={(e) => {
+                    const checked = e.currentTarget.checked;
+                    setPrepared((s) => ({ ...s, [key]: checked }));
+                  }}
                 />
                 <span>{label}</span>
               </label>

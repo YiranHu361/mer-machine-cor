@@ -10,6 +10,7 @@ import {
   requireThat,
   Problem,
   specSchema,
+  ownValue,
   type State,
   type Job,
   type Machine,
@@ -48,7 +49,7 @@ export class Service {
   }
   async job(jobId: string, actor?: { id: string; role: string }) {
     const s = await this.read();
-    const j = s.jobs[jobId];
+    const j = ownValue(s.jobs, jobId);
     requireThat(j, "NOT_FOUND", "Order not found.", 404);
     if (actor)
       requireThat(
@@ -62,6 +63,19 @@ export class Service {
       );
     return j;
   }
+  validateCalibrationIntent(key: unknown, ownerReady: unknown) {
+    requireThat(
+      ownerReady === true,
+      "OWNER_READY_REQUIRED",
+      "Confirm loaded media, a clear output area and supervision before the finite calibration job.",
+    );
+    requireThat(
+      typeof key === "string" && key.length >= 8 && key.length <= 200,
+      "IDEMPOTENCY_REQUIRED",
+      "Calibration needs a stable idempotency key between 8 and 200 characters.",
+      422,
+    );
+  }
   async startCalibration(
     machineId: string,
     ownerId: string,
@@ -70,17 +84,14 @@ export class Service {
     key: string,
     ownerReady: boolean,
   ) {
-    requireThat(
-      ownerReady === true && key?.length >= 8,
-      "OWNER_READY_REQUIRED",
-      "Confirm loaded media, a clear output area and supervision before the finite calibration job.",
-    );
+    this.validateCalibrationIntent(key, ownerReady);
     const spec = specSchema.parse(input);
     if (spec.outputType === "3d") this.validateCatalog(spec, artifact);
     const accepted = await mutate(this.store, (s) => {
-      const m = s.machines[machineId];
+      const m = ownValue(s.machines, machineId);
+      requireThat(m, "NOT_FOUND", "Machine not found.", 404);
       requireThat(
-        m && m.ownerId === ownerId,
+        m.ownerId === ownerId,
         "FORBIDDEN",
         "This machine belongs to another owner.",
         403,
@@ -114,8 +125,8 @@ export class Service {
       );
       for (const assetId of spec.assetIds)
         requireThat(
-          s.assets[assetId]?.ownerId === ownerId ||
-            s.assets[assetId]?.ownerId === "catalog",
+          ownValue(s.assets, assetId)?.ownerId === ownerId ||
+            ownValue(s.assets, assetId)?.ownerId === "catalog",
           "ASSET_ACCESS",
           "Use owner calibration artwork or a reviewed prepared model.",
           403,
@@ -195,6 +206,12 @@ export class Service {
   }
   async calibrationStatus(machineId: string) {
     const s = await this.read();
+    requireThat(
+      ownValue(s.machines, machineId),
+      "NOT_FOUND",
+      "Machine not found.",
+      404,
+    );
     const c = Object.values(s.calibrations ?? {})
       .filter((c) => c.machineId === machineId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -274,7 +291,8 @@ export class Service {
       "Record the observed result, inspection and a specific reason.",
     );
     const s = await this.read(),
-      m = s.machines[machineId];
+      m = ownValue(s.machines, machineId);
+    requireThat(m, "NOT_FOUND", "Machine not found.", 404);
     const c = Object.values(s.calibrations ?? {}).find(
       (c) => c.machineId === machineId && c.attemptId === body.attemptId,
     );
@@ -332,8 +350,9 @@ export class Service {
     return mutate(this.store, (s) => {
       for (const a of spec.assetIds)
         requireThat(
-          s.assets[a]?.ownerId === requesterId ||
-            (spec.outputType === "3d" && s.assets[a]?.ownerId === "catalog"),
+          ownValue(s.assets, a)?.ownerId === requesterId ||
+            (spec.outputType === "3d" &&
+              ownValue(s.assets, a)?.ownerId === "catalog"),
           "ASSET_ACCESS",
           "Upload your own artwork first.",
           403,
@@ -400,8 +419,9 @@ export class Service {
       );
       for (const a of spec.assetIds)
         requireThat(
-          s.assets[a]?.ownerId === j.requesterId ||
-            (spec.outputType === "3d" && s.assets[a]?.ownerId === "catalog"),
+          ownValue(s.assets, a)?.ownerId === j.requesterId ||
+            (spec.outputType === "3d" &&
+              ownValue(s.assets, a)?.ownerId === "catalog"),
           "ASSET_ACCESS",
           "Artwork is not owned by this requester.",
           403,
@@ -917,7 +937,7 @@ export class Service {
     );
     const state = await this.read(),
       j = state.jobs[jobId],
-      op = state.operations[operationId];
+      op = ownValue(state.operations, operationId);
     requireThat(
       this.payment.mode === "testnet" &&
         op?.jobId === jobId &&
@@ -1373,11 +1393,19 @@ export class Service {
       "Choose pass or fail.",
       422,
     );
+    requireThat(
+      typeof reason === "string" &&
+        reason.trim().length >= 8 &&
+        reason.length <= 1000,
+      "REASON_REQUIRED",
+      "Provide a specific inspection reason between 8 and 1000 characters.",
+      422,
+    );
     const j = await this.job(jobId);
     requireThat(
-      j.productionState === "needs_review" && reason?.trim().length >= 8,
-      "REASON_REQUIRED",
-      "Resolve a review order with a specific inspection reason.",
+      j.productionState === "needs_review",
+      "REVIEW_REQUIRED",
+      "Only an order awaiting owner review can be resolved.",
     );
     if (j.spec.permission === "unclear" && !j.attemptId) {
       return mutate(this.store, (s) => {

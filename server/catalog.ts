@@ -15,7 +15,7 @@ const entry = z
     heightMm: z.number().int().positive().max(180),
     depthMm: z.number().positive().max(180),
     material: z.literal("pla"),
-    color: z.string().min(1),
+    color: z.string().trim().min(1).max(60),
     estimatedSeconds: z.number().int().min(1).max(3600),
   })
   .strict();
@@ -24,6 +24,11 @@ export async function loadCatalog(path: string | undefined, dataDir: string) {
   const entries = z
     .array(entry)
     .max(20)
+    .refine(
+      (entries) =>
+        new Set(entries.map((model) => model.id)).size === entries.length,
+      "Prepared catalog model IDs must be unique.",
+    )
     .parse(JSON.parse(await readFile(path, "utf8")));
   const models: any[] = [],
     assets: Asset[] = [];

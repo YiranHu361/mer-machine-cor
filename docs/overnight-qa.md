@@ -109,15 +109,57 @@ Representative screenshots: [portrait](../web/evidence/overnight-touch-webkit-po
 Earlier diagnostic/affected-only reports remain private under `.data/`; final
 per-engine reports use `overnight-second-*-browser.json`.
 
+## Verified third checkpoint, 02:29 Pacific
+
+Continuation from commit `77d62f7` completed navigation, adversarial validation,
+live owner-queue and preview/cache audits. The overnight task remains active
+through 9:00 a.m. Pacific. Source fingerprint:
+
+`3b8b53e7e46b781a03722fcb644a2be6786bdbeae811e1fab891df2c3d8eceae`
+
+- Production previews: viewing another order or rebuilt artifact with identical bytes no longer enables approval while that preview is loading. Readiness binds order, artifact, fingerprint, source and view; reselect/edit/cancel reloads remain usable. Three isolated regressions pass.
+- Navigation: unsaved requester edits/uploads and pending actions arm a browser leave-page warning. Dismissing it preserves exact input and document; pristine edits, explicit discard/new-order and successful save disarm it. Eleven isolated browser cases also verify saved selection/owner authentication over history, and lost committed create/edit/quote responses over actual document reloads without replacement identity or duplicate submissions. A WebKit 1 ms timeOrigin-rounding difference exposed an overstrict test assertion; document UUID is now the authoritative document identity. Native unload warnings do not survive forced browser/OS termination.
+- Input and focus preservation: stable built Firefox diagnostics reproduced typed intent reverting before submission. A held-frame regression established the cause: a delayed heading-focus callback could steal focus after the user entered a textbox. Requester heading and owner pagination callbacks now respect newer focus; deterministic regressions cover both. Primitive-value capture separately hardens requester, handling-checkbox and measured-cost state updates. A specific repeated edit diagnostic verifies the intermittent boundary without inflating unique-case counts.
+- Owner queue: pagination no longer jumps back after live work shrinks/returns. New arrivals retain the focused pickup draft/code in an eight-slot page with a truthful note; displaced orders remain reachable by paging. Settled follow-up/handoff returns keyboard focus safely, and retained input scrolls fully into 320px-wide view. Five cross-engine regressions and representative screenshot are retained.
+- Keyboard focus: measured orange focus outlines had only 1.83–2.28:1 contrast on primary light surfaces. A darker shared amber focus token measures 4.22–5.26:1 there; existing accents remain. Relative-luminance evidence records colors/surfaces/formula. This complements automated accessibility scans and is not a full conformance claim.
+- Adversarial API validation: own-property dictionary lookups reject constructor/toString/**proto** instead of returning inherited objects or internal errors. Owner review/payment reasons and calibration keys are typed/bounded; Unicode collection references trim correctly, and malformed numeric/budget/quantity values reject before preparation. Invalid calibration intent or unknown machine rejects before creating preview assets, preserving exact store/file state.
+- Catalog consistency: duplicate prepared-model IDs, blank/oversized colors and mismatched normalization no longer produce unorderable catalog choices. Backend and Python node use matching Unicode trim/length rules. Signed parameters remain normalized/exact and wrong file/hash/dimensions/color/duration still reject. Six backend and two node regression cases were added; no hardware was called.
+- Actual local activation: backend/node restarted with retained Spacetime data, assets and attempt journals. The already-open owner dashboard disconnected, natively reconnected and received new pause/resume mutations with polling disabled; 2 opens, 1 error, 4 refreshes. No production job or payment was submitted for this check.
+
+| Check                                | Result                                       |
+| ------------------------------------ | -------------------------------------------- |
+| Backend/application/process/realtime | 61 passed                                    |
+| Python node                          | 67 passed in 5.57s                           |
+| Payment/Claude and Fetch fixtures    | 25+5 passed                                  |
+| Storage/wallet unit                  | 20 passed                                    |
+| Built-application browser scenarios  | 56 passed in each of Chromium/Firefox/WebKit |
+| Automated accessibility              | 39 A/AA scans, no detected violations        |
+| Build/strict types/secret scan       | Passed                                       |
+| Actual local restart/SSE reconnect   | Passed; polling disabled                     |
+
+That is 234 unique software cases, or 346 executions including
+the three browser engines, with no final failed/skipped/flaky cases. The shared
+software check followed API/node/behavior repairs; the final production web
+build and three-engine browser suite followed the final focus-contrast and input-preservation refinements.
+Unchanged finite simulation loops, database restart/CAS and dependency audits
+remain historical evidence; they were not rerun for volume.
+
+[Current machine-readable checkpoint](evidence/overnight-third-qa.json),
+[full report](test-report.md), [focus/input diagnostics](evidence/overnight-focus-recovery.json), [focus contrast](evidence/overnight-focus-contrast.json),
+[latest reconnect](evidence/overnight-third-sse-reconnect.json),
+[retained mobile pickup draft](../web/evidence/overnight-owner-queue-live-draft-320.png).
+Earlier failing/affected-only diagnostic reports are private under `.data/`;
+final reports are `web/evidence/overnight-third-*-browser.json`.
+
 ## Next useful audits
 
-The first-pass touch/storage/reordered-refresh/reconnect/artwork audits are complete. Continue with new boundaries rather than unchanged full-suite reruns:
+Completed: touch/reflow/storage/reordered refresh/SSE reconnect/artwork isolation, navigation/document recovery, malformed API/catalog validation and live queue/focus behavior. Continue with a new boundary or reproduced failure:
 
-1. Browser back/forward, reload and interrupted navigation around order creation, editing, quotes and owner login/logout. Preserve the requester identity and existing selected-order semantics; distinguish a lost mutation response from an unsubmitted request.
-2. Adversarial form/API validation for meaningful Unicode/length/numeric/budget/quantity/catalog edge cases, using isolated fixtures or isolated stores. Reproduce a concrete user-visible or safety failure before changing behavior.
-3. Owner queue/search/page behavior as live updates move jobs between handling, follow-up and history. Check keyboard focus and reachable actions at narrow widths.
-4. Cached or failed media and asynchronous image/model paths when artwork is replaced or a preview changes. Preserve the approved artifact/hash and explicit permission review; no live model spending.
-5. Record fixes, affected checks and remaining scope. At 9:00 a.m. Pacific, perform final relevant checks, prepare the morning handoff and disable the heartbeat. Physical/live prerequisites remain external blockers; do not fill time with redundant simulation loops or sponsor add-ons.
+1. Owner machine/policy/payment/trial forms: unsaved changes, failed saves, switching views, and typing temporarily empty/partial numeric values; keep configured values and explicit confirmations truthful. Use isolated API fixtures and avoid actual configuration changes.
+2. Storage/persistence failures during asset preparation and mutation responses: distinguish definite failure from uncertain commit before cleaning files or suggesting retry. Preserve all existing private data and avoid destructive fault injection against the retained runtime.
+3. Media and error copy on expired/unauthorized/corrupt evidence or previews, plus pending payment/review states where a clear next action may still be missing. Reproduce specific UI failures; no live model/wallet/hardware tests.
+4. Review any newly fixed boundary independently, run affected checks, and update this log. Do not repeat unchanged suites/finite jobs simply to fill time. If useful independent work is exhausted, remain quiet until a meaningful change or the cutoff.
+5. At 9:00 a.m. Pacific, perform final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Keep physical/live prerequisites honest and leave this chat unarchived.
 
 ## Morning handoff requirements
 

@@ -262,12 +262,10 @@ export function TrialEconomicsForm({
                 min="0"
                 step={step}
                 value={values[key]}
-                onChange={(e) =>
-                  setValues((current) => ({
-                    ...current,
-                    [key]: e.target.value,
-                  }))
-                }
+                onChange={(e) => {
+                  const value = e.currentTarget.value;
+                  setValues((current) => ({ ...current, [key]: value }));
+                }}
               />
             </div>
           ))}

@@ -1,0 +1,2172 @@
+{
+  "config": {
+    "argv": [
+      "/opt/homebrew/Cellar/node/25.8.1_1/bin/node",
+      "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/node_modules/.bin/playwright",
+      "test"
+    ],
+    "configFile": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/playwright.config.ts",
+    "rootDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "snapshotDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+        "timeout": 90000,
+        "use": {
+          "browserName": "webkit",
+          "baseURL": "http://127.0.0.1:4318",
+          "trace": "off",
+          "actionTimeout": 20000,
+          "navigationTimeout": 20000,
+          "screenshot": "only-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "evidence/overnight-third-webkit-browser.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "accessibility.spec.ts",
+      "file": "accessibility.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "requester intake and production preview pass accessibility and 320px reflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2843,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:08.797Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "requester-intake-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItaW50YWtlLTMyMCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMwp9"
+                    },
+                    {
+                      "name": "requester-intake-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItaW50YWtlLTE0NDAiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjMKfQ=="
+                    },
+                    {
+                      "name": "requester-preview-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItcHJldmlldy0zMjAiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjEKfQ=="
+                    },
+                    {
+                      "name": "requester-preview-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItcHJldmlldy0xNDQwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDIxCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-d6b8d17090358c316e83",
+          "file": "accessibility.spec.ts",
+          "line": 62,
+          "column": 1
+        },
+        {
+          "title": "owner login and every dashboard tab pass accessibility and narrow reflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3566,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:11.782Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "owner-login-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1sb2dpbiIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMAp9"
+                    },
+                    {
+                      "name": "owner-login-mobile-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1sb2dpbi1tb2JpbGUiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjAKfQ=="
+                    },
+                    {
+                      "name": "owner-orders-handling-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1vcmRlcnMtaGFuZGxpbmctMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDI4Cn0="
+                    },
+                    {
+                      "name": "owner-orders-handling-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1vcmRlcnMtaGFuZGxpbmctMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyOAp9"
+                    },
+                    {
+                      "name": "owner-machines-policy-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1tYWNoaW5lcy1wb2xpY3ktMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDI3Cn0="
+                    },
+                    {
+                      "name": "owner-machines-policy-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1tYWNoaW5lcy1wb2xpY3ktMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyNwp9"
+                    },
+                    {
+                      "name": "owner-payment-records-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1wYXltZW50LXJlY29yZHMtMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDIyCn0="
+                    },
+                    {
+                      "name": "owner-payment-records-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1wYXltZW50LXJlY29yZHMtMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMgp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-f3fe3d6dac392752f534",
+          "file": "accessibility.spec.ts",
+          "line": 114,
+          "column": 1
+        },
+        {
+          "title": "initial service failure has an accessible retry and recovers without reloading",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 505,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:15.352Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "service-unavailable-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJzZXJ2aWNlLXVuYXZhaWxhYmxlIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDE5Cn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-c9984caed529caf58a30",
+          "file": "accessibility.spec.ts",
+          "line": 161,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "artwork-context.spec.ts",
+      "file": "artwork-context.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "discarded multi-image replacements and suggestions never move from order A into order B (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 515,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:15.866Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d93344f518d17a3b0cb7-44b9717be3af46b4a14d",
+          "file": "artwork-context.spec.ts",
+          "line": 171,
+          "column": 1
+        },
+        {
+          "title": "selecting a different order directly drops the prior order's unsaved artwork replacements (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 484,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:16.385Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d93344f518d17a3b0cb7-61ad78bae929682e8e36",
+          "file": "artwork-context.spec.ts",
+          "line": 216,
+          "column": 1
+        },
+        {
+          "title": "canceling an artwork replacement restores the same order's saved sources (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 481,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:16.877Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d93344f518d17a3b0cb7-550077059318ef4648bc",
+          "file": "artwork-context.spec.ts",
+          "line": 234,
+          "column": 1
+        },
+        {
+          "title": "a new multi-image draft keeps its intended images through raster and 3D format switches (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 409,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:17.363Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d93344f518d17a3b0cb7-b521f2396f52d7276d98",
+          "file": "artwork-context.spec.ts",
+          "line": 253,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "navigation.spec.ts",
+      "file": "navigation.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "back, forward and reload preserve a saved requester selection without replacing its session (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 584,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:17.780Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-a507f1617018e2d0b8e8",
+          "file": "navigation.spec.ts",
+          "line": 199,
+          "column": 1
+        },
+        {
+          "title": "a committed creation with lost response remains recoverable after reload without another creation (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 360,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:18.368Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-5bfb57951afd9fafbc30",
+          "file": "navigation.spec.ts",
+          "line": 234,
+          "column": 1
+        },
+        {
+          "title": "an edited specification committed before connection loss reloads as unapproved without resubmitting (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 329,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:18.732Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-14687910334706efd5da",
+          "file": "navigation.spec.ts",
+          "line": 263,
+          "column": 1
+        },
+        {
+          "title": "a quote committed before connection loss survives reload without a duplicate reservation (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 370,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:19.065Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-414134f4628b1cce7f63",
+          "file": "navigation.spec.ts",
+          "line": 305,
+          "column": 1
+        },
+        {
+          "title": "unsaved requester edits can cancel accidental navigation without discarding artwork choices (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 285,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:19.440Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-5fa9642561d58d4ad1be",
+          "file": "navigation.spec.ts",
+          "line": 328,
+          "column": 1
+        },
+        {
+          "title": "owner authentication survives history navigation without restoring requester data or creating another identity (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 476,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:19.729Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-45e015817bff5e539a1f",
+          "file": "navigation.spec.ts",
+          "line": 356,
+          "column": 1
+        },
+        {
+          "title": "a new uploaded draft can cancel leaving without losing its image or intent (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 258,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:20.209Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-af434d13d28cb828b8f4",
+          "file": "navigation.spec.ts",
+          "line": 457,
+          "column": 1
+        },
+        {
+          "title": "untouched edits and explicit cancel or new order do not warn on navigation (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 733,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:20.472Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-c1066b7132afa9cfcc0f",
+          "file": "navigation.spec.ts",
+          "line": 486,
+          "column": 1
+        },
+        {
+          "title": "a successful specification save removes the navigation warning (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 409,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:21.209Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-de04e4bade83f268353e",
+          "file": "navigation.spec.ts",
+          "line": 540,
+          "column": 1
+        },
+        {
+          "title": "an in-flight quote can cancel navigation and disarms after its saved response (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 383,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:21.622Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-3570a2a72653a84c16a2",
+          "file": "navigation.spec.ts",
+          "line": 579,
+          "column": 1
+        },
+        {
+          "title": "deferred edit-heading focus cannot steal focus after the requester starts typing (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 286,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:22.010Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "5d2868f7d23420c27cca-db2d9f1819f19b7bf597",
+          "file": "navigation.spec.ts",
+          "line": 623,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "owner-queue-live.spec.ts",
+      "file": "owner-queue-live.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "a queue page clamps permanently when live work shrinks, without jumping back when work returns",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 399,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:22.304Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "415f277de6575d0a8740-f1635ecf88d398aa4f46",
+          "file": "owner-queue-live.spec.ts",
+          "line": 113,
+          "column": 1
+        },
+        {
+          "title": "live insertion keeps a focused eighth-order handoff draft reachable",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 360,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:22.707Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "415f277de6575d0a8740-b4e03242540b415dfe0a",
+          "file": "owner-queue-live.spec.ts",
+          "line": 128,
+          "column": 1
+        },
+        {
+          "title": "a completed handoff moves to history and returns keyboard focus to queue controls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 219,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:23.071Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "415f277de6575d0a8740-9cbf28f5c17980f37f99",
+          "file": "owner-queue-live.spec.ts",
+          "line": 170,
+          "column": 1
+        },
+        {
+          "title": "a settled follow-up leaves the active search safely and remains reachable in history",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 266,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:23.294Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "415f277de6575d0a8740-6ce8777ce2b3ca21cad4",
+          "file": "owner-queue-live.spec.ts",
+          "line": 198,
+          "column": 1
+        },
+        {
+          "title": "a deferred page-change focus respects an owner who moved to search",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 223,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:23.565Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "415f277de6575d0a8740-bcebd49fd3cb0441528e",
+          "file": "owner-queue-live.spec.ts",
+          "line": 241,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "owner-records.spec.ts",
+      "file": "owner-records.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "owner recovery forms validate references and submit measured trial records (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 436,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:23.798Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-d774aa7ef0fa88f9f5ef",
+          "file": "owner-records.spec.ts",
+          "line": 3,
+          "column": 1
+        },
+        {
+          "title": "requester specification suggestions preserve approval and manual fallback (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 391,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:24.238Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-7c74ce0b60ef5dd6cd45",
+          "file": "owner-records.spec.ts",
+          "line": 242,
+          "column": 1
+        },
+        {
+          "title": "owner queue finds actionable orders, keeps history and supports keyboard views at narrow widths (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 345,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:24.633Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-e76e00d0b539b71fd2d2",
+          "file": "owner-records.spec.ts",
+          "line": 421,
+          "column": 1
+        },
+        {
+          "title": "a clear owner counter keeps archived orders reachable through finite pages and search (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 321,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:24.982Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-10dcbd0d0a1be2dd4dc2",
+          "file": "owner-records.spec.ts",
+          "line": 560,
+          "column": 1
+        },
+        {
+          "title": "requester identity changes discard private artwork, drafts and saved order selection (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2773,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:25.306Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-1e12d5513883f7ad5e2e",
+          "file": "owner-records.spec.ts",
+          "line": 648,
+          "column": 1
+        },
+        {
+          "title": "late upload results from an expired requester cannot restore private state (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3115,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:28.084Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-553321c6cc02fa477f09",
+          "file": "owner-records.spec.ts",
+          "line": 827,
+          "column": 3
+        },
+        {
+          "title": "late create results from an expired requester cannot restore private state (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:31.204Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-146085626cfc56c283f3",
+          "file": "owner-records.spec.ts",
+          "line": 827,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "preview-integrity.spec.ts",
+      "file": "preview-integrity.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "identical production bytes for another order still wait for the current preview to load (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 305,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:34.321Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "9fd800f134ed12fd48dc-33cea2a4582ca3b30b69",
+          "file": "preview-integrity.spec.ts",
+          "line": 18,
+          "column": 3
+        },
+        {
+          "title": "identical production bytes for a rebuilt file on the same order still wait for the current preview to load (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3086,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:34.630Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "9fd800f134ed12fd48dc-a417af941d700b3afd08",
+          "file": "preview-integrity.spec.ts",
+          "line": 18,
+          "column": 3
+        },
+        {
+          "title": "identical production bytes for the reselected and reopened current order still wait for the current preview to load (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 371,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:37.721Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "9fd800f134ed12fd48dc-df38fb9687daee2fd6de",
+          "file": "preview-integrity.spec.ts",
+          "line": 18,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "refresh-ordering.spec.ts",
+      "file": "refresh-ordering.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "an old owner refresh cannot restore preparation after a confirmed handling action (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 527,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:38.100Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-dff5f01cd62a2ab56f11",
+          "file": "refresh-ordering.spec.ts",
+          "line": 114,
+          "column": 1
+        },
+        {
+          "title": "an old requester refresh cannot roll a newer order back when its row is selected (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 402,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:38.631Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-b0c3fd5aa2d14dddf585",
+          "file": "refresh-ordering.spec.ts",
+          "line": 178,
+          "column": 1
+        },
+        {
+          "title": "an old owner authentication error cannot end a successfully reopened session (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 383,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:39.038Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-5b843355718fd1a03954",
+          "file": "refresh-ordering.spec.ts",
+          "line": 230,
+          "column": 1
+        },
+        {
+          "title": "authoritative revisions win when an earlier request reads the newer snapshot (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 366,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:39.425Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-851849f4501f9c3034b4",
+          "file": "refresh-ordering.spec.ts",
+          "line": 303,
+          "column": 1
+        },
+        {
+          "title": "an unavailable session lookup offers retry without replacing the original requester or orders (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 275,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:39.796Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-44ad84291c2d3060041a",
+          "file": "refresh-ordering.spec.ts",
+          "line": 379,
+          "column": 3
+        },
+        {
+          "title": "a malformed successful session lookup offers retry without replacing the original requester or orders (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 259,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:40.075Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1adf803ea3a33dfbddd-dd9721296a35c247186e",
+          "file": "refresh-ordering.spec.ts",
+          "line": 379,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "resilience.spec.ts",
+      "file": "resilience.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "invalid and failed uploads preserve the form and allow a deliberate retry (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 269,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:40.341Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-0cbd3510de8ee1df02bd",
+          "file": "resilience.spec.ts",
+          "line": 96,
+          "column": 1
+        },
+        {
+          "title": "a failed production image blocks approval and has a working preview retry (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 276,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:40.615Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-b9e7e81da6781a533509",
+          "file": "resilience.spec.ts",
+          "line": 167,
+          "column": 1
+        },
+        {
+          "title": "an older receipt response never appears on a newly selected order (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 428,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:40.895Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-9585787c0467b917c18d",
+          "file": "resilience.spec.ts",
+          "line": 207,
+          "column": 1
+        },
+        {
+          "title": "an expired owner session clears private dashboard data and offers sign-in (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3556,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:41.327Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-2b03a2c1a6a17d86b0a4",
+          "file": "resilience.spec.ts",
+          "line": 263,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "storage.spec.ts",
+      "file": "storage.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "local storage getter failure leaves requester interface and order selection usable (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 262,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:44.892Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-d1d90ff947a6e630bfaf",
+          "file": "storage.spec.ts",
+          "line": 180,
+          "column": 3
+        },
+        {
+          "title": "local storage quota failure leaves requester interface and order selection usable (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 262,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:45.158Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-8c0ffd14f9fa00663d15",
+          "file": "storage.spec.ts",
+          "line": 180,
+          "column": 3
+        },
+        {
+          "title": "unavailable session storage retains the same mock checkout key across interrupted response and reload (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 335,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:45.424Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-641f976dae23ddb1d314",
+          "file": "storage.spec.ts",
+          "line": 202,
+          "column": 1
+        },
+        {
+          "title": "quota-limited session storage blocks wallet signature and signed submission with useful error (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 291,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:45.764Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-1f72be323ed94db80def",
+          "file": "storage.spec.ts",
+          "line": 233,
+          "column": 1
+        },
+        {
+          "title": "ambiguous wallet submission cannot sign again after retry or page reload (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 451,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:46.059Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-b47e3d0447f92693e756",
+          "file": "storage.spec.ts",
+          "line": 259,
+          "column": 1
+        },
+        {
+          "title": "clearing session storage in the open page cannot authorize another ambiguous payment (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 319,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:46.514Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-705ad0601ede07496c09",
+          "file": "storage.spec.ts",
+          "line": 298,
+          "column": 1
+        },
+        {
+          "title": "denied session storage leaves owner calibration visible and blocks a new physical attempt (offline fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 319,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:46.837Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b48019861cf9d71d9131-d86113a48f56fb734662",
+          "file": "storage.spec.ts",
+          "line": 332,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "touch-layout.spec.ts",
+      "file": "touch-layout.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "touch intake keeps controls reachable in portrait and short landscape with reduced motion",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 623,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:47.164Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "99afd42b6dc22f5281de-7257f2d40506a3fd8e64",
+          "file": "touch-layout.spec.ts",
+          "line": 151,
+          "column": 1
+        },
+        {
+          "title": "long collection and machine status text remains readable under touch and 200 percent equivalent reflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 409,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:47.790Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "99afd42b6dc22f5281de-a4630d754d0d15e88a3d",
+          "file": "touch-layout.spec.ts",
+          "line": 256,
+          "column": 1
+        },
+        {
+          "title": "long owner evidence and machine reasons remain readable and disclosures accept touch",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 807,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:48.202Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "99afd42b6dc22f5281de-b3c4855b0b8ebcc23688",
+          "file": "touch-layout.spec.ts",
+          "line": 304,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "workflow.spec.ts",
+      "file": "workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "requester and owner complete an honest simulated order, independent handling, refund and pickup",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4746,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:49.017Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-05d3a4df0e3481a3dc39",
+          "file": "workflow.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "intake validates specifications, review returns to approval, and expired/offline states recover",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3405,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:53.768Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-28bdb19b3e325145217e",
+          "file": "workflow.spec.ts",
+          "line": 293,
+          "column": 1
+        },
+        {
+          "title": "live subscription updates the open owner dashboard with polling disabled",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 506,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T09:28:57.176Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-121331f264c95c8918d3",
+          "file": "workflow.spec.ts",
+          "line": 467,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-23T09:28:08.496Z",
+    "duration": 49220.534,
+    "expected": 56,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

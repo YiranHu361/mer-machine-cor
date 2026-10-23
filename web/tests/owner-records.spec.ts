@@ -213,8 +213,11 @@ test("owner recovery forms validate references and submit measured trial records
     ["API cost (USD cents)", "2"],
     ["Machine cost (USD cents)", "5"],
   ];
-  for (const [label, value] of values)
-    await trial.getByLabel(label, { exact: true }).fill(value);
+  for (const [label, value] of values) {
+    const input = trial.getByLabel(label, { exact: true });
+    await input.fill(value);
+    await expect(input).toHaveValue(value);
+  }
   await trial
     .getByRole("button", { name: "Save trial measurements", exact: true })
     .click();
@@ -383,6 +386,10 @@ test("requester specification suggestions preserve approval and manual fallback 
   await expect(
     page.getByLabel("Artwork permission", { exact: true }),
   ).toHaveValue("unclear");
+  const manualIntent = "A revised club sticker for the evening event";
+  const intent = page.getByLabel("What is it for?", { exact: true });
+  await intent.fill(manualIntent);
+  await expect(intent).toHaveValue(manualIntent);
   await suggest.click();
   await expect.poll(() => drafts.length).toBe(2);
   await expect(
@@ -401,9 +408,12 @@ test("requester specification suggestions preserve approval and manual fallback 
   await expect(page.getByLabel("Height (mm)", { exact: true })).toBeEnabled();
   expect(createdJobs).toBe(0);
   expect(drafts).toEqual(
-    Array.from({ length: 3 }, () => ({
+    Array.from({ length: 3 }, (_, index) => ({
       assetIds: ["artwork_fixture"],
-      intent: "A club sticker for our local tabling event",
+      intent:
+        index === 0
+          ? "A club sticker for our local tabling event"
+          : manualIntent,
     })),
   );
 });

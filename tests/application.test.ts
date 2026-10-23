@@ -707,3 +707,249 @@ test("session lookup failures remain service errors and preserve the existing re
     f.close();
   }
 });
+
+test("inherited dictionary names never resolve to orders, artwork, sessions or supported machines", async () => {
+  const f = fixture();
+  try {
+    let nodeCalls = 0;
+    f.service.node.call = async () => {
+      nodeCalls++;
+      throw new Error("No device calls allowed in lookup validation");
+    };
+    const owner = request.agent(f.app),
+      requester = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    await requester
+      .post("/api/session")
+      .send({ role: "requester" })
+      .expect(200);
+    const before = await f.store.read();
+    for (const key of ["constructor", "toString", "__proto__"]) {
+      await owner.get(`/api/jobs/${key}`).expect(404);
+      await requester.get(`/api/jobs/${key}`).expect(404);
+      await owner.post(`/api/owner/jobs/${key}/reconcile`).send({}).expect(404);
+      await owner.get(`/assets/${key}`).expect(404);
+      await owner.patch(`/api/owner/machines/${key}`).send({}).expect(404);
+      await owner.get(`/api/owner/machines/${key}/calibration`).expect(404);
+      await owner
+        .get(`/api/owner/machines/${key}/calibration/evidence`)
+        .expect(404);
+      await owner
+        .post(`/api/owner/machines/${key}/calibrate`)
+        .send({ inspected: true })
+        .expect(404);
+      await owner
+        .post(`/api/owner/machines/${key}/calibration/resolve`)
+        .send({
+          inspected: true,
+          result: "failed",
+          attemptId: "nonexistent",
+          reason: "Unknown device must not reach the node",
+        })
+        .expect(404);
+      await owner
+        .post("/api/owner/machines")
+        .send({ model: key, mode: "simulation" })
+        .expect(422);
+      await requester.post("/api/jobs").send(spec(key)).expect(403);
+      await requester
+        .post("/api/intake")
+        .send({
+          assetIds: [key],
+          intent: "Unknown artwork must never reach a provider",
+        })
+        .expect(403);
+      assert.deepEqual(
+        (
+          await request(f.app)
+            .get("/api/session")
+            .set("Cookie", `fabrary_session=${key}`)
+            .expect(200)
+        ).body,
+        { role: null },
+      );
+    }
+    assert.equal(nodeCalls, 0);
+    assert.deepEqual(await f.store.read(), before);
+  } finally {
+    f.close();
+  }
+});
+
+test("owner inspection reasons reject malformed or oversized values without changing review state", async () => {
+  const f = fixture();
+  try {
+    const owner = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    await mutate(f.store, (s) => {
+      s.assets.review_art = {
+        id: "review_art",
+        ownerId: "review_requester",
+        path: "unused-fixture",
+        url: "/assets/review_art",
+        sha256: "a".repeat(64),
+        mime: "image/png",
+        width: 1,
+        height: 1,
+        createdAt: new Date().toISOString(),
+      };
+    });
+    const j = await f.service.create(
+      "review_requester",
+      { ...spec("review_art"), permission: "unclear" },
+      { id: "review_art", url: "/assets/review_art", sha256: "a".repeat(64) },
+    );
+    const before = await f.store.read();
+    for (const reason of [
+      { observed: true },
+      [],
+      7,
+      true,
+      null,
+      "        ",
+      "x".repeat(1001),
+    ]) {
+      const response = await owner
+        .post(`/api/owner/jobs/${j.id}/review`)
+        .send({ result: "pass", reason })
+        .expect(422);
+      assert.equal(response.body.error.code, "REASON_REQUIRED");
+      await owner
+        .post(`/api/owner/jobs/${j.id}/payment-reference`)
+        .send({
+          operationId: "constructor",
+          transactionHash: "0x" + "b".repeat(64),
+          reason,
+        })
+        .expect(422);
+      assert.deepEqual(await f.store.read(), before);
+    }
+    const reviewed = await owner
+      .post(`/api/owner/jobs/${j.id}/review`)
+      .send({
+        result: "pass",
+        reason: "所有者が図案の利用許可を確認しました 😊",
+      })
+      .expect(200);
+    assert.equal(reviewed.body.job.spec.permission, "authorized");
+    assert.equal(reviewed.body.job.productionState, "specified");
+    assert.equal(reviewed.body.job.approvedSpecHash, undefined);
+  } finally {
+    f.close();
+  }
+});
+
+test("numeric budget and quantity errors reject before preview creation, while collection references normalize whitespace", async () => {
+  const f = fixture();
+  try {
+    const requester = request.agent(f.app),
+      owner = request.agent(f.app);
+    await requester
+      .post("/api/session")
+      .send({ role: "requester" })
+      .expect(200);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    const before = await f.store.read();
+    for (const change of [
+      { quantity: "2" },
+      { quantity: true },
+      { quantity: 1.5 },
+      { quantity: 1e100 },
+      { budgetMandate: { enabled: true, capCents: 0.5 } },
+      { budgetMandate: { enabled: true, capCents: 1e100 } },
+      { budgetMandate: { enabled: true, capCents: "100" } },
+      { budgetMandate: { enabled: true, capCents: -1 } },
+      { widthMm: 1e100 },
+      { heightMm: 1e100 },
+    ]) {
+      const response = await requester
+        .post("/api/jobs")
+        .send({ ...spec("unused_asset"), ...change })
+        .expect(422);
+      assert.equal(response.body.error.code, "INVALID_SPEC");
+      assert.deepEqual(await f.store.read(), before);
+    }
+    f.service.node.call = async () => ({});
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ collectionPoint: "   " })
+      .expect(422);
+    assert.deepEqual(await f.store.read(), before);
+    const updated = await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ collectionPoint: "  工坊领取处 😊  " })
+      .expect(200);
+    assert.equal(updated.body.machine.collectionPoint, "工坊领取处 😊");
+  } finally {
+    f.close();
+  }
+});
+
+test("calibration authorization and machine lookup fail before generating orphan previews", async () => {
+  const f = fixture();
+  try {
+    const owner = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    const uploaded = await owner
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "calibration-preconditions.png",
+        contentType: "image/png",
+      })
+      .expect(201);
+    const input = spec(uploaded.body.assets[0].id);
+    const before = await f.store.read();
+    const { readdir } = await import("node:fs/promises");
+    const filesBefore = await readdir(join(f.service.config.dataDir, "assets"));
+    let calls = 0;
+    f.service.node.call = async () => {
+      calls++;
+      throw new Error("No node calls before calibration authorization");
+    };
+    for (const [body, status] of [
+      [{ idempotencyKey: { length: 8 }, ownerReady: true }, 422],
+      [{ idempotencyKey: "x".repeat(201), ownerReady: true }, 422],
+      [{ ownerReady: true }, 422],
+      [{ idempotencyKey: "valid-stable-key", ownerReady: false }, 409],
+      [{ idempotencyKey: "valid-stable-key", ownerReady: "true" }, 409],
+    ] as const) {
+      await owner
+        .post("/api/owner/machines/phomemo_01/calibration/start")
+        .send({ ...body, spec: input })
+        .expect(status);
+      assert.deepEqual(await f.store.read(), before);
+      assert.deepEqual(
+        await readdir(join(f.service.config.dataDir, "assets")),
+        filesBefore,
+      );
+    }
+    await owner
+      .post("/api/owner/machines/constructor/calibration/start")
+      .send({
+        spec: input,
+        idempotencyKey: "valid-stable-key",
+        ownerReady: true,
+      })
+      .expect(404);
+    assert.deepEqual(await f.store.read(), before);
+    assert.deepEqual(
+      await readdir(join(f.service.config.dataDir, "assets")),
+      filesBefore,
+    );
+    assert.equal(calls, 0);
+  } finally {
+    f.close();
+  }
+});

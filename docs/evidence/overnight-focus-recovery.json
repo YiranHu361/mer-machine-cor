@@ -1,0 +1,67 @@
+{
+  "recordedAt": "2026-10-23T09:24:47.464Z",
+  "boundary": "Isolated browser APIs and offline fixture images; no physical work, wallets or provider calls.",
+  "baselineBuild": {
+    "recordedAt": "2026-10-23T09:21:36.634Z",
+    "origin": "http://127.0.0.1:4318",
+    "indexSha256": "abd170a3059e2f581d8d9573edf2b5c2e24d84749ce07f31e28f9a6770ecd561",
+    "script": "/assets/index-CAA2UMH9.js",
+    "stylesheet": "/assets/index-DFzESWet.css",
+    "scope": "Built baseline used to diagnose delayed requester focus before the synchronous-value and deferred-focus refinements; all application APIs are intercepted in these navigation cases."
+  },
+  "results": {
+    "oldBuilt": {
+      "report": ".data/overnight-navigation-firefox-old-build-input.json",
+      "reportSha256": "46db68dbadc6bc7a9bb17a0b7298cc5edbd52c9a65e45d2a2c1bcd61b0bf5e96",
+      "startTime": "2026-10-23T09:18:30.553Z",
+      "duration": 76114.496,
+      "expected": 17,
+      "skipped": 0,
+      "unexpected": 3,
+      "flaky": 0
+    },
+    "captureOnlyWithoutHmr": {
+      "report": ".data/overnight-navigation-firefox-input-fixed-isolated.json",
+      "reportSha256": "66ff897561cca9ab01935d785a37b08d7e2cc1aeaf26077d98cb962ca37eee42",
+      "startTime": "2026-10-23T09:17:33.829Z",
+      "duration": 61925.791000000005,
+      "expected": 18,
+      "skipped": 0,
+      "unexpected": 2,
+      "flaky": 0
+    },
+    "guardedDelayedFocus": {
+      "report": ".data/overnight-navigation-firefox-focus-input-fixed.json",
+      "reportSha256": "dcb47a715c42dd6d3ae8d33ce2a5f383373209c5f4bcb0ca53eed67dfd3ec8e5",
+      "startTime": "2026-10-23T09:21:50.194Z",
+      "duration": 32862.996999999996,
+      "expected": 20,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "deterministicOldBuilt": {
+      "report": ".data/overnight-navigation-focus-old-build.json",
+      "reportSha256": "878943e95e7cdf1561391d018cf1ef6322a8139c33add9fe8af9db828755b168",
+      "startTime": "2026-10-23T09:20:00.575Z",
+      "duration": 16481.034,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "deterministicPatched": {
+      "report": ".data/overnight-navigation-focus-fixed.json",
+      "reportSha256": "e1208565686ed84ccaee59a8b30606266a04238be64995ec0aeada21f0d443a6",
+      "startTime": "2026-10-23T09:20:58.422Z",
+      "duration": 1718.05,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    }
+  },
+  "conclusion": "The built baseline and a source run without Vite HMR both reproduced input loss. A held-frame test established delayed programmatic heading focus interrupting textbox focus. Respecting a newer user focus choice passed that deterministic case and the 20-repeat Firefox diagnostic. Synchronous value capture is retained as separate state-updater purity hardening, not identified as the causal repair.",
+  "counting": "Each repeat group executes one existing unique scenario repeatedly for diagnosis; these repeat executions do not inflate the canonical unique-case or three-engine counts.",
+  "limits": "Finite diagnostics do not establish absence of every possible browser scheduling race."
+}

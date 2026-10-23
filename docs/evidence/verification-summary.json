@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-23T08:21:31.617Z",
-  "sourceStateSha256": "66bc8ea5e7a773ad50eb3160bf32aa2bea56fd2f0e65f14fed32452f41a65a08",
+  "recordedAt": "2026-10-23T09:29:59.890Z",
+  "sourceStateSha256": "3b8b53e7e46b781a03722fcb644a2be6786bdbeae811e1fab891df2c3d8eceae",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 55,
-    "node": 65,
+    "backendApplicationAndProcessRecovery": 61,
+    "node": 67,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 20,
-    "browserScenarios": 37,
+    "browserScenarios": 56,
     "browserEngines": 3,
-    "uniqueTestCases": 207,
-    "testExecutionsIncludingThreeEngines": 281,
+    "uniqueTestCases": 234,
+    "testExecutionsIncludingThreeEngines": 346,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -42,13 +42,19 @@
     ".data/overnight-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
     ".data/overnight-second-chromium-browser.log": "7c7790e17546b955abcbb513e6a73dfd5cdcca9f8b14b27966f9fb7aa5797f28",
     ".data/overnight-second-firefox-browser.log": "48f57d3e6693e7101805b0116f2cfcfe3bbdf8e76c663b42e50ce0f122980c4c",
-    ".data/overnight-second-webkit-browser.log": "e8399db54ce345739b8497d6268d1e4813d552a06e0f3ae5d007de951d8d98d2"
+    ".data/overnight-second-webkit-browser.log": "e8399db54ce345739b8497d6268d1e4813d552a06e0f3ae5d007de951d8d98d2",
+    ".data/overnight-third-web-final.log": "b29f71ae801eb01bc37445682b3cc2477bb2a16d09f2db44c04980c46d001e1d",
+    ".data/overnight-third-software-final.log": "20e76f89d6790d2ecdc901c829b37e437ecf398eb74be0b80d11588eda90ecf7",
+    ".data/overnight-third-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-third-chromium-browser.log": "c2218fdd08da05c56b4065899cdb92a596ce09d4d16bc52bb7437102b33c0762",
+    ".data/overnight-third-firefox-browser.log": "4b7514946dfb4db7b9437367d1731f9c948db904af769c10e1b5eef4830ca46c",
+    ".data/overnight-third-webkit-browser.log": "839bfbe20955bbc5a42d0f701d6ffc7fc52e0cf375b5cfdb16d43b7937ab5924"
   },
-  "notes": "October 23 second overnight checkpoint; see overnight-second-qa.json for current evidence and overnight-qa.json for the historical first checkpoint. Further audits continue until 9 a.m. Pacific.",
+  "notes": "October 23 third overnight checkpoint; see overnight-third-qa.json for current evidence. First and second checkpoint JSON files are historical. Further scheduled audits continue until 9 a.m. Pacific.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 172,
+    "candidateFiles": 184,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [

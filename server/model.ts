@@ -1,5 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+export function ownValue<T>(
+  values: Record<string, T>,
+  key: string,
+): T | undefined {
+  return Object.hasOwn(values, key) ? values[key] : undefined;
+}
 export const now = () => new Date().toISOString();
 export const id = (prefix: string) => `${prefix}_${randomUUID()}`;
 export const canonical = (x: unknown): string =>

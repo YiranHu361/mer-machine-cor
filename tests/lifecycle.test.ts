@@ -1276,3 +1276,32 @@ test("authenticated calibration revocation clears stale inspection provenance an
     }
   }
 });
+
+test("calibration idempotency keys must be bounded strings before any device intent is persisted", async () => {
+  const f = fixture();
+  try {
+    const artwork = await draft(f, "team_owner");
+    const before = await f.store.read();
+    for (const key of [
+      { length: 8 },
+      ["01234567"],
+      12345678,
+      "x".repeat(201),
+    ]) {
+      await assert.rejects(
+        f.service.startCalibration(
+          "phomemo_01",
+          "team_owner",
+          spec,
+          artwork.artifact,
+          key as any,
+          true,
+        ),
+        /stable idempotency key/,
+      );
+      assert.deepEqual(await f.store.read(), before);
+    }
+  } finally {
+    f.close();
+  }
+});

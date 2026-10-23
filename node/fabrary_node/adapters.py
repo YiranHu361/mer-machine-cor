@@ -227,11 +227,27 @@ class InstaxLink3:
         return {"status": "unsupported", "reason": "Queued Link 3 transfer can be cancelled; physical print stoppage is not verified"}
 
 
+# Match the backend's String.trim() and Zod code-point length so an owner
+# catalog can round-trip through the signed specification without changes.
+_JS_TRIM = "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+
+def normalized_catalog_color(value) -> str:
+    if not isinstance(value, str):
+        raise NodeError("catalog_color", "Prepared model color must be a string", 422)
+    color = value.strip(_JS_TRIM)
+    if not color or len(color) > 60:
+        raise NodeError("catalog_color", "Prepared model color must contain 1–60 characters after trimming", 422)
+    return color
+
+
 class Bambu:
     version = "bambulabs-api/2.6.6"
 
     def __init__(self, config: dict):
         self.config = config
+        for entry in self.config.get("catalog", []):
+            entry["color"] = normalized_catalog_color(entry.get("color"))
         self.printer = None
 
     def blockers(self) -> list[str]:

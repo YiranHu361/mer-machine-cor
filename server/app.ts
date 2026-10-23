@@ -28,6 +28,7 @@ import {
   id,
   now,
   specSchema,
+  ownValue,
   record,
   type Asset,
   type Machine,
@@ -62,7 +63,7 @@ const machineSchema = z
       .refine((h) => h.start < h.end)
       .optional(),
     maxJobSeconds: z.number().int().min(1).max(3600).optional(),
-    collectionPoint: z.string().min(3).max(150).optional(),
+    collectionPoint: z.string().trim().min(3).max(150).optional(),
     policy: z
       .object({
         authorizedArtwork: z.boolean(),
@@ -118,7 +119,7 @@ export function createApp(
       .find((c) => c.startsWith("fabrary_session="))
       ?.slice(16);
     const s = await service.read();
-    const session = cookie ? s.sessions[cookie] : undefined;
+    const session = cookie ? ownValue(s.sessions, cookie) : undefined;
     requireThat(
       session && Date.parse(session.expiresAt) > Date.now(),
       "AUTH_REQUIRED",
@@ -273,7 +274,7 @@ export function createApp(
     const state = await service.read();
     const images = [];
     for (const assetId of input.assetIds) {
-      const asset = state.assets[assetId];
+      const asset = ownValue(state.assets, assetId);
       requireThat(
         asset?.ownerId === a.id,
         "ASSET_ACCESS",
@@ -435,7 +436,7 @@ export function createApp(
     const s = await service.read();
     for (const assetId of spec.assetIds)
       requireThat(
-        s.assets[assetId]?.ownerId === ownerId,
+        ownValue(s.assets, assetId)?.ownerId === ownerId,
         "ASSET_ACCESS",
         "Upload your own artwork before creating this order.",
         403,
@@ -578,13 +579,21 @@ export function createApp(
   }
   app.post("/api/owner/jobs/:id/payment-reference", async (req, res) => {
     await ownerJob(req);
+    const body = z
+      .object({
+        operationId: z.string().min(1).max(250),
+        transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+        reason: z.string().trim().min(10).max(1000),
+      })
+      .strict()
+      .parse(req.body);
     res.json({
       job: view(
         await service.attachConfirmedPaymentReference(
           String(req.params.id),
-          String(req.body.operationId),
-          String(req.body.transactionHash),
-          String(req.body.reason ?? ""),
+          body.operationId,
+          body.transactionHash,
+          body.reason,
         ),
       ),
     });
@@ -649,7 +658,7 @@ export function createApp(
   app.get("/assets/:id", async (req, res) => {
     const assetId = String(req.params.id),
       s = await service.read(),
-      asset = s.assets[assetId];
+      asset = ownValue(s.assets, assetId);
     requireThat(asset, "NOT_FOUND", "Asset not found.", 404);
     const expires = Number(req.query.expires);
     const expected = createHmac("sha256", service.config.secret)
@@ -696,7 +705,7 @@ export function createApp(
       "Instax Mini Link 3": "instax_01",
       "Bambu Lab A1 mini": "bambu_01",
     };
-    const machineId = models[slug];
+    const machineId = ownValue(models, slug);
     requireThat(
       machineId,
       "UNSUPPORTED_DEVICE",
@@ -760,7 +769,10 @@ export function createApp(
   app.patch("/api/owner/machines/:id", async (req, res) => {
     await owner(req);
     const body = machineSchema.parse(req.body);
-    const before = (await service.read()).machines[String(req.params.id)];
+    const before = ownValue(
+      (await service.read()).machines,
+      String(req.params.id),
+    );
     requireThat(before, "NOT_FOUND", "Machine not found.", 404);
     if (body.paused === false) {
       requireThat(
@@ -837,10 +849,23 @@ export function createApp(
   });
   app.post("/api/owner/machines/:id/calibration/start", async (req, res) => {
     const a = await owner(req);
+    const machineId = String(req.params.id);
+    const machine = ownValue((await service.read()).machines, machineId);
+    requireThat(machine, "NOT_FOUND", "Machine not found.", 404);
+    requireThat(
+      machine.ownerId === a.id,
+      "FORBIDDEN",
+      "This machine belongs to another owner.",
+      403,
+    );
+    service.validateCalibrationIntent(
+      req.body.idempotencyKey,
+      req.body.ownerReady,
+    );
     const artifact = await prepare(req, a.id, 1, req.body.spec);
     res.json({
       calibration: await service.startCalibration(
-        String(req.params.id),
+        machineId,
         a.id,
         req.body.spec,
         artifact,
@@ -871,7 +896,8 @@ export function createApp(
   app.get("/api/owner/machines/:id/calibration/evidence", async (req, res) => {
     await owner(req);
     const state = await service.read(),
-      m = state.machines[String(req.params.id)];
+      m = ownValue(state.machines, String(req.params.id));
+    requireThat(m, "NOT_FOUND", "Machine not found.", 404);
     const c = Object.values(state.calibrations ?? {})
       .filter((c) => c.machineId === m?.id && c.evidence?.url)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
@@ -891,7 +917,7 @@ export function createApp(
   app.post("/api/owner/machines/:id/calibrate", async (req, res) => {
     await owner(req);
     const s = await service.read(),
-      m = s.machines[String(req.params.id)];
+      m = ownValue(s.machines, String(req.params.id));
     requireThat(m, "NOT_FOUND", "Machine not found.", 404);
     requireThat(
       (!m.activeJobId ||

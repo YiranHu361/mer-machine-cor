@@ -10,6 +10,7 @@
   --line: #d0dbe7;
   --paper: #fcfdff;
   --orange: #ffb457;
+  --focus: #a05b00;
   --green: #216a50;
   --red: #ab3939;
 }
@@ -57,7 +58,7 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 summary:focus-visible {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 4px;
 }
 input,
@@ -364,7 +365,7 @@ main {
   top: 5px;
 }
 .output-choice:has(input:focus-visible) {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 4px;
 }
 .output-choice.selected {
@@ -413,7 +414,7 @@ main {
   z-index: 1;
 }
 .upload-zone:has(input:focus-visible) {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 4px;
 }
 .upload-zone strong {
@@ -791,7 +792,7 @@ main {
   scroll-margin-block: 24px;
 }
 .notice[tabindex="-1"]:focus {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 .notice .text-button {
@@ -1338,6 +1339,11 @@ main {
 .queue-summary h2 {
   font-size: 23px;
   margin-bottom: 9px;
+  scroll-margin-block: 24px;
+}
+.queue-summary h2:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 6px;
 }
 .queue-summary > p {
   font-size: 12px;
@@ -1358,6 +1364,9 @@ main {
 }
 .owner-job.attention {
   border-left: 4px solid #dca04c;
+}
+.owner-job :is(input, button, select, textarea, summary) {
+  scroll-margin-block: 24px;
 }
 .owner-job-head {
   display: flex;
@@ -2630,7 +2639,7 @@ button {
   scroll-margin-top: 24px;
 }
 .panel-heading h2:focus {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 6px;
   border-radius: 2px;
 }
@@ -2696,7 +2705,7 @@ button {
   text-align: center;
 }
 .queue-tools:focus {
-  outline: 3px solid #eb9a30;
+  outline: 3px solid var(--focus);
   outline-offset: 4px;
 }
 .owner-tabs button {

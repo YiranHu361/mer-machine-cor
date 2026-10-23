@@ -124,3 +124,112 @@ test("reviewed catalog binds full3D specification and rejects changed artifacts 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("catalog color metadata round trips through specification normalization and model IDs stay unambiguous", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "fabrary-catalog-schema-"));
+  try {
+    const file = join(dir, "fixture.3mf"),
+      previewFile = join(dir, "preview.png"),
+      path = join(dir, "catalog.json");
+    const bytes = Buffer.from("PK\x03\x04software-only-schema-fixture");
+    await writeFile(file, bytes);
+    await writeFile(
+      previewFile,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+    const entry = {
+      id: "schema_fixture",
+      name: "Prepared model schema fixture",
+      reviewed: true,
+      file,
+      previewFile,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      widthMm: 30,
+      heightMm: 30,
+      depthMm: 5,
+      material: "pla",
+      color: "\ufeff  青色 blue\u00a0",
+      estimatedSeconds: 180,
+    };
+    await writeFile(path, JSON.stringify([entry]));
+    const { models } = await loadCatalog(path, dir);
+    assert.equal(models[0].color, "青色 blue");
+    const { specSchema } = await import("../server/model.ts");
+    const spec = specSchema.parse({
+      assetIds: [models[0].artifactId],
+      intent: "Catalog metadata must remain orderable",
+      outputType: "3d",
+      widthMm: models[0].widthMm,
+      heightMm: models[0].heightMm,
+      depthMm: models[0].depthMm,
+      material: models[0].material,
+      color: models[0].color,
+      estimatedSeconds: models[0].estimatedSeconds,
+      quantity: 1,
+      permission: "authorized",
+      crop: "contain",
+      preparedModelId: models[0].id,
+    });
+    const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
+    try {
+      const service = new Service(
+        store,
+        {
+          async call() {
+            throw new Error("No device calls in catalog schema test");
+          },
+          token() {
+            throw new Error("No execution tokens in catalog schema test");
+          },
+        },
+        new MockPayment(),
+        {
+          mode: "simulation",
+          paymentMode: "mock",
+          storeMode: "sqlite-development",
+          assetOrigin: "http://127.0.0.1:1/assets",
+          secret: "isolated-test",
+          quoteMs: 1000,
+          pickupMs: 1000,
+          ownerCode: "isolated-test",
+          dataDir: dir,
+          nodeUrl: "http://127.0.0.1:1",
+          catalog: models,
+        },
+      );
+      service.validateCatalog(spec, models[0].artifact);
+    } finally {
+      store.close();
+    }
+    for (const color of [
+      "   ",
+      "\ufeff\u00a0",
+      "x".repeat(61),
+      "😀".repeat(61),
+    ]) {
+      await writeFile(path, JSON.stringify([{ ...entry, color }]));
+      await assert.rejects(loadCatalog(path, dir));
+    }
+    await writeFile(
+      path,
+      JSON.stringify([{ ...entry, color: "😀".repeat(60) }]),
+    );
+    assert.equal(
+      (await loadCatalog(path, dir)).models[0].color,
+      "😀".repeat(60),
+    );
+    await writeFile(
+      path,
+      JSON.stringify([
+        entry,
+        { ...entry, name: "Duplicate model ID", color: "red" },
+      ]),
+    );
+    await assert.rejects(loadCatalog(path, dir), /IDs must be unique/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

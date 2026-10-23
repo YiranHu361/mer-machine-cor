@@ -14,7 +14,7 @@ import time
 import uuid
 import httpx
 from PIL import Image, ImageDraw, ImageFilter
-from .adapters import Bambu, adapter_for, capture_camera
+from .adapters import Bambu, adapter_for, capture_camera, normalized_catalog_color
 from .journal import Journal, now
 from .security import NodeError, canonical, validate_artifact_url, verify_token
 
@@ -212,8 +212,8 @@ class NodeService:
             duration = parameters["estimatedSeconds"]
             if isinstance(depth, bool) or not isinstance(depth, (int, float)) or not math.isfinite(depth) or not 0 < depth <= 180:
                 raise NodeError("dimensions", "Prepared 3D depth must be positive and no greater than 180 mm", 422)
-            if not isinstance(parameters["color"], str) or not parameters["color"].strip():
-                raise NodeError("catalog_color", "Prepared 3D color must be a nonempty single-color specification", 422)
+            if normalized_catalog_color(parameters["color"]) != parameters["color"]:
+                raise NodeError("catalog_color", "Signed prepared 3D color must already match the normalized catalog color", 422)
             if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not math.isfinite(duration) or not 0 < duration <= state["maxJobSeconds"]:
                 raise NodeError("catalog_duration", "Prepared 3D duration must be positive and within the owner time limit", 422)
 
