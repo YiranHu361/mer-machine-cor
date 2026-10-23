@@ -1,77 +1,36 @@
 {
-  "observedOnLocalDate": "2026-10-22",
-  "spacetime": {
-    "version": "2.13.0",
-    "server": "ws://127.0.0.1:3002",
-    "module": "fabrary-local",
-    "status": "PASS",
-    "checks": [
-      "real SDK clients",
-      "persisted full JSON state",
-      "stale compare-and-set rejected",
-      "cross-client subscription received",
-      "anonymous state read empty",
-      "unauthorized reducer rejected"
-    ]
-  },
-  "fetchLocalApplication": {
-    "status": "PASS",
-    "applicationOrigin": "http://127.0.0.1:4318",
-    "store": "spacetimedb",
-    "jobId": "job_dac0f4c1-b282-4439-bad4-0fe780f02d8b",
-    "machineId": "instax_01",
-    "machineMode": "simulation",
-    "paymentMode": "mock",
-    "productionState": "produced",
-    "paymentState": "released",
-    "fulfillmentState": "collected",
-    "checks": [
-      "dedicated requester session",
-      "actual FastMCP machine list",
-      "uploaded local fixture",
-      "FastMCP create_request",
-      "explicit fixture approval through requester HTTP",
-      "FastMCP request_quote",
-      "FastMCP checkout_job",
-      "FastMCP dispatch_job",
-      "FastMCP job_status until produced",
-      "owner fixture handling",
-      "pickup redemption",
-      "cleared simulation resumed"
-    ],
-    "finalRecheck": {
-      "observedOnLocalDate": "2026-10-22",
-      "jobId": "job_e6807daa-5050-4f6a-a4ea-751e2ace12a4",
-      "productionState": "produced",
-      "paymentState": "released",
-      "fulfillmentState": "collected",
-      "mandateEnforced": true,
-      "scope": "Actual local FastMCP via dedicated requester, not ASI:One discovery"
-    }
-  },
-  "publicTestnetReadOnly": {
-    "status": "PASS",
-    "facilitator": "https://x402.org/facilitator",
-    "advertisedKind": {
-      "x402Version": 2,
-      "scheme": "exact",
-      "network": "eip155:84532"
-    },
-    "rpc": "https://sepolia.base.org",
-    "chainId": 84532,
-    "usdcTokenName": "USDC",
-    "transactionsSubmitted": 0
-  },
-  "livePayments": {
-    "status": "BLOCKED",
-    "reason": "No configured funded test payer/treasury keys or operator testnet configuration; zero transactions submitted"
-  },
-  "liveClaude": {
-    "status": "BLOCKED",
-    "reason": "ANTHROPIC_API_KEY absent; zero API calls made"
-  },
-  "agentverseAsiOneDiscovery": {
-    "status": "NOT_TESTED",
-    "reason": "No ASI1 API key, persistent agent seed, authorized sender binding or observed discovery/invocation"
-  }
+  "status": "PASS",
+  "scope": "actual local FastMCP -> requester API",
+  "store": "spacetimedb",
+  "tools": [
+    "list_machines",
+    "create_request",
+    "job_status",
+    "request_quote",
+    "checkout_job",
+    "dispatch_job"
+  ],
+  "machineCount": 3,
+  "discovery": "NOT_TESTED; local invocation is not ASI:One discovery",
+  "fulfillmentState": "collected",
+  "jobId": "job_04babc71-1bde-49f6-afa9-fb429a306d3f",
+  "productionState": "produced",
+  "paymentState": "released",
+  "machineMode": "simulation",
+  "paymentMode": "mock",
+  "steps": [
+    "dedicated requester session",
+    "FastMCP machine list",
+    "upload fixture",
+    "FastMCP create request",
+    "explicit fixture preview approval via normal HTTP",
+    "FastMCP quote",
+    "FastMCP checkout",
+    "FastMCP dispatch",
+    "FastMCP job status until produced",
+    "owner fixture prepares item",
+    "single-use pickup redemption",
+    "owner resumes cleared simulation"
+  ],
+  "recordedAt": "2026-10-23T07:38:23.907Z"
 }

@@ -326,6 +326,32 @@ test("owner price changes invalidate unpaid approval while preserving an already
       (await f.service.read()).machines.phomemo_01.reservation!.jobId,
       j.id,
     );
+    await a.post(`/api/jobs/${j.id}/cancel`).send({}).expect(200);
+    const cancelled = (
+      await a
+        .post("/api/jobs")
+        .send(spec(uploaded.body.assets[0].id))
+        .expect(201)
+    ).body.job;
+    await a
+      .post(`/api/jobs/${cancelled.id}/approve`)
+      .send({
+        specVersion: cancelled.specVersion,
+        artifactSha256: cancelled.artifact.sha256,
+      })
+      .expect(200);
+    await a.post(`/api/jobs/${cancelled.id}/quote`).send({}).expect(200);
+    await a.post(`/api/jobs/${cancelled.id}/cancel`).send({}).expect(200);
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({
+        priceCard: { consumables: 55, machine: 10, handling: 30, platform: 15 },
+      })
+      .expect(200);
+    assert.equal(
+      (await f.service.job(cancelled.id)).productionState,
+      "cancelled",
+    );
   } finally {
     f.close();
   }
@@ -352,6 +378,208 @@ test("built application serves owner deep links without turning unknown API path
     const bundle = await request(app).get("/assets/app-bundle.js").expect(200);
     assert.match(bundle.text, /public build fixture/);
     await request(app).get("/api/route-that-does-not-exist").expect(404);
+  } finally {
+    f.close();
+  }
+});
+
+test("empty bodies and multibyte invalid credentials return useful validation errors", async () => {
+  const f = fixture();
+  try {
+    const empty = await request(f.app).post("/api/session").expect(422);
+    assert.equal(empty.body.error.code, "INVALID_ROLE");
+    const invalid = await request(f.app)
+      .post("/api/session")
+      .send({
+        role: "owner",
+        accessCode: "é".repeat(f.service.config.ownerCode.length),
+      })
+      .expect(403);
+    assert.equal(invalid.body.error.code, "ACCESS_CODE");
+    const a = request.agent(f.app);
+    await a.post("/api/session").send({ role: "requester" }).expect(200);
+    const uploaded = await a
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "credential-check.png",
+        contentType: "image/png",
+      })
+      .expect(201);
+    const url = new URL(f.service.assetUrl(uploaded.body.assets[0].id));
+    url.searchParams.set("sig", "é".repeat(64));
+    await request(f.app)
+      .get(url.pathname + url.search)
+      .expect(401);
+  } finally {
+    f.close();
+  }
+});
+
+test("result frames use the configured authenticated node boundary and preserve requester isolation", async () => {
+  const f = fixture();
+  try {
+    const a = request.agent(f.app),
+      stranger = request.agent(f.app);
+    await a.post("/api/session").send({ role: "requester" }).expect(200);
+    await stranger.post("/api/session").send({ role: "requester" }).expect(200);
+    const uploaded = await a
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "evidence-check.png",
+        contentType: "image/png",
+      })
+      .expect(201);
+    const created = await a
+      .post("/api/jobs")
+      .send(spec(uploaded.body.assets[0].id))
+      .expect(201);
+    const jobId = created.body.job.id;
+    await mutate(f.store, (s) => {
+      s.jobs[jobId].machineId = "phomemo_01";
+      s.jobs[jobId].evidence = { url: "/frames/private-fixture.png" };
+    });
+    let calls = 0;
+    f.service.node.fetchFrame = async (url, machine) => {
+      calls++;
+      assert.equal(url, "/frames/private-fixture.png");
+      assert.equal(machine.id, "phomemo_01");
+      return image;
+    };
+    await stranger.get(`/api/jobs/${jobId}/evidence`).expect(403);
+    assert.equal(calls, 0);
+    const frame = await a.get(`/api/jobs/${jobId}/evidence`).expect(200);
+    assert.equal(frame.headers["content-type"], "image/png");
+    assert.deepEqual(frame.body, image);
+    assert.equal(calls, 1);
+    f.service.node.fetchFrame = async () => {
+      throw new Error("Node offline");
+    };
+    const unavailable = await a.get(`/api/jobs/${jobId}/evidence`).expect(502);
+    assert.equal(unavailable.body.error.code, "FRAME_UNAVAILABLE");
+    assert.match(unavailable.body.error.message, /camera node/);
+  } finally {
+    f.close();
+  }
+});
+
+test("in-flight calibration confirmation cannot reserve work or clear a newer calibration", async () => {
+  const f = fixture();
+  let unblock!: () => void;
+  try {
+    const owner = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    const uploaded = await owner
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "calibration-race.png",
+        contentType: "image/png",
+      })
+      .expect(201);
+    const artworkId = uploaded.body.assets[0].id;
+    const artwork = (await f.service.read()).assets[artworkId];
+    const artifact = {
+      id: artworkId,
+      url: artwork.url,
+      sha256: artwork.sha256,
+    };
+    const draft = await f.service.create(
+      "team_owner",
+      spec(artworkId),
+      artifact,
+    );
+    await f.service.approve(draft.id, {
+      specVersion: 1,
+      artifactSha256: artifact.sha256,
+    });
+    await mutate(f.store, (s) =>
+      Object.assign(s.machines.phomemo_01, {
+        listed: true,
+        ready: true,
+        paused: false,
+        calibrated: true,
+      }),
+    );
+    let enter!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    f.service.node.call = async (tool, input) => {
+      if (tool === "/calibrate" && input.inspected === true) {
+        enter();
+        await gate;
+      }
+      return { calibrated: true };
+    };
+    f.service.node.token = () => ({
+      token: "isolated-test-token",
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    const confirming = owner
+      .post("/api/owner/machines/phomemo_01/calibrate")
+      .send({ inspected: true })
+      .then((response) => response);
+    await entered;
+    await assert.rejects(f.service.quote(draft.id), /No ready machine/);
+    const calibration = await f.service.startCalibration(
+      "phomemo_01",
+      "team_owner",
+      spec(artworkId),
+      artifact,
+      "newer-calibration-key",
+      true,
+    );
+    unblock();
+    const stale = await confirming;
+    assert.equal(stale.status, 409);
+    assert.equal(stale.body.error.code, "MACHINE_BUSY");
+    const machine = (await f.service.read()).machines.phomemo_01;
+    assert.equal(machine.activeJobId, calibration.id);
+    assert.equal(machine.calibrated, false);
+    assert.equal(machine.ready, false);
+  } finally {
+    unblock?.();
+    f.close();
+  }
+});
+
+test("failed upload batches leave no partial artwork and decoded format controls MIME", async () => {
+  const f = fixture();
+  try {
+    const a = request.agent(f.app);
+    await a.post("/api/session").send({ role: "requester" }).expect(200);
+    await a
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "valid.png",
+        contentType: "image/png",
+      })
+      .attach("images", Buffer.from("not an image"), {
+        filename: "invalid.png",
+        contentType: "image/png",
+      })
+      .expect(422);
+    const { readdir } = await import("node:fs/promises");
+    assert.deepEqual(
+      await readdir(join(f.service.config.dataDir, "assets")),
+      [],
+    );
+    assert.equal(Object.keys((await f.service.read()).assets).length, 0);
+    const uploaded = await a
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "misidentified.jpg",
+        contentType: "image/jpeg",
+      })
+      .expect(201);
+    assert.equal(uploaded.body.assets[0].mime, "image/png");
+    const served = await a.get(uploaded.body.assets[0].url).expect(200);
+    assert.equal(served.headers["content-type"], "image/png");
   } finally {
     f.close();
   }

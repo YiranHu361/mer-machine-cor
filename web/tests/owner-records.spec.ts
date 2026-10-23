@@ -320,6 +320,27 @@ test("requester specification suggestions preserve approval and manual fallback 
     });
   });
   await page.goto("/");
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("A label that still needs artwork");
+  await page
+    .getByRole("button", { name: "Make production preview", exact: true })
+    .click();
+  const missingArtwork = page
+    .getByRole("alert")
+    .filter({ hasText: "Add at least one image" });
+  await expect(missingArtwork).toBeFocused();
+  await expect
+    .poll(async () => {
+      const errorPosition = await missingArtwork.boundingBox();
+      return Boolean(
+        errorPosition &&
+        errorPosition.y >= 0 &&
+        errorPosition.y + errorPosition.height <= 844,
+      );
+    })
+    .toBe(true);
   const suggest = page.getByRole("button", {
     name: "Suggest specification",
     exact: true,
@@ -386,3 +407,552 @@ test("requester specification suggestions preserve approval and manual fallback 
     })),
   );
 });
+
+test("owner queue finds actionable orders, keeps history and supports keyboard views at narrow widths (UI fixture)", async ({
+  page,
+}, testInfo) => {
+  const now = new Date().toISOString();
+  const makeJob = (
+    id: string,
+    productionState: string,
+    fulfillmentState: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    id,
+    specVersion: 1,
+    spec: {
+      assetIds: [],
+      intent:
+        id === "job_prepare"
+          ? "Membership labels for the local making counter"
+          : `Workshop order ${id}`,
+      outputType: "sticker",
+      widthMm: 53,
+      heightMm: 50,
+      quantity: 1,
+      material: "thermal-paper",
+      permission: "authorized",
+      crop: "contain",
+    },
+    productionState,
+    paymentState: "released",
+    fulfillmentState,
+    history: [],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+    ...extra,
+  });
+  const jobs = [
+    makeJob("job_review", "needs_review", "unprepared"),
+    makeJob("job_recovered", "failed", "unprepared", {
+      history: [
+        {
+          at: now,
+          event: "owner_recovery",
+          reason: "Output inspected and machine cleared",
+        },
+      ],
+    }),
+    makeJob("job_prepare", "produced", "awaiting_owner"),
+    makeJob("job_pickup", "produced", "ready_for_pickup"),
+    makeJob("job_running", "running", "unprepared", { paymentState: "held" }),
+    makeJob("job_collected", "produced", "collected"),
+    makeJob("job_cancelled", "cancelled", "unprepared", {
+      paymentState: "unpaid",
+    }),
+    makeJob("job_payment", "produced", "collected", {
+      paymentState: "release_pending",
+    }),
+  ];
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const body =
+      path === "/api/health"
+        ? { mode: "simulation", paymentMode: "mock", store: "ui-fixture" }
+        : path === "/api/session"
+          ? { role: "owner", id: "queue_fixture_owner" }
+          : path === "/api/owner/dashboard"
+            ? { machines: [], jobs, ledger: [] }
+            : {};
+    await route.fulfill({
+      status: 200,
+      contentType:
+        path === "/api/events" ? "text/event-stream" : "application/json",
+      body: path === "/api/events" ? ": UI fixture\n\n" : JSON.stringify(body),
+    });
+  });
+  await page.goto("/owner");
+  const filter = page.getByLabel("Show orders", { exact: true });
+  const search = page.getByLabel("Find an order", { exact: true });
+  await expect(filter).toHaveValue("action");
+  await expect(page.locator(".owner-job")).toHaveCount(4);
+  await expect(page.locator(".queue-count")).toHaveText("4 of 8 orders shown");
+  await expect(
+    page.getByText("Workshop order job_recovered", { exact: true }),
+  ).toHaveCount(0);
+  await search.fill("membership labels");
+  await expect(page.locator(".owner-job")).toHaveCount(1);
+  await search.fill("not-an-order");
+  await expect(
+    page.getByRole("heading", { name: "No orders match.", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Show all orders", exact: true })
+    .click();
+  await expect(search).toHaveValue("");
+  await expect(filter).toHaveValue("all");
+  await expect(page.locator(".owner-job")).toHaveCount(8);
+  for (const [view, count] of [
+    ["pickup", 1],
+    ["production", 1],
+    ["completed", 3],
+  ] as const) {
+    await filter.selectOption(view);
+    await expect(page.locator(".owner-job")).toHaveCount(count);
+  }
+  await filter.selectOption("action");
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    );
+    expect(overflow, `Owner queue must fit a ${width}px viewport`).toBe(false);
+  }
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.screenshot({
+    path: testInfo.outputPath("owner-queue-320.png"),
+    fullPage: true,
+  });
+  const queueTab = page.getByRole("tab", {
+    name: "Orders & handling",
+    exact: true,
+  });
+  await queueTab.focus();
+  await page.keyboard.press("End");
+  await expect(
+    page.getByRole("tab", { name: "Payment records", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("tab", { name: "Payment records", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(queueTab).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByRole("tab", { name: "Machines & policy", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(queueTab).toBeFocused();
+  await expect(search).toBeVisible();
+});
+
+test("a clear owner counter keeps archived orders reachable through finite pages and search (UI fixture)", async ({
+  page,
+}) => {
+  const now = new Date().toISOString();
+  const jobs = Array.from({ length: 10 }, (_, index) => ({
+    id: `archived_${index + 1}`,
+    specVersion: 1,
+    spec: {
+      assetIds: [],
+      intent: `Archive order ${index + 1}`,
+      outputType: "sticker",
+      widthMm: 53,
+      heightMm: 50,
+      quantity: 1,
+      material: "thermal-paper",
+      permission: "authorized",
+      crop: "contain",
+    },
+    productionState: "produced",
+    paymentState: "released",
+    fulfillmentState: "collected",
+    history: [],
+    createdAt: now,
+    updatedAt: now,
+    version: 1,
+  }));
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    const body =
+      path === "/api/health"
+        ? { mode: "simulation", paymentMode: "mock", store: "ui-fixture" }
+        : path === "/api/session"
+          ? { role: "owner", id: "archive_fixture_owner" }
+          : path === "/api/owner/dashboard"
+            ? { machines: [], jobs, ledger: [] }
+            : {};
+    await route.fulfill({
+      status: 200,
+      contentType:
+        path === "/api/events" ? "text/event-stream" : "application/json",
+      body: path === "/api/events" ? ": fixture\n\n" : JSON.stringify(body),
+    });
+  });
+  await page.goto("/owner");
+  await expect(
+    page.getByRole("heading", {
+      name: "No orders need owner action.",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Show all orders", exact: true })
+    .click();
+  await expect(page.locator(".owner-job")).toHaveCount(8);
+  await expect(
+    page.getByRole("button", { name: "Previous orders", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Next orders", exact: true }).click();
+  await expect(page.locator(".owner-job")).toHaveCount(2);
+  await expect(
+    page.getByRole("search", { name: "Find workshop orders", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByText("Archive order 9", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Next orders", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".queue-count")).toHaveText(
+    "9–10 of 10 matching orders shown",
+  );
+  await page
+    .getByLabel("Find an order", { exact: true })
+    .fill("Archive order 1");
+  await expect(page.locator(".owner-job")).toHaveCount(2);
+  await expect(
+    page.getByText("Archive order 1", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Order pages", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Find an order", { exact: true }).fill("");
+  await expect(page.locator(".owner-job")).toHaveCount(8);
+  await expect(page.locator(".queue-count")).toHaveText(
+    "1–8 of 10 matching orders shown",
+  );
+});
+
+test("requester identity changes discard private artwork, drafts and saved order selection (UI fixture)", async ({
+  page,
+}) => {
+  const pixel =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
+  let identity = "requester_A";
+  let expired = false;
+  let opened = 0;
+  let privateJob: any = null;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let status = 200;
+    let body: unknown = {};
+    if (path === "/api/health")
+      body = { mode: "simulation", paymentMode: "mock", store: "ui-fixture" };
+    else if (path === "/api/session") {
+      if (route.request().method() === "POST") {
+        identity = "requester_B";
+        opened++;
+      }
+      body = { role: "requester", id: identity };
+    } else if (path === "/api/machines") body = { machines: [] };
+    else if (path === "/api/catalog") body = { models: [] };
+    else if (path === "/api/events") {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: ": UI fixture\n\n",
+      });
+      return;
+    } else if (path === "/api/uploads")
+      body = {
+        assets: [
+          {
+            id: "private_artwork_A",
+            url: pixel,
+            sha256: "private_A",
+            width: 500,
+            height: 460,
+          },
+        ],
+      };
+    else if (path === "/api/intake")
+      body = {
+        draft: {
+          outputType: "sticker",
+          widthMm: 25,
+          heightMm: 70,
+          quantity: 2,
+          material: "thermal-paper",
+          crop: "cover",
+          questions: ["Private draft question for requester A"],
+          contentReview: "clear",
+          reason: "Private artwork suggestion for requester A",
+          provider: "fixture",
+          model: "fixture",
+        },
+      };
+    else if (path === "/api/jobs" && route.request().method() === "POST") {
+      const now = new Date().toISOString();
+      privateJob = {
+        id: "private_order_A",
+        specVersion: 1,
+        spec: route.request().postDataJSON(),
+        artifact: { id: "private_preview_A", url: pixel, sha256: "private_A" },
+        productionState: "specified",
+        paymentState: "unpaid",
+        fulfillmentState: "unprepared",
+        history: [],
+        createdAt: now,
+        updatedAt: now,
+        version: 1,
+      };
+      body = { job: privateJob };
+    } else if (path === "/api/jobs") {
+      if (expired && identity === "requester_A") {
+        status = 401;
+        body = { error: { message: "Requester session expired" } };
+      } else
+        body = {
+          jobs: identity === "requester_A" && privateJob ? [privateJob] : [],
+        };
+    } else {
+      status = 404;
+      body = { error: { message: "No external calls in this fixture" } };
+    }
+    await route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  });
+  await page.goto("/");
+  await page
+    .getByLabel("Upload artwork", { exact: true })
+    .setInputFiles("tests/fixtures/makers.png");
+  await expect(page.getByAltText("Uploaded original artwork")).toBeVisible();
+  await page
+    .getByLabel("What is it for?", { exact: true })
+    .fill("Private requester A workshop artwork");
+  await page
+    .getByLabel("Automatically accept a quote within my budget", {
+      exact: true,
+    })
+    .check();
+  await page.getByLabel("Budget cap (USD)", { exact: true }).fill("9.00");
+  await page
+    .getByRole("button", { name: "Suggest specification", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Suggested specification", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Make production preview", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Your production file", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    )
+    .toBe("private_order_A");
+  await page
+    .getByRole("button", {
+      name: "Edit artwork or specifications",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
+    "Private requester A workshop artwork",
+  );
+  expired = true;
+  const reopen = page.getByRole("button", {
+    name: "Open requester session",
+    exact: true,
+  });
+  await expect(reopen).toBeVisible();
+  expect(opened).toBe(0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    )
+    .toBeNull();
+  await reopen.click();
+  await expect(
+    page.getByRole("heading", { name: "What are we making?", exact: true }),
+  ).toBeVisible();
+  expect(opened).toBe(1);
+  await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
+  await expect(page.getByLabel("What is it for?", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(page.getByLabel("Width (mm)", { exact: true })).toHaveValue(
+    "53",
+  );
+  await expect(page.getByLabel("Height (mm)", { exact: true })).toHaveValue(
+    "50",
+  );
+  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("1");
+  await expect(page.getByLabel("Image placement", { exact: true })).toHaveValue(
+    "contain",
+  );
+  await expect(
+    page.getByLabel("Automatically accept a quote within my budget", {
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByLabel("Budget cap (USD)", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Suggested specification", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByAltText(/Actual production preview/)).toHaveCount(0);
+  await expect(page.locator(".order-row")).toHaveCount(0);
+});
+
+for (const deferredOperation of ["upload", "create"] as const) {
+  test(`late ${deferredOperation} results from an expired requester cannot restore private state (UI fixture)`, async ({
+    page,
+  }) => {
+    const pixel =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
+    let identity = "requester_A";
+    let expired = false;
+    let pending: import("@playwright/test").Route | null = null;
+    let createSpec: unknown;
+    await page.route("**/api/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const isCreate =
+        path === "/api/jobs" && route.request().method() === "POST";
+      if (
+        (deferredOperation === "upload" && path === "/api/uploads") ||
+        (deferredOperation === "create" && isCreate)
+      ) {
+        pending = route;
+        if (isCreate) createSpec = route.request().postDataJSON();
+        return;
+      }
+      let status = 200;
+      let body: unknown = {};
+      if (path === "/api/health")
+        body = { mode: "simulation", paymentMode: "mock", store: "ui-fixture" };
+      else if (path === "/api/session") {
+        if (route.request().method() === "POST") identity = "requester_B";
+        body = { role: "requester", id: identity };
+      } else if (path === "/api/machines") body = { machines: [] };
+      else if (path === "/api/catalog") body = { models: [] };
+      else if (path === "/api/events") {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/event-stream",
+          body: ": UI fixture\n\n",
+        });
+        return;
+      } else if (path === "/api/uploads")
+        body = {
+          assets: [{ id: "old_private_A", url: pixel, sha256: "private_A" }],
+        };
+      else if (path === "/api/jobs") {
+        if (expired && identity === "requester_A") {
+          status = 401;
+          body = { error: { message: "Requester session expired" } };
+        } else body = { jobs: [] };
+      } else {
+        status = 404;
+        body = { error: { message: "No external calls in this fixture" } };
+      }
+      await route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    });
+    await page.goto("/");
+    await page
+      .getByLabel("What is it for?", { exact: true })
+      .fill("Private work belonging only to requester A");
+    await page
+      .getByLabel("Upload artwork", { exact: true })
+      .setInputFiles("tests/fixtures/makers.png");
+    if (deferredOperation === "create") {
+      await expect(
+        page.getByAltText("Uploaded original artwork"),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Make production preview", exact: true })
+        .click();
+    }
+    await expect.poll(() => Boolean(pending)).toBe(true);
+    expired = true;
+    await page
+      .getByRole("button", { name: "Open requester session", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "What are we making?", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByLabel("What is it for?", { exact: true })
+      .fill("New requester B draft stays separate");
+    const now = new Date().toISOString();
+    const oldResult =
+      deferredOperation === "upload"
+        ? {
+            assets: [
+              { id: "late_private_art_A", url: pixel, sha256: "private_A" },
+            ],
+          }
+        : {
+            job: {
+              id: "late_private_order_A",
+              specVersion: 1,
+              spec: createSpec,
+              artifact: {
+                id: "late_private_art_A",
+                url: pixel,
+                sha256: "private_A",
+              },
+              productionState: "specified",
+              paymentState: "unpaid",
+              fulfillmentState: "unprepared",
+              history: [],
+              createdAt: now,
+              updatedAt: now,
+              version: 1,
+            },
+          };
+    const response = page.waitForResponse(
+      (value) =>
+        value
+          .url()
+          .endsWith(
+            deferredOperation === "upload" ? "/api/uploads" : "/api/jobs",
+          ) && value.request().method() === "POST",
+    );
+    await pending!.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(oldResult),
+    });
+    await response;
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(
+      page.getByLabel("What is it for?", { exact: true }),
+    ).toHaveValue("New requester B draft stays separate");
+    await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(0);
+    await expect(page.getByAltText(/Actual production preview/)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Open requester session", exact: true }),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    ).toBeNull();
+  });
+}

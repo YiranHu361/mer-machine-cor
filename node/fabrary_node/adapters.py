@@ -323,30 +323,57 @@ def adapter_for(config: dict):
 
 async def capture_camera(config: dict) -> bytes:
     """Capture now; do not accept filesystem snapshots that can be stale."""
+    maximum = 10 * 1024 * 1024
     if config.get("cameraCommand"):
         command = config["cameraCommand"]
         if not isinstance(command, list) or not command or not all(isinstance(x, str) for x in command):
             raise NodeError("camera_config", "cameraCommand must be an owner-configured argument list")
-        process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
         try:
-            data, _ = await asyncio.wait_for(process.communicate(), 10)
-        except asyncio.TimeoutError:
-            process.kill()
+            process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        except OSError:
+            raise NodeError("camera_failed", "Configured camera capture could not start", 503) from None
+        async def read_frame():
+            content = bytearray()
+            while chunk := await process.stdout.read(64 * 1024):
+                content.extend(chunk)
+                if len(content) > maximum:
+                    raise NodeError("camera_oversize", "Camera frame exceeds 10 MiB", 503)
             await process.wait()
+            return bytes(content)
+        try:
+            data = await asyncio.wait_for(read_frame(), 10)
+        except asyncio.TimeoutError:
             raise NodeError("camera_timeout", "Camera did not return a fresh frame", 503) from None
+        finally:
+            if process.returncode is None:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                await process.wait()
         if process.returncode != 0:
             raise NodeError("camera_failed", "Camera capture failed", 503)
     elif config.get("cameraUrl"):
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
-            response = await client.get(config["cameraUrl"], headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
-            response.raise_for_status()
-            data = response.content
+        content = bytearray()
+        try:
+            async with asyncio.timeout(10):
+                async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
+                    async with client.stream("GET", config["cameraUrl"], headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}) as response:
+                        if response.status_code != 200:
+                            raise NodeError("camera_failed", "Camera capture endpoint is unavailable", 503)
+                        async for chunk in response.aiter_bytes():
+                            content.extend(chunk)
+                            if len(content) > maximum:
+                                raise NodeError("camera_oversize", "Camera frame exceeds 10 MiB", 503)
+            data = bytes(content)
+        except (httpx.HTTPError, TimeoutError, ValueError):
+            raise NodeError("camera_failed", "Camera capture endpoint is unavailable or timed out", 503) from None
     else:
         raise NodeError("camera_unconfigured", "Fresh camera capture is unconfigured", 503)
-    if len(data) > 10 * 1024 * 1024:
-        raise NodeError("camera_oversize", "Camera frame exceeds 10 MiB", 503)
     try:
         with Image.open(io.BytesIO(data)) as image:
+            if image.width * image.height > 24_000_000 or getattr(image, "is_animated", False):
+                raise ValueError()
             image.verify()
     except Exception:
         raise NodeError("camera_invalid", "Camera returned an unusable image", 503) from None

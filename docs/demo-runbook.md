@@ -2,6 +2,11 @@
 
 ## Current checkpoint
 
+The October 23 overnight interface review continues until 9:00 a.m. Pacific.
+See [overnight QA](overnight-qa.md) for the latest checkpoint and remaining audits.
+The owner queue now starts with orders needing action; use its view selector,
+search and page controls to reach collected/cancelled orders.
+
 The application runs on loopback http://127.0.0.1:4318, Python node on127.0.0.1:8788 and actual SpacetimeDB2.13.0 on127.0.0.1:3002. Production frontend is served by the backend. Optional Vite development preview uses4317. The default running checkpoint is **simulation / mock / actual SpacetimeDB**. This is a functional software demonstration, not a physical acceptance claim.
 
 All changes are inside the dedicated writable `fabrary/` directory. Original project references and pasted contract remain unchanged. Credentials, uploaded assets, journals and installed local runtime live under ignored private `.data/` or `.env`.
@@ -58,6 +63,15 @@ This starts the node and backend with matching local credentials. Run one backen
 7. Owner removes, labels, stores and clears before marking ready for pickup. Resume availability separately; another job can run while the older item awaits collection. Redeem the expiring pickup code once at actual handoff.
 
 ## Hardware prerequisites and finite physical acceptance
+
+Calibration is now bound to the device identity, transport/camera configuration,
+material and adapter version. Changing that setup invalidates calibration.
+Legacy hardware journals without this provenance require one fresh calibration;
+simulation journals migrate as simulations. Pairing confirmation/revocation is
+read from the current private device configuration at node startup. A pending
+device stop or unsettled worker blocks resume, new acceptance and manual
+reconciliation; inspect the recorded outcome after that transport has settled.
+Do not erase a journal to bypass an unresolved attempt.
 
 No hardware configuration was supplied or discovered; no physical job has been executed. Do not use software acceptance scripts as physical evidence.
 

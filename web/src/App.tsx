@@ -189,6 +189,18 @@ const available = (m: Machine) =>
   !m.activeJobId;
 const terminal = (s: string) =>
   ["produced", "failed", "needs_review", "cancelled"].includes(s);
+const needsOwnerReview = (job: Job) =>
+  job.productionState === "needs_review" ||
+  (job.productionState === "failed" &&
+    !job.history?.some((event) => event.event === "owner_recovery"));
+const needsOwnerAction = (job: Job) =>
+  needsOwnerReview(job) ||
+  job.fulfillmentState === "ready_for_pickup" ||
+  (job.productionState === "produced" &&
+    job.fulfillmentState === "awaiting_owner") ||
+  ["collection_pending", "release_pending", "refund_pending"].includes(
+    job.paymentState,
+  );
 
 class ApiError extends Error {
   constructor(
@@ -246,14 +258,25 @@ async function api<T>(
 function Notice({
   children,
   kind = "info",
+  focusOnShow = false,
 }: {
   children: ReactNode;
   kind?: "info" | "error" | "success";
+  focusOnShow?: boolean;
 }) {
+  const notice = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusOnShow && notice.current) {
+      notice.current.focus({ preventScroll: true });
+      notice.current.scrollIntoView({ block: "nearest", behavior: "instant" });
+    }
+  }, [focusOnShow, children]);
   return (
     <div
       className={`notice ${kind}`}
       role={kind === "error" ? "alert" : "status"}
+      ref={notice}
+      tabIndex={focusOnShow ? -1 : undefined}
     >
       {children}
     </div>
@@ -265,10 +288,14 @@ function Button({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) {
   return (
-    <button {...props} disabled={props.disabled || busy}>
+    <button
+      {...props}
+      disabled={props.disabled || busy}
+      aria-busy={busy || undefined}
+    >
       {busy ? (
         <>
-          <span className="spinner" /> Working…
+          <span className="spinner" aria-hidden="true" /> {children}
         </>
       ) : (
         children
@@ -470,15 +497,26 @@ function App() {
         ) : bootError ? (
           <div className="error-shell">
             <h1>The workshop is offline.</h1>
-            <p>{bootError}</p>
+            <p role="alert">{bootError}</p>
             <Button onClick={bootApp}>Try again</Button>
           </div>
         ) : isOwner ? (
           <OwnerApp session={session} setSession={setSession} health={health} />
         ) : (
           <RequesterApp
+            key={
+              session
+                ? `${session.role}:${session.id}`
+                : "requester-session-ended"
+            }
             session={session}
-            setSession={setSession}
+            setSession={(next) =>
+              setSession((active) =>
+                active?.id === session?.id && active?.role === session?.role
+                  ? next
+                  : active,
+              )
+            }
             health={health}
           />
         )}
@@ -501,7 +539,7 @@ function RequesterApp({
   health,
 }: {
   session: Session | null;
-  setSession: (s: Session) => void;
+  setSession: (s: Session | null) => void;
   health: Health | null;
 }) {
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -536,13 +574,25 @@ function RequesterApp({
   );
   const [refreshing, setRefreshing] = useState(true);
   const [connected, setConnected] = useState(true);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const productionHeading = useRef<HTMLHeadingElement>(null);
+  const focusProduction = () => {
+    requestAnimationFrame(() => productionHeading.current?.focus());
+  };
   const refresh = useCallback(async () => {
-    if (session?.role !== "requester") return;
+    if (!mounted.current || session?.role !== "requester") return;
     try {
       const [m, j] = await Promise.all([
         api<{ machines: Machine[] }>("/machines"),
         api<{ jobs: Job[] }>("/jobs"),
       ]);
+      if (!mounted.current) return;
       setMachines(m.machines);
       setJobs(j.jobs);
       setConnected(true);
@@ -553,10 +603,21 @@ function RequesterApp({
             old?.id === found.id && old.version > found.version ? old : found,
           );
       }
-    } catch {
+    } catch (error) {
+      if (!mounted.current) return;
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        selectedId.current = null;
+        localStorage.removeItem("fabrary-current-job");
+        setCurrent(null);
+        setJobs([]);
+        setSession(null);
+        setError(
+          "Your requester session expired. Open a requester session to continue.",
+        );
+      }
       setConnected(false);
     } finally {
-      setRefreshing(false);
+      if (mounted.current) setRefreshing(false);
     }
   }, [session?.role]);
   useEffect(() => {
@@ -583,6 +644,7 @@ function RequesterApp({
       .catch(() => {});
   }, []);
   const select = (job: Job) => {
+    if (!mounted.current) return;
     selectedId.current = job.id;
     localStorage.setItem("fabrary-current-job", job.id);
     setCurrent(job);
@@ -594,7 +656,7 @@ function RequesterApp({
     setError("");
     try {
       await fn();
-      await refresh();
+      if (mounted.current) await refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -769,6 +831,7 @@ function RequesterApp({
       );
       select(result.job);
       setEditing(false);
+      focusProduction();
     });
   };
   const newOrder = () => {
@@ -792,6 +855,7 @@ function RequesterApp({
     setBudgetEnabled(false);
     setEditing(false);
     setError("");
+    focusProduction();
   };
   const edit = () => {
     if (!current) return;
@@ -800,6 +864,7 @@ function RequesterApp({
     setBudget(String((current.spec.budgetMandate?.capCents || 300) / 100));
     setEditing(true);
     setError("");
+    focusProduction();
   };
   const readyCount = machines.filter(available).length;
   if (session?.role !== "requester")
@@ -807,14 +872,18 @@ function RequesterApp({
       <div className="error-shell">
         <h1>Make something here.</h1>
         <p>
-          Your current session is an owner session. Open a requester session to
-          create and view your own orders.
+          {session?.role === "owner"
+            ? "Your current session is an owner session. Open a requester session to create and view your own orders."
+            : "Your requester session ended. Open a requester session to prepare artwork and place an order."}
         </p>
         <Button
           onClick={() =>
-            act("session", async () =>
-              setSession(await api<Session>("/session", { role: "requester" })),
-            )
+            act("session", async () => {
+              const next = await api<Session>("/session", {
+                role: "requester",
+              });
+              if (mounted.current) setSession(next);
+            })
           }
           busy={busy === "session"}
         >
@@ -866,11 +935,15 @@ function RequesterApp({
           </button>
         </Notice>
       )}
-      {error && <Notice kind="error">{error}</Notice>}
+      {error && (
+        <Notice kind="error" focusOnShow>
+          {error}
+        </Notice>
+      )}
       <div className="workbench">
         <section className="intake-panel">
           <div className="panel-heading">
-            <h2>
+            <h2 ref={productionHeading} tabIndex={-1}>
               {current && !editing
                 ? "Your production file"
                 : editing
@@ -878,7 +951,11 @@ function RequesterApp({
                   : "What are we making?"}
             </h2>
             {current && (
-              <button className="text-button" onClick={newOrder}>
+              <button
+                className="text-button"
+                onClick={newOrder}
+                disabled={Boolean(busy)}
+              >
                 New order
               </button>
             )}
@@ -913,7 +990,11 @@ function RequesterApp({
                 current.productionState,
               ) &&
                 current.paymentState === "unpaid" && (
-                  <button className="secondary" onClick={edit}>
+                  <button
+                    className="secondary"
+                    onClick={edit}
+                    disabled={Boolean(busy)}
+                  >
                     Edit artwork or specifications
                   </button>
                 )}
@@ -924,358 +1005,362 @@ function RequesterApp({
               </small>
             </>
           ) : (
-            <form onSubmit={submit}>
-              <fieldset className="output-picker">
-                <legend className="sr-only">Choose an output</legend>
-                {(["sticker", "instax", "3d"] as Output[]).map((type) => (
-                  <label
-                    className={`output-choice ${spec.outputType === type ? "selected" : ""}`}
-                    key={type}
-                  >
-                    <input
-                      type="radio"
-                      name="output"
-                      value={type}
-                      checked={spec.outputType === type}
-                      onChange={() => changeOutput(type)}
-                    />
-                    <DeviceArt type={type} />
-                    <strong>{outputLabels[type]}</strong>
-                    <span>
-                      {type === "sticker"
-                        ? "Phomemo M02Pro"
-                        : type === "instax"
-                          ? "Instax Mini Link 3"
-                          : "Bambu A1 mini"}
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-              {spec.outputType === "3d" ? (
-                <div className="prepared-model">
-                  <Notice>
-                    Prepared decorative files only. Photo-to-3D and functional
-                    parts are not supported. This hardware path is unverified.
-                  </Notice>
-                  {spec.preparedModelId && (
-                    <PreparedModelFacts details={spec} />
-                  )}
-                  {catalog.length ? (
-                    <Field label="Owner-prepared model">
-                      <select
-                        required
-                        value={spec.preparedModelId || ""}
+            <form onSubmit={submit} aria-busy={Boolean(busy)}>
+              <fieldset disabled={Boolean(busy)} className="intake-fields">
+                <fieldset className="output-picker">
+                  <legend className="sr-only">Choose an output</legend>
+                  {(["sticker", "instax", "3d"] as Output[]).map((type) => (
+                    <label
+                      className={`output-choice ${spec.outputType === type ? "selected" : ""}`}
+                      key={type}
+                    >
+                      <input
+                        type="radio"
+                        name="output"
+                        value={type}
+                        checked={spec.outputType === type}
+                        onChange={() => changeOutput(type)}
+                      />
+                      <DeviceArt type={type} />
+                      <strong>{outputLabels[type]}</strong>
+                      <span>
+                        {type === "sticker"
+                          ? "Phomemo M02Pro"
+                          : type === "instax"
+                            ? "Instax Mini Link 3"
+                            : "Bambu A1 mini"}
+                      </span>
+                    </label>
+                  ))}
+                </fieldset>
+                {spec.outputType === "3d" ? (
+                  <div className="prepared-model">
+                    <Notice>
+                      Prepared decorative files only. Photo-to-3D and functional
+                      parts are not supported. This hardware path is unverified.
+                    </Notice>
+                    {spec.preparedModelId && (
+                      <PreparedModelFacts details={spec} />
+                    )}
+                    {catalog.length ? (
+                      <Field label="Owner-prepared model">
+                        <select
+                          required
+                          value={spec.preparedModelId || ""}
+                          onChange={(e) => {
+                            const item = catalog.find(
+                              (x) => x.id === e.target.value,
+                            );
+                            setSpec((s) => ({
+                              ...s,
+                              preparedModelId: item?.id,
+                              assetIds: item ? [item.artifactId] : [],
+                              widthMm: item?.widthMm || 0,
+                              heightMm: item?.heightMm || 0,
+                              depthMm: item?.depthMm,
+                              color: item?.color,
+                              estimatedSeconds: item?.estimatedSeconds,
+                              material: item?.material || "pla",
+                            }));
+                          }}
+                        >
+                          <option value="">Choose a prepared model</option>
+                          {catalog.map((item) => (
+                            <option value={item.id} key={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    ) : (
+                      <p>
+                        No prepared models are configured. Ask the owner to add
+                        a tested model before ordering a 3D print.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <label
+                      className={`upload-zone ${busy === "upload" ? "uploading" : ""}`}
+                    >
+                      <input
+                        aria-label="Upload artwork"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
                         onChange={(e) => {
-                          const item = catalog.find(
-                            (x) => x.id === e.target.value,
-                          );
-                          setSpec((s) => ({
-                            ...s,
-                            preparedModelId: item?.id,
-                            assetIds: item ? [item.artifactId] : [],
-                            widthMm: item?.widthMm || 0,
-                            heightMm: item?.heightMm || 0,
-                            depthMm: item?.depthMm,
-                            color: item?.color,
-                            estimatedSeconds: item?.estimatedSeconds,
-                            material: item?.material || "pla",
-                          }));
+                          void upload(e.target.files);
+                          e.target.value = "";
+                        }}
+                        disabled={Boolean(busy)}
+                      />
+                      <span className="upload-symbol">＋</span>
+                      <strong>
+                        {busy === "upload"
+                          ? "Uploading artwork…"
+                          : assets.length
+                            ? "Replace artwork"
+                            : "Add your artwork"}
+                      </strong>
+                      <span>PNG, JPEG or WebP · up to 4 images</span>
+                    </label>
+                    {(assets.length > 0 || editing) && (
+                      <div className="originals">
+                        {assets.map((a) => (
+                          <figure key={a.id}>
+                            <img src={a.url} alt="Uploaded original artwork" />
+                            <figcaption>
+                              Original · {a.width} × {a.height} px
+                            </figcaption>
+                          </figure>
+                        ))}
+                        {editing && !assets.length && (
+                          <p>
+                            The existing artwork stays selected. Upload images
+                            to replace it.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <p className="context-note">
+                      {spec.outputType === "sticker"
+                        ? "Thermal paper prints in black and white. The next step shows the exact prepared file."
+                        : "Instax uses fixed 54 × 86 mm film. Hardware compatibility and film development remain unverified."}
+                    </p>
+                  </>
+                )}
+                <Field label="What is it for?">
+                  <textarea
+                    required
+                    rows={2}
+                    maxLength={600}
+                    value={spec.intent}
+                    onChange={(e) => {
+                      setIntakeDraft(null);
+                      setSpec((s) => ({ ...s, intent: e.target.value }));
+                    }}
+                    placeholder="A club sticker for our next tabling event"
+                  />
+                </Field>
+                {spec.outputType !== "3d" && (
+                  <section
+                    className="intake-suggestion"
+                    aria-label="Specification suggestions"
+                  >
+                    <div className="suggestion-action">
+                      <Button
+                        className="secondary"
+                        type="button"
+                        busy={busy === "intake"}
+                        disabled={
+                          Boolean(busy) ||
+                          !spec.assetIds.length ||
+                          spec.intent.trim().length < 3
+                        }
+                        onClick={() => {
+                          void suggestSpecification();
                         }}
                       >
-                        <option value="">Choose a prepared model</option>
-                        {catalog.map((item) => (
-                          <option value={item.id} key={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  ) : (
-                    <p>
-                      No prepared models are configured. Ask the owner to add a
-                      tested model before ordering a 3D print.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <label
-                    className={`upload-zone ${busy === "upload" ? "uploading" : ""}`}
-                  >
-                    <input
-                      aria-label="Upload artwork"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      multiple
-                      onChange={(e) => {
-                        void upload(e.target.files);
-                        e.target.value = "";
-                      }}
-                      disabled={Boolean(busy)}
-                    />
-                    <span className="upload-symbol">＋</span>
-                    <strong>
-                      {busy === "upload"
-                        ? "Uploading artwork…"
-                        : assets.length
-                          ? "Replace artwork"
-                          : "Add your artwork"}
-                    </strong>
-                    <span>PNG, JPEG or WebP · up to 4 images</span>
-                  </label>
-                  {(assets.length > 0 || editing) && (
-                    <div className="originals">
-                      {assets.map((a) => (
-                        <figure key={a.id}>
-                          <img src={a.url} alt="Uploaded original artwork" />
-                          <figcaption>
-                            Original · {a.width} × {a.height} px
-                          </figcaption>
-                        </figure>
-                      ))}
-                      {editing && !assets.length && (
-                        <p>
-                          The existing artwork stays selected. Upload images to
-                          replace it.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <p className="context-note">
-                    {spec.outputType === "sticker"
-                      ? "Thermal paper prints in black and white. The next step shows the exact prepared file."
-                      : "Instax uses fixed 54 × 86 mm film. Hardware compatibility and film development remain unverified."}
-                  </p>
-                </>
-              )}
-              <Field label="What is it for?">
-                <textarea
-                  required
-                  rows={2}
-                  maxLength={600}
-                  value={spec.intent}
-                  onChange={(e) => {
-                    setIntakeDraft(null);
-                    setSpec((s) => ({ ...s, intent: e.target.value }));
-                  }}
-                  placeholder="A club sticker for our next tabling event"
-                />
-              </Field>
-              {spec.outputType !== "3d" && (
-                <section
-                  className="intake-suggestion"
-                  aria-label="Specification suggestions"
-                >
-                  <div className="suggestion-action">
-                    <Button
-                      className="secondary"
-                      type="button"
-                      busy={busy === "intake"}
-                      disabled={
-                        Boolean(busy) ||
-                        !spec.assetIds.length ||
-                        spec.intent.trim().length < 3
-                      }
-                      onClick={() => {
-                        void suggestSpecification();
-                      }}
-                    >
-                      Suggest specification
-                    </Button>
-                    <small>
-                      Upload artwork and describe it first. You can also enter
-                      every field manually.
-                    </small>
-                  </div>
-                  {intakeError && <Notice>{intakeError}</Notice>}
-                  {intakeDraft && (
-                    <div className="suggested-draft">
-                      <h3>Suggested specification</h3>
-                      <p>{intakeDraft.reason}</p>
-                      {intakeDraft.questions.length > 0 && (
-                        <>
-                          <h4>Clarify these together</h4>
-                          <ul>
-                            {intakeDraft.questions.map((question, index) => (
-                              <li key={index}>{question}</li>
-                            ))}
-                          </ul>
-                        </>
-                      )}
+                        Suggest specification
+                      </Button>
                       <small>
-                        Review the suggested values below. Suggestions do not
-                        authorize artwork or approve a production file; machine
-                        validation still applies.
+                        Upload artwork and describe it first. You can also enter
+                        every field manually.
                       </small>
                     </div>
-                  )}
-                </section>
-              )}
-              <div className="form-grid">
-                <Field label="Width (mm)">
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    max="300"
-                    disabled={spec.outputType !== "sticker"}
-                    value={spec.widthMm}
-                    onChange={(e) =>
-                      setSpec((s) => ({
-                        ...s,
-                        widthMm: Number(e.target.value),
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Height (mm)">
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    max="300"
-                    disabled={spec.outputType !== "sticker"}
-                    value={spec.heightMm}
-                    onChange={(e) =>
-                      setSpec((s) => ({
-                        ...s,
-                        heightMm: Number(e.target.value),
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Quantity">
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    max={
-                      spec.outputType === "instax"
-                        ? 3
-                        : spec.outputType === "3d"
-                          ? 1
-                          : 10
-                    }
-                    step="1"
-                    value={spec.quantity}
-                    onChange={(e) =>
-                      setSpec((s) => ({
-                        ...s,
-                        quantity: Number(e.target.value),
-                      }))
-                    }
-                  />
-                </Field>
-                <Field label="Image placement">
-                  <select
-                    value={spec.crop}
-                    onChange={(e) =>
-                      setSpec((s) => ({
-                        ...s,
-                        crop: e.target.value as Spec["crop"],
-                      }))
-                    }
-                    disabled={spec.outputType === "3d"}
-                  >
-                    <option value="contain">Fit whole image</option>
-                    <option value="cover">Fill and crop edges</option>
-                  </select>
-                </Field>
-              </div>
-              <Field label="Material">
-                <select
-                  value={spec.material}
-                  onChange={(e) =>
-                    setSpec((s) => ({ ...s, material: e.target.value }))
-                  }
-                >
-                  <option
-                    value={
-                      spec.outputType === "sticker"
-                        ? "thermal-paper"
-                        : spec.outputType === "instax"
-                          ? "photo-film"
-                          : "pla"
-                    }
-                  >
-                    {spec.outputType === "sticker"
-                      ? "Thermal adhesive paper"
-                      : spec.outputType === "instax"
-                        ? "Instax mini photo film"
-                        : "PLA · prepared decorative print"}
-                  </option>
-                </select>
-              </Field>
-              <Field label="Artwork permission">
-                <select
-                  value={spec.permission}
-                  onChange={(e) =>
-                    setSpec((s) => ({
-                      ...s,
-                      permission: e.target.value as Spec["permission"],
-                    }))
-                  }
-                >
-                  <option value="authorized">
-                    I own this artwork or have permission to print it
-                  </option>
-                  <option value="unclear">
-                    I need the owner to review permission
-                  </option>
-                </select>
-              </Field>
-              <div className="budget-option">
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={budgetEnabled}
-                    onChange={(e) => setBudgetEnabled(e.target.checked)}
-                  />
-                  <span>Automatically accept a quote within my budget</span>
-                </label>
-                {budgetEnabled && (
-                  <Field
-                    label="Budget cap (USD)"
-                    hint="Applies only after you approve this specification. Payment still requires checkout."
-                  >
+                    {intakeError && <Notice>{intakeError}</Notice>}
+                    {intakeDraft && (
+                      <div className="suggested-draft">
+                        <h3>Suggested specification</h3>
+                        <p>{intakeDraft.reason}</p>
+                        {intakeDraft.questions.length > 0 && (
+                          <>
+                            <h4>Clarify these together</h4>
+                            <ul>
+                              {intakeDraft.questions.map((question, index) => (
+                                <li key={index}>{question}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        <small>
+                          Review the suggested values below. Suggestions do not
+                          authorize artwork or approve a production file;
+                          machine validation still applies.
+                        </small>
+                      </div>
+                    )}
+                  </section>
+                )}
+                <div className="form-grid">
+                  <Field label="Width (mm)">
                     <input
                       type="number"
-                      min="0.01"
-                      step="0.01"
                       required
-                      value={budget}
-                      onChange={(e) => setBudget(e.target.value)}
+                      min="1"
+                      max="300"
+                      disabled={spec.outputType !== "sticker"}
+                      value={spec.widthMm}
+                      onChange={(e) =>
+                        setSpec((s) => ({
+                          ...s,
+                          widthMm: Number(e.target.value),
+                        }))
+                      }
                     />
                   </Field>
-                )}
-              </div>
-              <Button
-                className="primary full"
-                type="submit"
-                busy={busy === "create"}
-                disabled={
-                  Boolean(busy) || (spec.outputType === "3d" && !catalog.length)
-                }
-              >
-                {editing
-                  ? "Save changes & rebuild preview"
-                  : "Make production preview"}
-              </Button>
-              {editing && (
-                <button
-                  className="text-button cancel-edit"
-                  type="button"
-                  onClick={() => setEditing(false)}
+                  <Field label="Height (mm)">
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      max="300"
+                      disabled={spec.outputType !== "sticker"}
+                      value={spec.heightMm}
+                      onChange={(e) =>
+                        setSpec((s) => ({
+                          ...s,
+                          heightMm: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Quantity">
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      max={
+                        spec.outputType === "instax"
+                          ? 3
+                          : spec.outputType === "3d"
+                            ? 1
+                            : 10
+                      }
+                      step="1"
+                      value={spec.quantity}
+                      onChange={(e) =>
+                        setSpec((s) => ({
+                          ...s,
+                          quantity: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </Field>
+                  <Field label="Image placement">
+                    <select
+                      value={spec.crop}
+                      onChange={(e) =>
+                        setSpec((s) => ({
+                          ...s,
+                          crop: e.target.value as Spec["crop"],
+                        }))
+                      }
+                      disabled={spec.outputType === "3d"}
+                    >
+                      <option value="contain">Fit whole image</option>
+                      <option value="cover">Fill and crop edges</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label="Material">
+                  <select
+                    value={spec.material}
+                    onChange={(e) =>
+                      setSpec((s) => ({ ...s, material: e.target.value }))
+                    }
+                  >
+                    <option
+                      value={
+                        spec.outputType === "sticker"
+                          ? "thermal-paper"
+                          : spec.outputType === "instax"
+                            ? "photo-film"
+                            : "pla"
+                      }
+                    >
+                      {spec.outputType === "sticker"
+                        ? "Thermal adhesive paper"
+                        : spec.outputType === "instax"
+                          ? "Instax mini photo film"
+                          : "PLA · prepared decorative print"}
+                    </option>
+                  </select>
+                </Field>
+                <Field label="Artwork permission">
+                  <select
+                    value={spec.permission}
+                    onChange={(e) =>
+                      setSpec((s) => ({
+                        ...s,
+                        permission: e.target.value as Spec["permission"],
+                      }))
+                    }
+                  >
+                    <option value="authorized">
+                      I own this artwork or have permission to print it
+                    </option>
+                    <option value="unclear">
+                      I need the owner to review permission
+                    </option>
+                  </select>
+                </Field>
+                <div className="budget-option">
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      checked={budgetEnabled}
+                      onChange={(e) => setBudgetEnabled(e.target.checked)}
+                    />
+                    <span>Automatically accept a quote within my budget</span>
+                  </label>
+                  {budgetEnabled && (
+                    <Field
+                      label="Budget cap (USD)"
+                      hint="Applies only after you approve this specification. Payment still requires checkout."
+                    >
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        value={budget}
+                        onChange={(e) => setBudget(e.target.value)}
+                      />
+                    </Field>
+                  )}
+                </div>
+                <Button
+                  className="primary full"
+                  type="submit"
+                  busy={busy === "create"}
+                  disabled={
+                    Boolean(busy) ||
+                    (spec.outputType === "3d" && !catalog.length)
+                  }
                 >
-                  Keep existing specification
-                </button>
-              )}
+                  {editing
+                    ? "Save changes & rebuild preview"
+                    : "Make production preview"}
+                </Button>
+                {editing && (
+                  <button
+                    className="text-button cancel-edit"
+                    type="button"
+                    onClick={() => setEditing(false)}
+                  >
+                    Keep existing specification
+                  </button>
+                )}
+              </fieldset>
             </form>
           )}
         </section>
         <aside className="order-panel" aria-label="Order details">
           {current ? (
             <OrderDetail
+              key={current.id}
               job={current}
               busy={editing ? "editing" : busy}
               action={jobAction}
@@ -1388,7 +1473,12 @@ function RequesterApp({
                 <button
                   className={`order-row ${current?.id === job.id ? "active" : ""}`}
                   key={job.id}
-                  onClick={() => select(job)}
+                  aria-pressed={current?.id === job.id}
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    select(job);
+                    focusProduction();
+                  }}
                 >
                   <span>
                     {job.artifact?.url ? (
@@ -1503,28 +1593,57 @@ function ProductionPreview({
   job: Job;
   onReady: (ready: boolean) => void;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [job.artifact?.url]);
+  const source = job.artifact?.previewUrl || job.artifact?.url;
+  const [loadedSource, setLoadedSource] = useState<string | null>(null);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const failed = Boolean(source && failedSource === source);
+  const loading = Boolean(source && loadedSource !== source && !failed);
   return (
-    <div className={`preview-surface output-${job.spec.outputType}`}>
+    <div
+      className={`preview-surface output-${job.spec.outputType}`}
+      aria-busy={loading}
+    >
       <div className="preview-ruler">{job.spec.widthMm} mm</div>
-      {job.artifact?.url && !failed ? (
+      {source && !failed ? (
         <div className="production-paper">
           <img
-            src={job.artifact.previewUrl || job.artifact.url}
+            key={`${source}-${retry}`}
+            src={source}
             alt={`Actual production preview: ${outputLabels[job.spec.outputType]}, ${job.spec.widthMm} by ${job.spec.heightMm} millimeters`}
-            onLoad={() => onReady(true)}
+            onLoad={() => {
+              setLoadedSource(source);
+              onReady(true);
+            }}
             onError={() => {
-              setFailed(true);
+              setFailedSource(source);
               onReady(false);
             }}
           />
         </div>
       ) : (
         <Notice kind="error">
-          The production preview is unavailable. Refresh the order before
-          approving.
+          The production preview is unavailable. Load it before approving.
+          {source && (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setFailedSource(null);
+                setLoadedSource(null);
+                setRetry((attempt) => attempt + 1);
+              }}
+            >
+              Retry production preview
+            </button>
+          )}
         </Notice>
+      )}
+      {loading && (
+        <p className="preview-loading" role="status">
+          <span className="spinner" aria-hidden="true" /> Loading production
+          preview…
+        </p>
       )}
       <div className="preview-caption">
         <strong>
@@ -2010,7 +2129,7 @@ function OwnerApp({
   health,
 }: {
   session: Session | null;
-  setSession: (s: Session) => void;
+  setSession: (s: Session | null) => void;
   health: Health | null;
 }) {
   const [accessCode, setAccessCode] = useState("");
@@ -2026,13 +2145,25 @@ function OwnerApp({
   const [mode, setMode] = useState("simulation");
   const [nodeUrl, setNodeUrl] = useState("");
   const [tab, setTab] = useState("queue");
+  const [orderFilter, setOrderFilter] = useState("action");
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderPage, setOrderPage] = useState(1);
+  const queueStart = useRef<HTMLDivElement>(null);
+  useEffect(() => setOrderPage(1), [orderFilter, orderSearch]);
   const [connected, setConnected] = useState(true);
   const refresh = useCallback(async () => {
     if (session?.role !== "owner") return;
     try {
       setDashboard(await api("/owner/dashboard"));
       setConnected(true);
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        setDashboard(null);
+        setSession(null);
+        setError(
+          "Your owner session expired. Enter your access code to reopen the workshop.",
+        );
+      }
       setConnected(false);
     }
   }, [session?.role]);
@@ -2130,14 +2261,56 @@ function OwnerApp({
       j.fulfillmentState === "awaiting_owner" &&
       j.productionState === "produced",
   );
-  const attention = jobs.filter((j) =>
-    ["failed", "needs_review"].includes(j.productionState),
-  );
+  const attention = jobs.filter(needsOwnerReview);
   const active = jobs.filter((j) =>
     ["payment_confirmed", "dispatched", "running", "verifying"].includes(
       j.productionState,
     ),
   );
+  const matchingJobs = [...jobs]
+    .filter((job) => {
+      if (orderFilter === "action" && !needsOwnerAction(job)) return false;
+      if (
+        orderFilter === "pickup" &&
+        job.fulfillmentState !== "ready_for_pickup"
+      )
+        return false;
+      if (
+        orderFilter === "production" &&
+        !active.some((item) => item.id === job.id)
+      )
+        return false;
+      if (
+        orderFilter === "completed" &&
+        !["collected", "cancelled"].includes(job.fulfillmentState) &&
+        job.productionState !== "cancelled"
+      )
+        return false;
+      const query = orderSearch.trim().toLowerCase();
+      return (
+        !query ||
+        [
+          job.id,
+          job.spec.intent,
+          job.machineId || "",
+          outputLabels[job.spec.outputType],
+        ].some((value) => value.toLowerCase().includes(query))
+      );
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const pageSize = 8;
+  const pageCount = Math.max(1, Math.ceil(matchingJobs.length / pageSize));
+  const currentPage = Math.min(orderPage, pageCount);
+  const pageStart = (currentPage - 1) * pageSize;
+  const visibleJobs = matchingJobs.slice(pageStart, pageStart + pageSize);
+  const moveOrderPage = (page: number) => {
+    setOrderPage(page);
+    requestAnimationFrame(() => queueStart.current?.focus());
+  };
+  const resetOrderFilters = () => {
+    setOrderFilter("all");
+    setOrderSearch("");
+  };
   return (
     <div className="owner-workshop">
       <section className="owner-intro">
@@ -2186,15 +2359,22 @@ function OwnerApp({
             aria-selected={tab === id}
             aria-controls={`owner-${id}`}
             id={`tab-${id}`}
+            tabIndex={tab === id ? 0 : -1}
             onClick={() => setTab(id)}
             onKeyDown={(e) => {
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) {
                 e.preventDefault();
                 const list = ["queue", "machines", "payments"];
                 const next =
-                  list[
-                    (list.indexOf(tab) + (e.key === "ArrowRight" ? 1 : 2)) % 3
-                  ];
+                  e.key === "Home"
+                    ? list[0]
+                    : e.key === "End"
+                      ? list[2]
+                      : list[
+                          (list.indexOf(tab) +
+                            (e.key === "ArrowRight" ? 1 : 2)) %
+                            3
+                        ];
                 setTab(next);
                 document.getElementById(`tab-${next}`)?.focus();
               }
@@ -2207,176 +2387,318 @@ function OwnerApp({
       {!dashboard ? (
         <div className="loading-shell">Loading workshop records…</div>
       ) : (
-        <div role="tabpanel" id={`owner-${tab}`} aria-labelledby={`tab-${tab}`}>
-          {tab === "queue" ? (
-            <>
-              <div className="queue-summary">
-                <h2>
-                  {active.length
-                    ? "Production in progress"
-                    : handling.length
-                      ? "Items need preparation"
-                      : "The counter is clear."}
-                </h2>
-                <p>
-                  {jobs.length
-                    ? "Orders below retain separate production, payment and collection states."
-                    : "New requester orders will appear here. Register and calibrate a device to start."}
-                </p>
-              </div>
-              {jobs.length ? (
-                <div className="owner-job-list">
-                  {[...jobs]
-                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                    .map((job) => (
-                      <OwnerJob
-                        key={job.id}
-                        job={job}
-                        ledger={dashboard.ledger}
-                        busy={busy}
-                        health={health}
-                        action={(action, body) =>
-                          act(`${job.id}-${action}`, () =>
-                            request(
-                              `/owner/jobs/${job.id}/${action}`,
-                              body || {},
-                            ),
-                          )
-                        }
-                        simulation={(outcome) =>
-                          act(`${job.id}-simulation`, () =>
-                            request(`/owner/simulation/${job.machineId}`, {
-                              outcome,
-                            }),
-                          )
-                        }
-                      />
-                    ))}
-                </div>
-              ) : (
-                <div className="empty">
-                  <h3>No orders yet.</h3>
+        <>
+          {["queue", "machines", "payments"]
+            .filter((id) => id !== tab)
+            .map((id) => (
+              <div
+                key={id}
+                id={`owner-${id}`}
+                role="tabpanel"
+                aria-labelledby={`tab-${id}`}
+                hidden
+              />
+            ))}
+          <div
+            role="tabpanel"
+            id={`owner-${tab}`}
+            aria-labelledby={`tab-${tab}`}
+          >
+            {tab === "queue" ? (
+              <>
+                <div className="queue-summary">
+                  <h2>
+                    {active.length
+                      ? "Production in progress"
+                      : handling.length
+                        ? "Items need preparation"
+                        : attention.length
+                          ? "Orders need review"
+                          : jobs.some((job) =>
+                                [
+                                  "collection_pending",
+                                  "release_pending",
+                                  "refund_pending",
+                                ].includes(job.paymentState),
+                              )
+                            ? "Payments need follow-up"
+                            : jobs.some(
+                                  (job) =>
+                                    job.fulfillmentState === "ready_for_pickup",
+                                )
+                              ? "Items await collection"
+                              : "The counter is clear."}
+                  </h2>
                   <p>
-                    Open the requester counter in another browser session to
-                    create an order.
+                    {jobs.length
+                      ? "Orders below retain separate production, payment and collection states."
+                      : "New requester orders will appear here. Register and calibrate a device to start."}
                   </p>
                 </div>
-              )}
-            </>
-          ) : tab === "machines" ? (
-            <>
-              <div className="section-heading">
-                <div>
-                  <h2>Your machines</h2>
-                  <p>
-                    Pairing, configuration, calibration, listing and readiness
-                    are distinct facts.
-                  </p>
-                </div>
-              </div>
-              <div className="owner-machine-list">
-                {machines.map((machine) => (
-                  <OwnerMachine
-                    key={machine.id}
-                    machine={machine}
-                    busy={busy}
-                    action={(action, body) =>
-                      act(`${machine.id}-${action}`, () =>
-                        request(
-                          `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
-                          body,
-                          action === "calibrate" ? undefined : "PATCH",
-                        ),
-                      )
-                    }
-                  />
-                ))}
-              </div>
-              <form
-                className="register-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void act("register", async () => {
-                    await request("/owner/machines", {
-                      model,
-                      mode,
-                      ...(nodeUrl ? { nodeUrl } : {}),
-                    });
-                    setNodeUrl("");
-                  });
-                }}
-              >
-                <div>
-                  <h2>Add a supported machine</h2>
-                  <p>
-                    Known-model adapters only. Unfamiliar-machine onboarding is
-                    planned.
-                  </p>
-                </div>
-                <div className="form-grid">
-                  <Field label="Supported model">
-                    <select
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
+                {jobs.length ? (
+                  <>
+                    <div
+                      className="queue-tools"
+                      role="search"
+                      aria-label="Find workshop orders"
+                      ref={queueStart}
+                      tabIndex={-1}
                     >
-                      <option value="phomemo-m02pro">Phomemo M02Pro</option>
-                      <option value="instax-mini-link-3">
-                        Instax Mini Link 3
-                      </option>
-                      <option value="bambu-a1-mini">Bambu Lab A1 mini</option>
-                    </select>
-                  </Field>
-                  <Field label="Device mode">
-                    <select
-                      value={mode}
-                      onChange={(e) => setMode(e.target.value)}
-                    >
-                      <option value="simulation">
-                        Simulation · no physical job
-                      </option>
-                      <option value="hardware">
-                        Hardware · requires configured node
-                      </option>
-                    </select>
-                  </Field>
-                </div>
-                {mode === "hardware" && (
-                  <Field
-                    label="Configured node URL"
-                    hint="The server must have the node credential in its local environment. Registration does not establish calibration."
-                  >
-                    <input
-                      type="url"
-                      value={nodeUrl}
-                      onChange={(e) => setNodeUrl(e.target.value)}
-                      placeholder="http://127.0.0.1:4319"
-                      required
-                    />
-                  </Field>
+                      <Field label="Find an order">
+                        <input
+                          type="search"
+                          value={orderSearch}
+                          onChange={(event) =>
+                            setOrderSearch(event.target.value)
+                          }
+                          placeholder="Order, artwork or machine"
+                        />
+                      </Field>
+                      <Field label="Show orders">
+                        <select
+                          value={orderFilter}
+                          onChange={(event) =>
+                            setOrderFilter(event.target.value)
+                          }
+                        >
+                          <option value="all">
+                            All orders ({jobs.length})
+                          </option>
+                          <option value="action">
+                            Need owner action (
+                            {jobs.filter(needsOwnerAction).length})
+                          </option>
+                          <option value="pickup">
+                            Ready for pickup (
+                            {
+                              jobs.filter(
+                                (job) =>
+                                  job.fulfillmentState === "ready_for_pickup",
+                              ).length
+                            }
+                            )
+                          </option>
+                          <option value="production">
+                            In production ({active.length})
+                          </option>
+                          <option value="completed">
+                            Collected or cancelled (
+                            {
+                              jobs.filter(
+                                (job) =>
+                                  ["collected", "cancelled"].includes(
+                                    job.fulfillmentState,
+                                  ) || job.productionState === "cancelled",
+                              ).length
+                            }
+                            )
+                          </option>
+                        </select>
+                      </Field>
+                      <p className="queue-count" role="status">
+                        {matchingJobs.length > pageSize
+                          ? `${pageStart + 1}–${pageStart + visibleJobs.length} of ${matchingJobs.length} matching`
+                          : `${matchingJobs.length} of ${jobs.length}`}{" "}
+                        {jobs.length === 1 ? "order" : "orders"} shown
+                      </p>
+                    </div>
+                    {matchingJobs.length ? (
+                      <div className="owner-job-list">
+                        {visibleJobs.map((job) => (
+                          <OwnerJob
+                            key={job.id}
+                            job={job}
+                            ledger={dashboard.ledger}
+                            busy={busy}
+                            health={health}
+                            action={(action, body) =>
+                              act(`${job.id}-${action}`, () =>
+                                request(
+                                  `/owner/jobs/${job.id}/${action}`,
+                                  body || {},
+                                ),
+                              )
+                            }
+                            simulation={(outcome) =>
+                              act(`${job.id}-simulation`, () =>
+                                request(`/owner/simulation/${job.machineId}`, {
+                                  outcome,
+                                }),
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="empty queue-empty">
+                        <h3>
+                          {orderFilter === "action" && !orderSearch.trim()
+                            ? "No orders need owner action."
+                            : "No orders match."}
+                        </h3>
+                        <p>
+                          {orderFilter === "action" && !orderSearch.trim()
+                            ? "The counter is clear. Open all orders to check production or revisit a past order."
+                            : "Try another order number, artwork description or view."}
+                        </p>
+                        <button
+                          className="secondary"
+                          onClick={resetOrderFilters}
+                        >
+                          Show all orders
+                        </button>
+                      </div>
+                    )}
+                    {pageCount > 1 && (
+                      <nav
+                        className="queue-pagination"
+                        aria-label="Order pages"
+                      >
+                        <button
+                          className="secondary"
+                          disabled={currentPage === 1}
+                          onClick={() => moveOrderPage(currentPage - 1)}
+                        >
+                          Previous orders
+                        </button>
+                        <span>
+                          Page {currentPage} of {pageCount}
+                        </span>
+                        <button
+                          className="secondary"
+                          disabled={currentPage === pageCount}
+                          onClick={() => moveOrderPage(currentPage + 1)}
+                        >
+                          Next orders
+                        </button>
+                      </nav>
+                    )}
+                  </>
+                ) : (
+                  <div className="empty">
+                    <h3>No orders yet.</h3>
+                    <p>
+                      Open the requester counter in another browser session to
+                      create an order.
+                    </p>
+                  </div>
                 )}
-                <Button
-                  className="primary"
-                  type="submit"
-                  busy={busy === "register"}
+              </>
+            ) : tab === "machines" ? (
+              <>
+                <div className="section-heading">
+                  <div>
+                    <h2>Your machines</h2>
+                    <p>
+                      Pairing, configuration, calibration, listing and readiness
+                      are distinct facts.
+                    </p>
+                  </div>
+                </div>
+                <div className="owner-machine-list">
+                  {machines.map((machine) => (
+                    <OwnerMachine
+                      key={machine.id}
+                      machine={machine}
+                      busy={busy}
+                      action={(action, body) =>
+                        act(`${machine.id}-${action}`, () =>
+                          request(
+                            `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
+                            body,
+                            action === "calibrate" ? undefined : "PATCH",
+                          ),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+                <form
+                  className="register-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void act("register", async () => {
+                      await request("/owner/machines", {
+                        model,
+                        mode,
+                        ...(nodeUrl ? { nodeUrl } : {}),
+                      });
+                      setNodeUrl("");
+                    });
+                  }}
                 >
-                  Register supported device
-                </Button>
-              </form>
-            </>
-          ) : (
-            <section className="payment-records">
-              <h2>Platform-managed test hold</h2>
-              <p>
-                Quote allocation, submitted transfers and confirmed outcomes
-                remain separate.{" "}
-                {health?.paymentMode === "mock"
-                  ? "These are mock records; no funds moved."
-                  : "These records use Base Sepolia test funds."}
-              </p>
-              <LedgerList ledger={dashboard.ledger} />
-            </section>
-          )}
-        </div>
+                  <div>
+                    <h2>Add a supported machine</h2>
+                    <p>
+                      Known-model adapters only. Unfamiliar-machine onboarding
+                      is planned.
+                    </p>
+                  </div>
+                  <div className="form-grid">
+                    <Field label="Supported model">
+                      <select
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                      >
+                        <option value="phomemo-m02pro">Phomemo M02Pro</option>
+                        <option value="instax-mini-link-3">
+                          Instax Mini Link 3
+                        </option>
+                        <option value="bambu-a1-mini">Bambu Lab A1 mini</option>
+                      </select>
+                    </Field>
+                    <Field label="Device mode">
+                      <select
+                        value={mode}
+                        onChange={(e) => setMode(e.target.value)}
+                      >
+                        <option value="simulation">
+                          Simulation · no physical job
+                        </option>
+                        <option value="hardware">
+                          Hardware · requires configured node
+                        </option>
+                      </select>
+                    </Field>
+                  </div>
+                  {mode === "hardware" && (
+                    <Field
+                      label="Configured node URL"
+                      hint="The server must have the node credential in its local environment. Registration does not establish calibration."
+                    >
+                      <input
+                        type="url"
+                        value={nodeUrl}
+                        onChange={(e) => setNodeUrl(e.target.value)}
+                        placeholder="http://127.0.0.1:4319"
+                        required
+                      />
+                    </Field>
+                  )}
+                  <Button
+                    className="primary"
+                    type="submit"
+                    busy={busy === "register"}
+                  >
+                    Register supported device
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <section className="payment-records">
+                <h2>Platform-managed test hold</h2>
+                <p>
+                  Quote allocation, submitted transfers and confirmed outcomes
+                  remain separate.{" "}
+                  {health?.paymentMode === "mock"
+                    ? "These are mock records; no funds moved."
+                    : "These records use Base Sepolia test funds."}
+                </p>
+                <LedgerList ledger={dashboard.ledger} />
+              </section>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -3372,14 +3694,14 @@ function OwnerJob({
         jobId={j.id}
         paymentState={j.paymentState}
         records={ledger}
-        busy={busy === `${j.id}-payment-reference`}
+        busy={Boolean(busy)}
         onSubmit={(values) => action("payment-reference", values)}
       />
       {j.quote && ["produced", "failed"].includes(j.productionState) && (
         <TrialEconomicsForm
           economics={j.economics}
           simulation={health?.mode !== "hardware"}
-          busy={busy === `${j.id}-economics`}
+          busy={Boolean(busy)}
           onSubmit={(values) => action("economics", values)}
         />
       )}

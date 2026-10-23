@@ -48,6 +48,7 @@ class NodeService:
         self.artifact_transport = artifact_transport
         self.journal = Journal(self.data_dir / "journal.sqlite")
         self.machines, self.adapters, self.tasks = {}, {}, {}
+        self.stop_tasks: dict[str, tuple[str, asyncio.Task]] = {}
         for given in (machines if machines is not None else DEFAULT_MACHINES):
             config = dict(given)
             if config.get("mode", "simulation") not in {"simulation", "hardware"}:
@@ -60,13 +61,40 @@ class NodeService:
             config.setdefault("material", model["material"])
             self.machines[config["id"]] = config
             self.adapters[config["id"]] = adapter_for(config)
+            # Calibration belongs to an exact device, transport, and camera,
+            # never just its human-readable machine ID. Hash private config so
+            # camera URLs or other local connection details stay out of state.
+            calibration_fields = ("mode", "model", "outputType", "material", "bluetoothAddress", "rfcommChannel",
+                "serviceUUID", "writeCharUUID", "notifyCharUUID", "flipVertical", "compatibilityValidated",
+                "host", "serial", "cameraCommand", "cameraUrl")
+            calibration_config = {key: config.get(key) for key in calibration_fields}
+            calibration_config["adapterVersion"] = self.adapters[config["id"]].version
+            configuration_binding = hashlib.sha256(canonical(calibration_config).encode()).hexdigest()
             existing_state = self.journal.machine(config["id"])
             if existing_state and isinstance(existing_state.get("hours", {}).get("start"), str):
                 existing_state["hours"] = {k: min(24, int(v.split(":")[0]) + (1 if k == "end" and v.endswith(":59") else 0)) for k,v in existing_state["hours"].items()}
                 self.journal.save_machine(config["id"], existing_state)
-            if not existing_state:
+            if existing_state:
+                prior_binding = existing_state.get("configurationBinding")
+                # Legacy hardware journals cannot prove which physical setup
+                # was inspected. Existing simulation fixtures can migrate safely.
+                changed = prior_binding != configuration_binding and (prior_binding is not None or config["mode"] == "hardware")
+                if changed:
+                    simulation = config["mode"] == "simulation"
+                    existing_state.update(paired=simulation or bool(config.get("paired")), configured=simulation,
+                        calibrated=simulation, listed=simulation, ready=simulation, paused=not simulation,
+                        mediaRemaining=100 if simulation else 0, material=config["material"],
+                        reason="Simulation fixture calibrated; no physical device" if simulation else "Device or capture configuration changed; physical calibration and explicit owner resume are required")
+                # Pairing is a current owner confirmation, not a one-time
+                # calibration result. Reflect both confirmation and revocation
+                # without requiring a new journal for the same physical device.
+                existing_state["paired"] = config["mode"] == "simulation" or bool(config.get("paired"))
+                existing_state["configurationBinding"] = configuration_binding
+                self.journal.save_machine(config["id"], existing_state)
+            else:
                 simulation = config["mode"] == "simulation"
                 self.journal.save_machine(config["id"], {
+                    "configurationBinding": configuration_binding,
                     "paired": simulation or bool(config.get("paired")), "configured": simulation,
                     "calibrated": simulation, "listed": simulation, "ready": simulation,
                     "paused": not simulation, "mediaRemaining": 100 if simulation else 0,
@@ -92,6 +120,29 @@ class NodeService:
             raise NodeError("unknown_machine", "Machine is not configured on this node", 404)
         return self.machines[machine_id]
 
+    def stop_pending(self, machine_id: str) -> bool:
+        stop = self.stop_tasks.get(machine_id)
+        return bool(stop and not stop[1].done())
+
+    def require_stop_settled(self, machine_id: str) -> None:
+        if self.stop_pending(machine_id):
+            raise NodeError("stop_pending", "The device stop operation is still pending; wait for its transport to finish before releasing or reusing the machine", 409)
+
+    async def request_device_stop(self, machine_id: str, attempt_id: str) -> dict:
+        # Device I/O survives an individual HTTP/worker caller cancellation.
+        # Duplicate requests for the same attempt share the original transport.
+        stop = self.stop_tasks.get(machine_id)
+        if not stop or stop[0] != attempt_id:
+            self.require_stop_settled(machine_id)
+            async def request_stop():
+                try:
+                    return await self.adapters[machine_id].abort()
+                except Exception:
+                    return {"status": "unknown", "reason": "Stop transport failed; physical stoppage is unconfirmed"}
+            stop = (attempt_id, asyncio.create_task(request_stop()))
+            self.stop_tasks[machine_id] = stop
+        return await asyncio.shield(stop[1])
+
     def get_capabilities(self, machine_id: str) -> dict:
         config = self.machine(machine_id)
         state, adapter = self.journal.machine(machine_id), self.adapters[machine_id]
@@ -103,11 +154,12 @@ class NodeService:
             "camera": "simulation" if config["mode"] == "simulation" else "configured" if config.get("cameraCommand") or config.get("cameraUrl") else "unconfigured",
             "abort_support": "confirmed" if config["mode"] == "simulation" else "requested" if isinstance(adapter, Bambu) else "unsupported",
             "paired": state["paired"], "configured": not blockers, "calibrated": state["calibrated"],
-            "listed": state["listed"], "ready": bool(state["ready"] and not state["paused"] and not blockers and not self.journal.active(machine_id)),
+            "listed": state["listed"], "ready": bool(state["ready"] and not state["paused"] and not blockers and not self.journal.active(machine_id) and not self.stop_pending(machine_id)),
+            "stop_pending": self.stop_pending(machine_id),
             "paused": state["paused"], "media_remaining": state["mediaRemaining"], "max_quantity": state["maxQuantity"],
             "max_job_seconds": state["maxJobSeconds"], "hours": {**state["hours"], "timezone": "UTC"},
             "handling": ["remove", "label", "store", "clear", "explicitly resume"],
-            "blockers": blockers, "reason": "; ".join(blockers) if blockers else state.get("reason"),
+            "blockers": blockers, "reason": "; ".join(blockers) if blockers else "Device stop operation is still pending; wait before reusing this machine" if self.stop_pending(machine_id) else state.get("reason"),
             "catalog": [{k: e[k] for k in ("id", "sha256", "widthMm", "heightMm", "depthMm", "color", "material", "estimatedSeconds") if k in e} for e in config.get("catalog", []) if e.get("reviewed") is True]}
 
     def get_status(self, machine_id: str, job_id: str | None = None, attempt_id: str | None = None) -> dict:
@@ -121,12 +173,13 @@ class NodeService:
         manifest = self.get_capabilities(machine_id)
         return {"machine_id": machine_id, "mode": config["mode"], "ready": manifest["ready"],
             "paused": state["paused"], "configured": manifest["configured"], "calibrated": state["calibrated"],
+            "stop_pending": manifest["stop_pending"],
             "media_remaining": state["mediaRemaining"], "execution_status": attempt["status"] if attempt else "idle",
             "job_id": attempt["job_id"] if attempt else None, "attempt_id": attempt["attempt_id"] if attempt else None,
             "completion_credible": bool(attempt and attempt["completion_credible"]),
             "accepted_at": attempt["accepted_at"] if attempt else None, "started_at": attempt["started_at"] if attempt else None,
             "completed_at": attempt["completed_at"] if attempt else None,
-            "reason": attempt["reason"] if attempt and attempt["reason"] else manifest["reason"], "blockers": manifest["blockers"]}
+            "reason": manifest["reason"] if manifest["stop_pending"] else attempt["reason"] if attempt and attempt["reason"] else manifest["reason"], "blockers": manifest["blockers"]}
 
     def validate_parameters(self, machine_id: str, parameters: dict) -> None:
         config, state = self.machine(machine_id), self.journal.machine(machine_id)
@@ -137,7 +190,7 @@ class NodeService:
             raise NodeError("parameters", "Parameters must contain exactly the approved base fields, plus depthMm, color and estimatedSeconds for 3D only", 422)
         if parameters["outputType"] != config["outputType"] or parameters["material"] != state["material"]:
             raise NodeError("unsupported_material", "Output type or material is not loaded on this machine", 422)
-        if parameters["crop"] not in {"contain", "cover"}:
+        if not isinstance(parameters["crop"], str) or parameters["crop"] not in {"contain", "cover"}:
             raise NodeError("unsupported_crop", "Crop must be contain or cover", 422)
         for key in ("widthMm", "heightMm"):
             value = parameters[key]
@@ -163,6 +216,22 @@ class NodeService:
                 raise NodeError("catalog_color", "Prepared 3D color must be a nonempty single-color specification", 422)
             if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not math.isfinite(duration) or not 0 < duration <= state["maxJobSeconds"]:
                 raise NodeError("catalog_duration", "Prepared 3D duration must be positive and within the owner time limit", 422)
+
+    def validate_acceptance_policy(self, machine_id: str, parameters: dict, scope: str) -> dict:
+        self.require_stop_settled(machine_id)
+        self.validate_parameters(machine_id, parameters)
+        manifest, state = self.get_capabilities(machine_id), self.journal.machine(machine_id)
+        if scope == "calibration":
+            if manifest["blockers"] or self.journal.active(machine_id):
+                raise NodeError("calibration_blocked", manifest.get("reason") or "Device has an active attempt", 409)
+        elif not manifest["ready"] or not state["listed"] or not state["calibrated"]:
+            raise NodeError("machine_not_ready", manifest.get("reason") or "Machine is unavailable under owner policy", 409)
+        utc = datetime.now(timezone.utc)
+        current = utc.hour + utc.minute / 60 + utc.second / 3600
+        start, end = state["hours"]["start"], state["hours"]["end"]
+        if not (start <= current < end if start < end else current >= start or current < end):
+            raise NodeError("owner_hours", "Machine is outside owner operating hours (UTC)", 409)
+        return state
 
     async def fetch_artifact(self, url: str, digest: str, config: dict, parameters: dict) -> Path:
         validate_artifact_url(url, self.asset_origin)
@@ -209,27 +278,23 @@ class NodeService:
             if existing["binding"] != binding or existing["scope"] != _scope:
                 raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
             return self.acceptance(existing, False)
-        self.validate_parameters(machine_id, parameters)
-        manifest, state = self.get_capabilities(machine_id), self.journal.machine(machine_id)
-        if _scope == "calibration":
-            if manifest["blockers"] or self.journal.active(machine_id):
-                raise NodeError("calibration_blocked", manifest.get("reason") or "Device has an active attempt", 409)
-        elif not manifest["ready"] or not state["listed"] or not state["calibrated"]:
-            raise NodeError("machine_not_ready", manifest.get("reason") or "Machine is unavailable under owner policy", 409)
-        utc = datetime.now(timezone.utc)
-        current = utc.hour + utc.minute / 60 + utc.second / 3600
-        start, end = state["hours"]["start"], state["hours"]["end"]
-        if not (start <= current < end if start < end else current >= start or current < end):
-            raise NodeError("owner_hours", "Machine is outside owner operating hours (UTC)", 409)
+        self.validate_acceptance_policy(machine_id, parameters, _scope)
         if config["outputType"] == "3d" and config["mode"] == "hardware":
             self.adapters[machine_id].catalog_entry(artifact_sha256, parameters)
         path = await self.fetch_artifact(artifact_url, artifact_sha256, config, parameters)
         verify_token(token, self.token_secret, scope=_scope, expected=request)
-        # Re-read readiness after the network await; mutation and acceptance are
-        # synchronous under one event-loop turn, with a DB uniqueness backstop.
-        if _scope != "calibration" and not self.get_capabilities(machine_id)["ready"]:
-            raise NodeError("machine_not_ready", "Machine became unavailable while retrieving the artifact", 409)
-        row, created = self.journal.accept(request, state.get("simulationOutcome", "pass"), _scope)
+        # Another identical request may have finished downloading first. Replay
+        # its durable acceptance before checking the now-busy machine policy.
+        existing = self.journal.get(attempt_id)
+        if existing:
+            binding = canonical({k: request[k] for k in ("machine_id", "job_id", "attempt_id", "artifact_sha256", "parameters")})
+            if existing["binding"] != binding or existing["scope"] != _scope:
+                raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
+            return self.acceptance(existing, False)
+        # Re-read every policy after the network await. Acceptance and saving
+        # this fresh state are synchronous in one event-loop turn.
+        state = self.validate_acceptance_policy(machine_id, parameters, _scope)
+        row, created = self.journal.accept(request, state.get("simulationOutcome", "pass"), _scope, state["configurationBinding"])
         if created:
             state["simulationOutcome"] = "pass"
             if _scope == "calibration":
@@ -249,6 +314,8 @@ class NodeService:
         machine_id, attempt_id = row["machine_id"], row["attempt_id"]
         # FULL-sync commit MUST complete before anything can reach hardware.
         self.journal.update(attempt_id, "running", artifact_path=str(path))
+        if self.journal.get(attempt_id)["status"] != "running":
+            return
         try:
             timeout = self.journal.machine(machine_id)["maxJobSeconds"] + 30
             status, credible, reason = await asyncio.wait_for(self.adapters[machine_id].run(path, parameters, attempt_id), timeout)
@@ -262,14 +329,14 @@ class NodeService:
             # Process shutdown retains running; the next startup marks uncertain.
             raise
         except Exception as exc:
-            stop = await self.adapters[machine_id].abort()
+            stop = await self.request_device_stop(machine_id, attempt_id)
             self.journal.update(attempt_id, "uncertain", reason="Execution error after possible start (" + type(exc).__name__ + "); " + stop["reason"])
 
     async def camera_snapshot(self, *, token: str, machine_id: str, job_id: str,
                               attempt_id: str, phase: str = "result") -> dict:
         verify_token(token, self.token_secret, scope="camera", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
         config = self.machine(machine_id)
-        if phase not in {"baseline", "result"}:
+        if not isinstance(phase, str) or phase not in {"baseline", "result"}:
             raise NodeError("camera_phase", "Camera phase must be baseline or result", 422)
         row = self.journal.get(attempt_id)
         if row and (row["machine_id"] != machine_id or row["job_id"] != job_id):
@@ -323,15 +390,33 @@ class NodeService:
         row = self.journal.get(attempt_id)
         if not row or row["machine_id"] != machine_id or row["job_id"] != job_id:
             raise NodeError("attempt_binding", "Abort context is not associated with this attempt", 403)
-        if row["status"] == "completed":
-            return {"status": "unknown", "reason": "Recorded execution is already completed; no stop was issued"}
+        if row["status"] in {"completed", "failed"}:
+            return {"status": "unknown", "reason": "Recorded execution is already terminal; no stop was issued"}
+        if row["status"] == "accepted":
+            # No worker has committed a possible physical start. Fence it before
+            # yielding, and never send a stop for a different device operation.
+            self.journal.update(attempt_id, "failed", reason="Execution explicitly stopped before any physical start")
+            task = self.tasks.get(attempt_id)
+            if task:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            return {"status": "stopped", "reason": "Execution stopped before any physical start"}
         if config["mode"] == "simulation":
             task = self.tasks.get(attempt_id)
             if task:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
             self.journal.update(attempt_id, "failed", reason="Simulation explicitly stopped")
-        result = await self.adapters[machine_id].abort()
+        if config["mode"] == "hardware":
+            # Reserve uncertainty before awaiting transport I/O so a late worker
+            # result cannot claim a safely stopped or completed physical item.
+            self.journal.update(attempt_id, "uncertain", reason="Owner requested stop; physical stoppage is unconfirmed")
+            # A stop command can outlive the run worker. Keep its transport
+            # fenced separately and shield it from an HTTP caller disconnect,
+            # so a late stop can never reach a newly accepted execution.
+            result = await self.request_device_stop(machine_id, attempt_id)
+        else:
+            result = await self.adapters[machine_id].abort()
         if config["mode"] == "hardware":
             self.journal.update(attempt_id, "uncertain", reason=result["reason"])
         return result
@@ -346,6 +431,8 @@ class NodeService:
             if key in changes and type(changes[key]) is not bool:
                 raise NodeError("policy", key + " must be boolean", 422)
         resuming = changes.get("paused") is False or changes.get("ready") is True
+        if resuming:
+            self.require_stop_settled(machine_id)
         if resuming and (not state["calibrated"] or not changes.get("cleared") or not changes.get("inspected") or self.journal.active(machine_id)):
             raise NodeError("inspection_required", "Resume requires calibration, explicit inspection and clearing, and no active or uncertain attempt", 409)
         for key, minimum, maximum in (("mediaRemaining", 0, 100000), ("maxQuantity", 1, 100), ("maxJobSeconds", 1, 3600)):
@@ -353,7 +440,7 @@ class NodeService:
                 raise NodeError("policy", key + " is out of bounds", 422)
         if "material" in changes and changes["material"] != self.machines[machine_id]["material"]:
             raise NodeError("policy", "This adapter does not support that material", 422)
-        if "widthsMm" in changes and (not isinstance(changes["widthsMm"], list) or not changes["widthsMm"] or any(x not in {15,25,53} for x in changes["widthsMm"])):
+        if "widthsMm" in changes and (not isinstance(changes["widthsMm"], list) or not changes["widthsMm"] or any(type(x) is not int or x not in {15,25,53} for x in changes["widthsMm"])):
             raise NodeError("policy", "Sticker widths must be a nonempty subset of 15,25,53", 422)
         if "hours" in changes:
             hours = changes["hours"]
@@ -371,6 +458,7 @@ class NodeService:
 
     def calibrate(self, machine_id: str, inspected: bool, attempt_id: str | None = None, reason: str | None = None) -> dict:
         config = self.machine(machine_id)
+        self.require_stop_settled(machine_id)
         state, adapter = self.journal.machine(machine_id), self.adapters[machine_id]
         blockers = adapter.blockers()
         if not inspected or blockers:
@@ -385,6 +473,8 @@ class NodeService:
             attempt = self.journal.get(attempt_id or "")
             if not attempt or attempt["machine_id"] != machine_id or attempt["status"] != "completed" or attempt["scope"] != "calibration":
                 return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "A completed attempt authorized specifically for calibration and physical inspection are required. Installing an adapter is not calibration."}
+            if attempt["configuration_binding"] != state["configurationBinding"]:
+                return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration attempt belongs to another device or capture configuration; run a new physical calibration for this setup"}
             if not attempt["completion_credible"]:
                 if not (attempt["reason"] or "").startswith("Operator inspected:") or not isinstance(reason,str) or len(reason.strip()) < 10:
                     return {"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Transport-only calibration requires a resolved completed attempt and an explicit physical inspection reason (at least 10 characters)"}
@@ -408,12 +498,16 @@ class NodeService:
 
     def reconcile(self, *, machine_id: str, job_id: str, attempt_id: str, inspected: bool, result: str, reason: str) -> dict:
         self.machine(machine_id)
-        if inspected is not True or result not in {"completed", "failed"} or not isinstance(reason, str) or not 5 <= len(reason.strip()) <= 1000:
+        if inspected is not True or not isinstance(result, str) or result not in {"completed", "failed"} or not isinstance(reason, str) or not 5 <= len(reason.strip()) <= 1000:
             raise NodeError("operator_resolution", "Reconciliation requires inspection, completed/failed result and a concrete reason", 422)
         with self.journal.transaction():
             row = self.journal.get(attempt_id)
             if not row or row["machine_id"] != machine_id or row["job_id"] != job_id:
                 raise NodeError("attempt_binding", "Resolution does not match this execution attempt", 403)
+            self.require_stop_settled(machine_id)
+            task = self.tasks.get(attempt_id)
+            if task and not task.done():
+                raise NodeError("attempt_active", "The execution worker is still active; wait for it to settle before inspection can release the machine", 409)
             if row["status"] not in {"uncertain", "failed", "completed"}:
                 raise NodeError("attempt_active", "An active worker cannot be resolved by inspection", 409)
             if row["status"] in {"failed", "completed"}:
@@ -431,7 +525,7 @@ class NodeService:
         config = self.machine(machine_id)
         if config["mode"] != "simulation":
             raise NodeError("hardware_simulation_forbidden", "Simulation controls cannot affect hardware", 403)
-        if outcome not in {"pass", "fail", "review", "lost_ack"}:
+        if not isinstance(outcome, str) or outcome not in {"pass", "fail", "review", "lost_ack"}:
             raise NodeError("simulation_outcome", "Unknown simulation outcome", 422)
         state = self.journal.machine(machine_id)
         state["simulationOutcome"] = outcome
@@ -443,6 +537,9 @@ class NodeService:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        # Retain the journal lock until any already-issued device stop has
+        # actually returned; a new process must not overtake a delayed command.
+        await asyncio.gather(*(task for _, task in self.stop_tasks.values()), return_exceptions=True)
         for adapter in self.adapters.values():
             if isinstance(adapter, Bambu) and adapter.printer is not None:
                 await asyncio.to_thread(adapter.printer.mqtt_stop)

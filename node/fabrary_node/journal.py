@@ -28,6 +28,7 @@ class Journal:
         CREATE TABLE IF NOT EXISTS attempts (
           attempt_id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, job_id TEXT NOT NULL,
           binding TEXT NOT NULL, status TEXT NOT NULL, artifact_path TEXT, scope TEXT NOT NULL DEFAULT 'dispatch',
+          configuration_binding TEXT,
           outcome TEXT NOT NULL DEFAULT 'pass', completion_credible INTEGER NOT NULL DEFAULT 0,
           accepted_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, reason TEXT
         );
@@ -44,6 +45,8 @@ class Journal:
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(attempts)")}
         if "scope" not in columns:
             self.db.execute("ALTER TABLE attempts ADD COLUMN scope TEXT NOT NULL DEFAULT 'dispatch'")
+        if "configuration_binding" not in columns:
+            self.db.execute("ALTER TABLE attempts ADD COLUMN configuration_binding TEXT")
         with self.transaction():
             rows = self.db.execute("SELECT * FROM attempts WHERE status IN ('accepted','running')").fetchall()
             for row in rows:
@@ -91,7 +94,7 @@ class Journal:
             row = self.db.execute("SELECT * FROM attempts WHERE machine_id=? ORDER BY accepted_at DESC LIMIT 1", (machine_id,)).fetchone()
             return dict(row) if row else None
 
-    def accept(self, request: dict, outcome: str, scope: str = "dispatch") -> tuple[dict, bool]:
+    def accept(self, request: dict, outcome: str, scope: str = "dispatch", configuration_binding: str | None = None) -> tuple[dict, bool]:
         binding = canonical({k: request[k] for k in ("machine_id", "job_id", "attempt_id", "artifact_sha256", "parameters")})
         with self.transaction():
             existing = self.get(request["attempt_id"])
@@ -102,8 +105,8 @@ class Journal:
             if self.active(request["machine_id"]):
                 raise NodeError("machine_busy", "Machine has an active or uncertain attempt", 409)
             try:
-                self.db.execute("INSERT INTO attempts(attempt_id,machine_id,job_id,binding,status,outcome,accepted_at,scope) VALUES (?,?,?,?,?,?,?,?)",
-                    (request["attempt_id"], request["machine_id"], request["job_id"], binding, "accepted", outcome, now(), scope))
+                self.db.execute("INSERT INTO attempts(attempt_id,machine_id,job_id,binding,status,outcome,accepted_at,scope,configuration_binding) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (request["attempt_id"], request["machine_id"], request["job_id"], binding, "accepted", outcome, now(), scope, configuration_binding))
             except sqlite3.IntegrityError:
                 raise NodeError("job_already_executed", "Job already has an execution attempt; reconcile that attempt", 409) from None
             self.audit(request["machine_id"], request["attempt_id"], "accepted", "Authorization, policy and artifact hash checked")

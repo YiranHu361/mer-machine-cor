@@ -34,6 +34,8 @@ def verify_token(token: str, key: str, *, scope: str, expected: dict) -> dict:
         if not hmac.compare_digest(signature, wanted):
             raise ValueError()
         payload = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        if not isinstance(payload, dict):
+            raise ValueError()
         expiration = payload.get("expires_at")
         if not isinstance(expiration, (int, float)) or not math.isfinite(expiration) or expiration <= time.time():
             raise NodeError("expired_token", "Authorization has expired", 403)

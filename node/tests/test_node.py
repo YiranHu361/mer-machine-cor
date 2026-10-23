@@ -318,7 +318,7 @@ async def test_transport_only_calibration_requires_physical_inspection_context(t
     machine={"id":"phomemo_01","model":"Phomemo M02Pro","mode":"hardware"}
     service=NodeService(key=KEY,data_dir=tmp_path,machines=[machine])
     monkeypatch.setattr(service.adapters["phomemo_01"],"blockers",lambda:[])
-    service.journal.accept(request_for(artifact),"pass",scope="calibration")
+    service.journal.accept(request_for(artifact),"pass",scope="calibration",configuration_binding=service.journal.machine("phomemo_01")["configurationBinding"])
     service.journal.update("attempt_1","running")
     service.journal.update("attempt_1","uncertain",reason="Transport acknowledged; ejection unknown")
     with pytest.raises(NodeError,match="Resolve the active"):
@@ -429,3 +429,277 @@ async def test_prepared_3d_characteristics_are_signed_and_durable(service,artifa
     assert error.value.code == "attempt_conflict"
     assert service.adapters["bambu_01"].executions == 1
     await service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy", [
+    {"maxQuantity": 1},
+    {"mediaRemaining": 1},
+    {"hours": {"start": 0, "end": 1}},
+])
+async def test_latest_owner_policy_rechecked_after_asset_download(tmp_path, artifact, policy, monkeypatch):
+    from datetime import datetime, timezone
+    from fabrary_node import service as service_module
+    started, finish = asyncio.Event(), asyncio.Event()
+    async def download(request):
+        started.set()
+        await finish.wait()
+        return httpx.Response(200, content=artifact)
+    service = NodeService(key=KEY, data_dir=tmp_path, artifact_transport=httpx.MockTransport(download))
+    class Clock:
+        @staticmethod
+        def now(tz): return datetime(2026, 10, 23, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(service_module, "datetime", Clock)
+    task = asyncio.create_task(service.run_job(**request_for(artifact, params=PARAMS | {"quantity": 2})))
+    await started.wait()
+    service.update_policy("phomemo_01", policy)
+    finish.set()
+    with pytest.raises(NodeError):
+        await task
+    assert not service.journal.latest("phomemo_01")
+    assert service.adapters["phomemo_01"].executions == 0
+    for key, value in policy.items():
+        assert service.journal.machine("phomemo_01")[key] == value
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_policy_changes_during_download_are_preserved(tmp_path, artifact):
+    started, finish = asyncio.Event(), asyncio.Event()
+    async def download(request):
+        started.set()
+        await finish.wait()
+        return httpx.Response(200, content=artifact)
+    service = NodeService(key=KEY, data_dir=tmp_path, artifact_transport=httpx.MockTransport(download))
+    task = asyncio.create_task(service.run_job(**request_for(artifact)))
+    await started.wait()
+    service.update_policy("phomemo_01", {"maxQuantity": 3, "mediaRemaining": 7})
+    finish.set()
+    await task
+    await service.tasks["attempt_1"]
+    state = service.journal.machine("phomemo_01")
+    assert state["maxQuantity"] == 3 and state["mediaRemaining"] == 6
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_simulation_calibration_cannot_enable_reconfigured_hardware(tmp_path, monkeypatch):
+    service = NodeService(key=KEY, data_dir=tmp_path)
+    assert service.get_capabilities("phomemo_01")["calibrated"]
+    await service.close()
+    machine = {"id": "phomemo_01", "model": "Phomemo M02Pro", "mode": "hardware", "bluetoothAddress": "owner-device-one"}
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine])
+    monkeypatch.setattr(service.adapters["phomemo_01"], "blockers", lambda: [])
+    manifest = service.get_capabilities("phomemo_01")
+    assert not manifest["calibrated"] and not manifest["ready"] and not manifest["listed"]
+    assert manifest["paused"]
+    # Simulate a completed physical calibration at the journal boundary, never
+    # through a hardware adapter, to check persistence for the same identity.
+    state = service.journal.machine("phomemo_01")
+    state.update(calibrated=True)
+    service.journal.save_machine("phomemo_01", state)
+    await service.close()
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine])
+    assert service.journal.machine("phomemo_01")["calibrated"]
+    await service.close()
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine | {"bluetoothAddress": "owner-device-two"}])
+    assert not service.journal.machine("phomemo_01")["calibrated"]
+    assert service.journal.machine("phomemo_01")["paused"]
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_hardware_abort_before_worker_starts_cannot_start_later(service, artifact, monkeypatch):
+    # Use a no-I/O adapter boundary after acceptance to reproduce an immediate
+    # owner stop before the asynchronous worker's first event-loop turn.
+    request = request_for(artifact)
+    await service.run_job(**request)
+    service.machines["phomemo_01"]["mode"] = "hardware"
+    result = await service.abort(**camera_args(scope="abort"))
+    await asyncio.gather(service.tasks["attempt_1"], return_exceptions=True)
+    assert service.adapters["phomemo_01"].executions == 0
+    assert service.get_status("phomemo_01")["execution_status"] == "failed"
+    assert result["status"] == "stopped"
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_abort_for_old_failed_attempt_cannot_stop_new_worker(service, artifact, monkeypatch):
+    await service.run_job(**request_for(artifact))
+    await wait_done(service)
+    # A terminal failed attempt can be followed by an explicitly resumed job.
+    service.journal.db.execute("UPDATE attempts SET status='failed' WHERE attempt_id='attempt_1'")
+    service.update_policy("phomemo_01", {"paused": False, "ready": True, "cleared": True, "inspected": True})
+    service.adapters["phomemo_01"].config["simulationSeconds"] = 30
+    await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2"))
+    await asyncio.sleep(0)
+    service.machines["phomemo_01"]["mode"] = "hardware"
+    aborts = []
+    async def stop():
+        aborts.append(True)
+        return {"status": "requested", "reason": "test-only stop"}
+    monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
+    result = await service.abort(**camera_args(scope="abort"))
+    assert aborts == []
+    assert result["status"] == "unknown"
+    assert service.journal.get("attempt_2")["status"] == "running"
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_old_calibration_attempt_cannot_recalibrate_replaced_device(tmp_path, artifact, monkeypatch):
+    machine = {"id": "phomemo_01", "model": "Phomemo M02Pro", "mode": "hardware", "bluetoothAddress": "owner-device-one"}
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine])
+    binding = service.journal.machine("phomemo_01")["configurationBinding"]
+    service.journal.accept(request_for(artifact), "pass", "calibration", binding)
+    service.journal.update("attempt_1", "running")
+    service.journal.update("attempt_1", "completed", credible=True)
+    await service.close()
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine | {"bluetoothAddress": "owner-device-two"}])
+    monkeypatch.setattr(service.adapters["phomemo_01"], "blockers", lambda: [])
+    result = service.calibrate("phomemo_01", True, "attempt_1", "Owner inspected the newly configured physical device")
+    assert result["status"] == "blocked" and "another device or capture" in result["reason"]
+    assert not service.journal.machine("phomemo_01")["calibrated"]
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_uncertain_worker_cannot_be_manually_released_while_still_active(service, artifact, monkeypatch):
+    service.adapters["phomemo_01"].config["simulationSeconds"] = 30
+    await service.run_job(**request_for(artifact))
+    await asyncio.sleep(0)
+    service.machines["phomemo_01"]["mode"] = "hardware"
+    async def stop(): return {"status": "requested", "reason": "Fixture stop request; worker has not returned yet"}
+    monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
+    await service.abort(**camera_args(scope="abort"))
+    assert service.journal.get("attempt_1")["status"] == "uncertain"
+    resolution = {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": "failed", "reason": "Owner inspected the stopped device and found no complete item"}
+    with pytest.raises(NodeError) as error:
+        service.reconcile(**resolution)
+    assert error.value.code == "attempt_active"
+    service.tasks["attempt_1"].cancel()
+    await asyncio.gather(service.tasks["attempt_1"], return_exceptions=True)
+    assert service.reconcile(**resolution)["execution_status"] == "failed"
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_malformed_enum_and_policy_http_requests_fail_without_internal_errors(service, artifact):
+    app = create_app(service)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers={"Authorization": "Bearer " + KEY}) as client:
+        requests = [
+            ("POST", "/tools/run_job", request_for(artifact, params=PARAMS | {"crop": {}})),
+            ("POST", "/tools/run_job", request_for(artifact) | {"token": sign_token([], KEY)}),
+            ("POST", "/tools/camera_snapshot", camera_args() | {"phase": {}}),
+            ("PATCH", "/machines/phomemo_01/policy", {"widthsMm": [{}]}),
+            ("POST", "/simulation/phomemo_01", {"outcome": {}}),
+            ("POST", "/reconcile", {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": {}, "reason": "Owner inspected the device"}),
+        ]
+        for method, path, body in requests:
+            response = await client.request(method, path, json=body)
+            assert response.status_code in {403, 422}, (path, response.text)
+        assert not service.journal.latest("phomemo_01")
+    await service.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_caller", [False, True])
+async def test_pending_stop_transport_fences_reconciliation_resume_and_new_execution(service, artifact, monkeypatch, cancel_caller):
+    finished, stop_entered, stop_gate = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    executions, stops = [], []
+    async def run(path, parameters, attempt_id):
+        executions.append(attempt_id)
+        await finished.wait()
+        return "completed", True, "Fixture worker completed"
+    async def stop():
+        stops.append("entered")
+        stop_entered.set()
+        await stop_gate.wait()
+        stops.append("returned")
+        return {"status": "requested", "reason": "Fixture stop transport returned"}
+    monkeypatch.setattr(service.adapters["phomemo_01"], "run", run)
+    monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
+    await service.run_job(**request_for(artifact))
+    await asyncio.sleep(0)
+    service.machines["phomemo_01"]["mode"] = "hardware"
+    abort_call = asyncio.create_task(service.abort(**camera_args(scope="abort")))
+    try:
+        await stop_entered.wait()
+        if cancel_caller:
+            abort_call.cancel()
+            await asyncio.gather(abort_call, return_exceptions=True)
+        finished.set()
+        await service.tasks["attempt_1"]
+        assert service.journal.get("attempt_1")["status"] == "uncertain"
+        assert service.get_status("phomemo_01")["stop_pending"]
+        assert not service.get_capabilities("phomemo_01")["ready"]
+        resolution = {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": "completed", "reason": "Owner inspected the stopped device and found the completed item"}
+        resume = {"paused": False, "ready": True, "cleared": True, "inspected": True}
+        for operation in (lambda: service.reconcile(**resolution), lambda: service.update_policy("phomemo_01", resume)):
+            with pytest.raises(NodeError) as error:
+                operation()
+            assert error.value.code == "stop_pending"
+        with pytest.raises(NodeError) as error:
+            await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2"))
+        assert error.value.code == "stop_pending"
+        assert executions == ["attempt_1"] and stops == ["entered"]
+        stop_gate.set()
+        await service.stop_tasks["phomemo_01"][1]
+        await asyncio.gather(abort_call, return_exceptions=True)
+        assert not service.stop_pending("phomemo_01")
+        service.reconcile(**resolution)
+        service.update_policy("phomemo_01", resume)
+        await service.run_job(**request_for(artifact, job="job_2", attempt="attempt_2"))
+        await service.tasks["attempt_2"]
+        assert executions == ["attempt_1", "attempt_2"]
+        assert stops == ["entered", "returned"]
+        assert service.journal.get("attempt_2")["status"] == "completed"
+    finally:
+        stop_gate.set()
+        await asyncio.gather(abort_call, return_exceptions=True)
+        await service.close()
+
+
+@pytest.mark.asyncio
+async def test_hardware_pairing_confirmation_and_revocation_refresh_on_restart(tmp_path):
+    machine = {"id": "phomemo_01", "model": "Phomemo M02Pro", "mode": "hardware", "bluetoothAddress": "owner-device-one", "paired": False}
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine])
+    assert not service.get_capabilities("phomemo_01")["paired"]
+    await service.close()
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine | {"paired": True, "ownerReady": True}])
+    assert service.get_capabilities("phomemo_01")["paired"]
+    assert service.journal.machine("phomemo_01")["paired"]
+    # Confirming pairing does not itself satisfy physical calibration.
+    assert not service.get_capabilities("phomemo_01")["calibrated"]
+    await service.close()
+    service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine])
+    assert not service.get_capabilities("phomemo_01")["paired"]
+    assert not service.journal.machine("phomemo_01")["paired"]
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_keeps_journal_ownership_until_error_stop_transport_returns(service, artifact, tmp_path, monkeypatch):
+    stop_entered, stop_gate = asyncio.Event(), asyncio.Event()
+    async def run(path, parameters, attempt_id): raise RuntimeError("Fixture driver failed after possible start")
+    async def stop():
+        stop_entered.set()
+        await stop_gate.wait()
+        return {"status": "unknown", "reason": "Fixture stop transport returned"}
+    monkeypatch.setattr(service.adapters["phomemo_01"], "run", run)
+    monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
+    await service.run_job(**request_for(artifact))
+    service.machines["phomemo_01"]["mode"] = "hardware"
+    await stop_entered.wait()
+    closing = asyncio.create_task(service.close())
+    try:
+        await asyncio.sleep(0)
+        assert service.stop_pending("phomemo_01") and not closing.done()
+        with pytest.raises(RuntimeError, match="Another node"):
+            NodeService(key=KEY, data_dir=tmp_path)
+    finally:
+        stop_gate.set()
+        await closing
+    restarted = NodeService(key=KEY, data_dir=tmp_path)
+    assert restarted.get_status("phomemo_01")["execution_status"] == "uncertain"
+    await restarted.close()

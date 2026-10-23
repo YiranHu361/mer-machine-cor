@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 export type PaymentRecord = {
   id?: string;
@@ -184,6 +184,14 @@ export function TrialEconomicsForm({
     ),
   );
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (economics)
+      setValues(
+        Object.fromEntries(
+          trialFields.map(([key]) => [key, String(economics[key])]),
+        ),
+      );
+  }, [economics?.recordedAt]);
   return (
     <details className="trial-economics">
       <summary>Trial costs & handling time</summary>

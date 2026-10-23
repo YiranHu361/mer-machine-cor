@@ -274,7 +274,12 @@ test("requester and owner complete an honest simulated order, independent handli
       exact: true,
     }),
   ).toBeVisible();
-  await requestPage.keyboard.press("Tab");
+  // Respect macOS WebKit's native full-navigation shortcut rather than changing user preferences.
+  await requestPage.keyboard.press(
+    browser.browserType().name() === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab",
+  );
   await expect(
     requestPage.getByRole("link", { name: "Skip to content", exact: true }),
   ).toBeFocused();

@@ -127,16 +127,23 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     // Durable caller records this nonce before settle, preventing signature reuse
     // across jobs and preserving an indeterminate result after a lost response.
     await op.onSubmitted?.(pending);
+    let settled;
     try {
-      const settled = await this.facilitator.settle(payload,requirements);
-      if (settled.network!==BASE_SEPOLIA_NETWORK) return {...pending,status:'pending',reason:'Facilitator returned unexpected network; operator reconciliation required'};
-      if (!settled.transaction || !/^0x[0-9a-fA-F]{64}$/.test(settled.transaction)) return {...pending,status:'pending',reason:settled.errorReason ?? 'Settlement returned no transaction; no confirmed collection'};
-      const submitted = {...pending,transactionHash:settled.transaction};
-      await op.onSubmitted?.(submitted);
-      return this.confirm(submitted);
+      settled = await this.facilitator.settle(payload,requirements);
     } catch {
       return {...pending,reason:'Settlement response unavailable; authorization may have settled. Reconcile, never submit a new payment automatically.'};
     }
+    if (settled.network!==BASE_SEPOLIA_NETWORK) return {...pending,status:'pending',reason:'Facilitator returned unexpected network; operator reconciliation required'};
+    if (!settled.transaction || !/^0x[0-9a-fA-F]{64}$/.test(settled.transaction)) return {...pending,status:'pending',reason:settled.errorReason ?? 'Settlement returned no transaction; no confirmed collection'};
+    const submitted = {...pending,transactionHash:settled.transaction};
+    try { await op.onSubmitted?.(submitted); }
+    catch {
+      // The settlement already happened. Preserve its known hash even if the
+      // second checkpoint fails so the caller can persist/reconcile this exact
+      // transaction rather than replace it with an unknowable nonce record.
+      return {...submitted,reason:'Settlement transaction is known but its durable checkpoint was unavailable; preserve and reconcile this transaction hash before further payment actions'};
+    }
+    return this.confirm(submitted);
   }
   async release(op: PaymentOperation) { return this.transfer(op,'release'); }
   async refund(op: PaymentOperation) { return this.transfer(op,'refund'); }

@@ -1,0 +1,287 @@
+{
+  "recordedAt": "2026-10-23T07:40:53.999Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 53,
+    "node": 65,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserWallet": 8,
+    "browserScenarios": 17,
+    "uniqueCases": 173,
+    "checksIncludingThreeBrowserEngines": 207,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T07:39:28.162Z",
+      "durationMs": 29655.451,
+      "report": "web/evidence/overnight-chromium-browser.json",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ],
+      "reportSha256": "6b222362c87fb494726d397a57a6956390ad71a52e062d9235bf331e77e4908c"
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T07:38:23.081Z",
+      "durationMs": 32033.233,
+      "report": "web/evidence/overnight-firefox-browser.json",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ],
+      "reportSha256": "a1bc52eae08997c99bb7ebf2c1dddeb1f28388271f4b2b2f20ac00a71c820059"
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T07:38:55.512Z",
+      "durationMs": 32244.784,
+      "report": "web/evidence/overnight-webkit-browser.json",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 28,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 22,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        }
+      ],
+      "reportSha256": "52b4bee0dff00bece465b46da54152c06247ecd9e03785d38985b62d429d156f"
+    }
+  ],
+  "actualLocalChecks": {
+    "database": "SpacetimeDB 2.13: CAS, subscription, anonymous read isolation and unauthorized write rejection",
+    "simulationJobs": {
+      "sticker": 10,
+      "instax": 3,
+      "failureReviewAndLostAckCases": 3
+    },
+    "signedCalibrationApi": "PASS, simulation only",
+    "fastMcpApplicationLoop": "PASS, simulation/mock only"
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "logHashes": {
+    ".data/overnight-software-check.log": "ec4c0aef4bb05992a4ca9be3a8c5931cb10ac8707f35788ce108b1bba2d08389",
+    ".data/overnight-web-build.log": "23321965f8f6ac40986d2dbc75c9b42d3bd00a35ce4e3c6a3e10ed687cd93130",
+    ".data/overnight-software-acceptance.log": "6324e5ed8b264dbdc16fa9644c937c47d8610dedcff63d34d3bd3960660f5c92",
+    ".data/overnight-calibration.log": "1ba93b928382ba61eaf119839e669be4399500aad487fd7e58875396f0442b22",
+    ".data/overnight-spacetime.log": "f0beb4094db037f89605e1cb61a8becb5f24e7bbb3127e89f16ce0c8ffaec7a7",
+    ".data/overnight-fetch-local.log": "f7c2b4537c093888fe5b699f96ceb2e8d958f05bcb2282f46af67717697df8f3"
+  },
+  "notes": "Software check followed backend/node/integration changes; final build and all three browser suites followed the last UI refinement. Automated rule scans complement visual/keyboard checks; no complete accessibility conformance or physical timing claim.",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 155,
+    "configuredSecretsFound": 0
+  }
+}

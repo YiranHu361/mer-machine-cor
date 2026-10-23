@@ -4,6 +4,13 @@ Checked against official upstream documentation on October 22, 2026. This docume
 
 ## Verified locally
 
+October 23 overnight follow-up: the payment/Claude fixture suite now passes
+**25 tests**, with typecheck passing. Added cases preserve a known settlement
+transaction hash when its durable checkpoint is unavailable and send unchanged
+baseline/result images, contradictory observations, invalid images and
+unavailable verification to review. No live transaction or model call was made.
+See [overnight QA](overnight-qa.md) for the latest integrated evidence.
+
 - **SpacetimeDB 2.13.0:** installed an actual standalone server on this Apple Silicon host, bound only to `127.0.0.1:3002`, published the TypeScript module, and generated official TypeScript SDK bindings. Two real SDK clients passed initialization, persisted state read, atomic compare-and-set conflict rejection, and cross-client live subscription. An anonymous SDK client received no application rows and its mutation failed `FORBIDDEN`. `fabrary-local` is the integration test database; `fabrary-app` was separately published clean for application acceptance. This is an actual database integration, not an in-memory substitute.
 - **Payments:** twelve deterministic adapter tests validate challenge encoding, exact cents, mock labeling, wrong-chain/quote rejection, unsettled authorization remaining pending, receipt confirmation, exact token-transfer matching, unknown-settlement reconciliation, and saving a signed transfer hash before broadcast. These tests use a facilitator/RPC fixture and do not establish a live blockchain result.
 - **Claude:** seven deterministic tests exercise Messages request image blocks, bounded parsing, approval/permission fields being dropped, invalid spec values, malformed visual output, stale evidence and credible-completion gates. No live Claude call has been made without an API key.
@@ -73,12 +80,12 @@ Operations carry `{jobId, operationId, quote, payload?, requesterAddress?, owner
 
 Required configuration:
 
-| Purpose | Variables and prerequisites |
-| --- | --- |
-| Testnet collection | `FABRARY_PAYMENT_MODE=testnet`, `FABRARY_TREASURY_ADDRESS`, `FABRARY_BASE_SEPOLIA_RPC`, `FABRARY_PUBLIC_ORIGIN`; requester signed authorization and test USDC |
-| Facilitator | `FABRARY_X402_FACILITATOR` optional, defaults to official testnet `https://x402.org/facilitator`; selected facilitator must support x402 v2 exact on Base Sepolia |
-| Release/refund | `FABRARY_TREASURY_PRIVATE_KEY` matching treasury address, treasury test ETH for gas and sufficient test USDC; explicit owner/payer addresses |
-| Live acceptance | All above plus `FABRARY_RUN_LIVE_PAYMENTS=1`, `FABRARY_TEST_PAYER_PRIVATE_KEY`, `FABRARY_OWNER_WALLET` |
+| Purpose            | Variables and prerequisites                                                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testnet collection | `FABRARY_PAYMENT_MODE=testnet`, `FABRARY_TREASURY_ADDRESS`, `FABRARY_BASE_SEPOLIA_RPC`, `FABRARY_PUBLIC_ORIGIN`; requester signed authorization and test USDC     |
+| Facilitator        | `FABRARY_X402_FACILITATOR` optional, defaults to official testnet `https://x402.org/facilitator`; selected facilitator must support x402 v2 exact on Base Sepolia |
+| Release/refund     | `FABRARY_TREASURY_PRIVATE_KEY` matching treasury address, treasury test ETH for gas and sufficient test USDC; explicit owner/payer addresses                      |
+| Live acceptance    | All above plus `FABRARY_RUN_LIVE_PAYMENTS=1`, `FABRARY_TEST_PAYER_PRIVATE_KEY`, `FABRARY_OWNER_WALLET`                                                            |
 
 `npm --prefix integrations run test:live` prints **BLOCKED** and exits 2 when live prerequisites are missing. With explicit opt-in, the script performs two distinct one-cent **testnet** collections, releases one to the owner, refunds the other to the payer, and records transaction hashes in a private JSONL journal. It polls existing transactions only. Its live result has **not** been obtained in this session because funded test wallets, their private keys and RPC configuration were unavailable. A read-only upstream smoke did succeed: the default facilitator advertised x402 v2 `exact` on `eip155:84532`, and the public Base Sepolia RPC reported chain ID 84532 and the configured token name `USDC`. This establishes public endpoint compatibility only. No token purchase, real funds or live blockchain submission was made.
 

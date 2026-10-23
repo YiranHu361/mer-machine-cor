@@ -7,6 +7,7 @@ const roots = [
   "node/fabrary_node",
   "node/tests",
   "integrations/src",
+  "integrations/test",
   "integrations/spacetimedb/src",
   "integrations/fetch",
   "web/src",
@@ -32,6 +33,8 @@ const files = [
   "web/package.json",
   "web/package-lock.json",
   "web/vite.config.ts",
+  "web/playwright.config.ts",
+  "web/tsconfig.json",
 ];
 async function walk(path) {
   for (const entry of await readdir(path, { withFileTypes: true })) {

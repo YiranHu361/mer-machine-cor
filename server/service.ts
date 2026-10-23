@@ -283,6 +283,11 @@ export class Service {
       "CALIBRATION_NOT_FOUND",
       "This calibration attempt does not belong to the machine.",
     );
+    requireThat(
+      m.activeJobId === c.id,
+      "CALIBRATION_NOT_CURRENT",
+      "This calibration is no longer the active machine attempt. Refresh before resolving it.",
+    );
     await this.node.call(
       "/reconcile",
       {
@@ -297,6 +302,11 @@ export class Service {
     );
     await mutate(this.store, (s) => {
       const current = s.calibrations![c.id];
+      requireThat(
+        s.machines[machineId].activeJobId === c.id,
+        "CALIBRATION_NOT_CURRENT",
+        "The machine moved to another attempt while this calibration was being resolved.",
+      );
       current.productionState =
         body.result === "completed" ? "produced" : "failed";
       record(current, "calibration_operator_resolution", body.reason);
@@ -382,9 +392,11 @@ export class Service {
     return mutate(this.store, (s) => {
       const j = s.jobs[jobId];
       requireThat(
-        j.paymentState === "unpaid" && !j.attemptId,
+        j.paymentState === "unpaid" &&
+          !j.attemptId &&
+          j.productionState !== "cancelled",
         "LOCKED",
-        "A paid or dispatched specification cannot be edited.",
+        "A cancelled, paid or dispatched specification cannot be edited.",
       );
       for (const a of spec.assetIds)
         requireThat(
@@ -421,7 +433,9 @@ export class Service {
         "An operator must resolve unclear artwork permission before checkout.",
       );
       requireThat(
-        j.paymentState === "unpaid" && !j.attemptId,
+        j.paymentState === "unpaid" &&
+          !j.attemptId &&
+          j.productionState !== "cancelled",
         "LOCKED",
         "This order cannot be reapproved.",
       );
@@ -431,7 +445,15 @@ export class Service {
         "STALE_APPROVAL",
         "Approve the current preview and specification.",
       );
-      j.approvedSpecHash = specificationHash(j);
+      const currentHash = specificationHash(j);
+      // Retried approval must preserve a quote and its reservation instead of
+      // moving an already quoted order back to a state checkout cannot use.
+      if (
+        j.approvedSpecHash === currentHash &&
+        ["approved", "quoted"].includes(j.productionState)
+      )
+        return j;
+      j.approvedSpecHash = currentHash;
       j.productionState = "approved";
       record(
         j,
@@ -1072,6 +1094,10 @@ export class Service {
   async reviewUncertain(jobId: string, reason: string) {
     await mutate(this.store, (s) => {
       const j = s.jobs[jobId];
+      // An earlier request may fail after another reconciler has completed the
+      // attempt and the owner has already cleared this machine for its next job.
+      if (["produced", "failed", "cancelled"].includes(j.productionState))
+        return;
       j.productionState = "needs_review";
       const m = s.machines[j.machineId!];
       m.paused = true;
@@ -1121,6 +1147,9 @@ export class Service {
           response.reason ?? "Device failure; inspect before resuming.";
         record(j, "device_failed", m.reason);
       } else if (["running", "started", "accepted"].includes(execution)) {
+        // Ignore an older progress response while a credible completion is
+        // already awaiting its result frame.
+        if (j.productionState === "verifying") return;
         const next = execution === "accepted" ? "dispatched" : "running";
         if (j.productionState !== next) {
           j.productionState = next;
@@ -1151,6 +1180,16 @@ export class Service {
     ))
       await this.transfer(jobId, op.kind as "release" | "refund");
     j = await this.job(jobId);
+    // A process may stop after the durable production outcome but before its
+    // transfer allocation. Recover that boundary from the recorded outcome,
+    // while transfer() keeps release/refund allocation mutually exclusive.
+    if (j.paymentState === "held") {
+      if (j.productionState === "produced" && j.evidence?.result === "pass")
+        await this.transfer(jobId, "release");
+      else if (j.productionState === "failed")
+        await this.transfer(jobId, "refund");
+      j = await this.job(jobId);
+    }
     if (
       j.paymentState === "refund_pending" &&
       !Object.values((await this.read()).operations).some(
@@ -1292,9 +1331,14 @@ export class Service {
     return this.job(jobId);
   }
   async resolveEvidence(jobId: string, evidence: any, operatorReason?: string) {
-    await mutate(this.store, (s) => {
+    const accepted = await mutate(this.store, (s) => {
       const j = s.jobs[jobId],
         m = s.machines[j.machineId!];
+      // Camera/model requests and owner reviews may overlap. Only the first
+      // resolution of the current state may change the outcome or allocate a
+      // transfer; a delayed result must never undo handling or pause a new job.
+      const expectedState = operatorReason ? "needs_review" : "verifying";
+      if (j.productionState !== expectedState) return false;
       j.evidence = evidence;
       j.productionState =
         evidence.result === "pass"
@@ -1316,7 +1360,9 @@ export class Service {
           : `verification_${evidence.result}`,
         operatorReason ?? evidence.reason,
       );
+      return true;
     });
+    if (!accepted) return;
     if (evidence.result === "pass") await this.transfer(jobId, "release");
     if (evidence.result === "fail") await this.transfer(jobId, "refund");
   }
@@ -1337,9 +1383,14 @@ export class Service {
       return mutate(this.store, (s) => {
         const current = s.jobs[jobId];
         requireThat(
-          current.paymentState === "unpaid",
+          current.paymentState === "unpaid" &&
+            current.productionState === "needs_review" &&
+            current.spec.permission === "unclear" &&
+            current.specVersion === j.specVersion &&
+            current.artifact.sha256 === j.artifact.sha256 &&
+            !current.attemptId,
           "LOCKED",
-          "Content review cannot alter a paid specification.",
+          "Content review is no longer current. Refresh the order before reviewing it.",
         );
         if (result === "pass") {
           current.spec.permission = "authorized";
@@ -1485,7 +1536,10 @@ export class Service {
         "Only produced items can be made ready for collection.",
       );
       requireThat(
-        body.removed && body.labeled && body.stored && body.cleared,
+        body.removed === true &&
+          body.labeled === true &&
+          body.stored === true &&
+          body.cleared === true,
         "HANDLING_REQUIRED",
         "Confirm removal, labeling, safe storage and a cleared machine.",
       );
@@ -1669,13 +1723,25 @@ export class Service {
       const result = results[i],
         machine = candidates[i];
       const unavailable =
-        result.status === "rejected" || result.value.status.ready !== true;
+        result.status === "rejected" ||
+        result.value.status.ready !== true ||
+        result.value.status.calibrated === false;
       if (unavailable)
         await mutate(this.store, (s) => {
           const current = s.machines[machine.id];
           if (current.activeJobId || !current.ready) return;
           current.ready = false;
           current.paused = true;
+          // A configured authenticated node may revoke calibration after its
+          // physical identity/capture configuration changes. Connectivity loss
+          // alone provides no evidence that the recorded inspection is invalid.
+          if (
+            result.status === "fulfilled" &&
+            result.value.status.calibrated === false
+          ) {
+            current.calibrated = false;
+            delete current.calibrationAt;
+          }
           current.reason =
             result.status === "rejected"
               ? "Node disconnected. Reconnect, inspect and explicitly resume."
@@ -1696,9 +1762,13 @@ export class Service {
       for (const j of Object.values(s.jobs)) {
         if (
           ["dispatched", "running", "verifying"].includes(j.productionState) ||
+          (j.paymentState === "held" &&
+            ["produced", "failed"].includes(j.productionState)) ||
           Object.values(s.operations).some(
             (o) =>
-              o.jobId === j.id && ["pending", "submitting"].includes(o.status),
+              o.jobId === j.id &&
+              (["pending", "submitting"].includes(o.status) ||
+                (o.status === "failed" && o.retryable === true)),
           ) ||
           (j.paymentState === "refund_pending" &&
             !Object.values(s.operations).some(

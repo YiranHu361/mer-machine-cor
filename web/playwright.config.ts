@@ -6,6 +6,14 @@ export default defineConfig({
   timeout: 90000,
   expect: { timeout: 15000 },
   use: {
+    browserName: (() => {
+      const engine = process.env.FABRARY_BROWSER_ENGINE || "chromium";
+      if (!["chromium", "firefox", "webkit"].includes(engine))
+        throw new Error(
+          "FABRARY_BROWSER_ENGINE must be chromium, firefox or webkit",
+        );
+      return engine as "chromium" | "firefox" | "webkit";
+    })(),
     baseURL: process.env.FABRARY_BROWSER_URL || "http://127.0.0.1:4317",
     trace: "off",
     actionTimeout: 20000,

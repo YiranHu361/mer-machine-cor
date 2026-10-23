@@ -35,7 +35,15 @@ Instax uses `--output-type instax --width-mm 54 --height-mm 86`, producing the u
 Every route, including health, frames and `/mcp/`, requires `Authorization: Bearer <FABRARY_NODE_KEY>`. JSON tools use `POST /tools/<name>`. FastMCP uses Streamable HTTP at `/mcp/`. Signed authorization is `base64url(JSON payload).hex_hmac_sha256`, with expiry in epoch seconds and scope `dispatch`, `camera`, `abort` or `calibration`. Dispatch binds machine, job, attempt, hash, expiry and the exact canonical parameters:
 
 ```json
-{"outputType":"sticker","widthMm":53,"heightMm":50,"quantity":1,"material":"thermal-paper","crop":"contain","specVersion":1}
+{
+  "outputType": "sticker",
+  "widthMm": 53,
+  "heightMm": 50,
+  "quantity": 1,
+  "material": "thermal-paper",
+  "crop": "contain",
+  "specVersion": 1
+}
 ```
 
 The node compares recursively sorted JSON, checks owner limits and hours (UTC), media, loaded material, dimensions and readiness, fetches only a signed `expires`/`sig` URL from its configured asset prefix without redirects or environment proxying, then hashes and verifies the exact prepared raster. The backend validates its asset URL signature. Changing an attempt's content is rejected. A job cannot be silently retried with a new attempt ID.
@@ -60,11 +68,11 @@ Phomemo raster delivery has no verified physical completion signal. A successful
 
 The actual host is macOS/Darwin arm64. The environment inspection found no configured machine-file path, node key, token secret or asset origin. No device scan, camera opening or physical job was attempted. Physical suites remain **BLOCKED**, rather than passed or skipped as success.
 
-| Device | Implemented path | Exact missing prerequisite and acceptance |
-| --- | --- | --- |
-| Phomemo M02Pro | Direct Linux RFCOMM approved raster transport; 1-bit encoding software-tested | Team device's paired Bluetooth address and channel; Linux/Pi node; loaded roll and measured printable width; fixed fresh camera; owner supervision; calibration and ten consecutive jobs with timings. No automatic physical completion signal is available in this path. |
+| Device             | Implemented path                                                                                                                                                                                | Exact missing prerequisite and acceptance                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phomemo M02Pro     | Direct Linux RFCOMM approved raster transport; 1-bit encoding software-tested                                                                                                                   | Team device's paired Bluetooth address and channel; Linux/Pi node; loaded roll and measured printable width; fixed fresh camera; owner supervision; calibration and ten consecutive jobs with timings. No automatic physical completion signal is available in this path.                                                                                                                                                              |
 | Instax Mini Link 3 | Pinned upstream InstaxBLE transport candidate, paired-only device selection, bounded 55 KB JPEG transfer, configurable UUID/orientation and film development allowance; guarded until validated | Exact paired Link 3 identity, device service/write/notify UUIDs, owner-confirmed compatibility test (`compatibilityValidated`), orientation, loaded film and camera. Upstream issues remain open. The candidate never scans and never claims ejection/completion from a print-command acknowledgment. Validate its physical path before claiming P1 completion, then run three complete jobs with development time and fresh evidence. |
-| Bambu Lab A1 mini | Pinned `bambulabs-api` MQTT/FTPS upload, prepared 3MF start, exact-file running→FINISH observation and stop request | Configured IP and serial, access-code env, owner-confirmed LAN Only/Developer Mode/firmware, loaded single-color PLA, clear bed, reviewed A1-mini-sliced catalog file and SHA, fixed fresh camera, calibration and a complete short print. |
+| Bambu Lab A1 mini  | Pinned `bambulabs-api` MQTT/FTPS upload, prepared 3MF start, exact-file running→FINISH observation and stop request                                                                             | Configured IP and serial, access-code env, owner-confirmed LAN Only/Developer Mode/firmware, loaded single-color PLA, clear bed, reviewed A1-mini-sliced catalog file and SHA, fixed fresh camera, calibration and a complete short print.                                                                                                                                                                                             |
 
 A catalog entry contains `{id,sha256,machineModel:"Bambu Lab A1 mini",reviewed:true,widthMm,heightMm,depthMm,color,material:"pla",plateNumber,estimatedSeconds}`. See [catalog-entry.example.json](../node/catalog-entry.example.json); its placeholder hash and `reviewed:false` are intentionally not production-ready. 3D signed parameters contain the original seven fields plus exactly `depthMm`, `color` and `estimatedSeconds`; sticker and Instax retain exactly the original seven fields. Depth must be finite, positive and at most 180 mm; color must be nonempty; estimated duration must be finite, positive and within the owner time limit. The Bambu adapter requires every dimension, color, material and duration to match the reviewed catalog entry exactly, together with the artifact SHA256. The actual uploaded 3MF bytes must match the reviewed hash. No arbitrary filesystem path or requester-uploaded model is selected by the node. Bambu reports completion only after observing this exact dispatched filename running and then FINISH.
 
@@ -81,6 +89,15 @@ Package registry metadata and upstream sources were checked on October 22, 2026 
 - [Bambu's third-party integration announcement](https://forum.bambulab.com/t/updates-and-third-party-integration-with-bambu-connect/137408/): optional Developer Mode leaves MQTT/FTP/live streams open; exact printer firmware must be checked by the owner.
 
 ## Executed evidence
+
+October 23 overnight follow-up: **65/65 node tests pass**, including policy
+changes during downloads, configuration-bound calibration and migration,
+pairing changes after restart, stops before worker start, delayed/cancelled stop
+transports, active-worker reconciliation and bounded/erroring camera capture.
+These regressions use isolated fixtures and no physical I/O. See
+[overnight QA](overnight-qa.md) for the integrated checkpoint. Hardware journals
+without configuration provenance require fresh calibration once; no simulated
+calibration is accepted for replacement hardware.
 
 The deterministic node suite initially passed 35 tests in 7.09 seconds. Added operator-resolution, exclusive-journal and actual loopback HTTP/FastMCP checks passed (3/3 in 1.38 seconds), then the full suite passed 38/38 in 4.29 seconds. An additional integer owner-hours regression test passed (1/1 in 0.43 seconds). These tests use real SQLite, real FastMCP and HTTP authentication, and the simulator only at the external device boundary. They exercise wrong-machine/expired/tampered tokens, camera scope, exact artifact hash and monochrome raster validation, local policy rejection, competing execution slots, durable retry, pre-start restart failure, running restart uncertainty, lost acknowledgment, fresh pass/fail/review fixtures, owner resume, next-job independence from collection, and accurate abort outcomes. The final isolated node command, `uv run --project node --extra hardware pytest -q node/tests`, passed **45/45** in 4.67 seconds. It additionally verifies that token expiry is rechecked after network retrieval, a normal production attempt cannot be relabeled as calibration, and transport-only calibration needs a fresh associated frame plus an explicit owner inspection without upgrading the completion signal. The calibration policy test mocks the camera/configuration boundary and is not hardware evidence. No hardware completion, physical timing or camera quality has been measured.
 

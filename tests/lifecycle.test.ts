@@ -734,6 +734,10 @@ test("disconnected idle node removes availability and requires explicit owner re
   const f = fixture();
   try {
     await draft(f);
+    const inspectionAt = now();
+    await mutate(f.store, (s) => {
+      s.machines.phomemo_01.calibrationAt = inspectionAt;
+    });
     f.device.call = async () => {
       throw new Error("Configured node disconnected");
     };
@@ -742,6 +746,8 @@ test("disconnected idle node removes availability and requires explicit owner re
     assert.equal(m.ready, false);
     assert.equal(m.paused, true);
     assert.match(m.reason, /disconnected/);
+    assert.equal(m.calibrated, true);
+    assert.equal(m.calibrationAt, inspectionAt);
   } finally {
     f.close();
   }
@@ -845,5 +851,428 @@ test("failed trial economics never count quoted owner payout or platform fee as 
     assert.equal(measured.economics!.platformMarginCents, -1);
   } finally {
     f.close();
+  }
+});
+
+test("a delayed verification cannot undo completed handling or pause the next execution", async () => {
+  const f = fixture();
+  let unblock!: () => void;
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    const original = f.device.call.bind(f.device);
+    let enter!: () => void,
+      resultCalls = 0;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    f.device.call = async (tool, input) => {
+      const response = await original(tool, input);
+      if (
+        tool === "camera_snapshot" &&
+        input.phase === "result" &&
+        ++resultCalls === 1
+      ) {
+        response.observation = "missing";
+        enter();
+        await gate;
+      }
+      return response;
+    };
+    const delayed = f.service.reconcile(j.id);
+    await entered;
+    await f.service.verify(j.id);
+    const ready = await f.service.prepare(j.id, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
+    const next = await paid(f);
+    await f.service.dispatch(next.id);
+    const machineBefore = (await f.service.read()).machines.phomemo_01;
+    unblock();
+    await delayed;
+    const final = await f.service.job(j.id);
+    assert.equal(final.productionState, "produced");
+    assert.equal(final.evidence.result, "pass");
+    assert.equal(final.paymentState, "released");
+    assert.equal(final.fulfillmentState, "ready_for_pickup");
+    assert.equal(final.pickup!.code, ready.pickup!.code);
+    assert.deepEqual(
+      (await f.service.read()).machines.phomemo_01,
+      machineBefore,
+    );
+    assert.equal(
+      Object.values((await f.service.read()).operations).filter(
+        (op) => op.jobId === j.id && op.kind === "refund",
+      ).length,
+      0,
+    );
+  } finally {
+    unblock?.();
+    f.close();
+  }
+});
+
+test("a delayed node error cannot replace a finalized outcome or pause new work", async () => {
+  const f = fixture();
+  let unblock!: () => void;
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    const original = f.device.call.bind(f.device);
+    let enter!: () => void,
+      statusCalls = 0;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    f.device.call = async (tool, input) => {
+      if (tool === "get_status" && ++statusCalls === 1) {
+        enter();
+        await gate;
+        throw new Error("Delayed disconnected response from old request");
+      }
+      return original(tool, input);
+    };
+    const delayed = f.service.reconcile(j.id);
+    await entered;
+    await f.service.reconcile(j.id);
+    await f.service.prepare(j.id, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
+    const next = await paid(f);
+    await f.service.dispatch(next.id);
+    const before = (await f.service.read()).machines.phomemo_01;
+    unblock();
+    await delayed;
+    assert.equal((await f.service.job(j.id)).productionState, "produced");
+    assert.equal(
+      (await f.service.job(j.id)).fulfillmentState,
+      "ready_for_pickup",
+    );
+    assert.deepEqual((await f.service.read()).machines.phomemo_01, before);
+  } finally {
+    unblock?.();
+    f.close();
+  }
+});
+
+test("conflicting concurrent owner reviews preserve one outcome and one matching allocation", async () => {
+  const f = fixture();
+  try {
+    f.device.outcome = "ambiguous";
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    await Promise.allSettled([
+      f.service.operatorReview(
+        j.id,
+        "pass",
+        "Owner confirmed matching visible output",
+      ),
+      f.service.operatorReview(
+        j.id,
+        "fail",
+        "Other simultaneous stale inspection reported failure",
+      ),
+    ]);
+    const final = await f.service.job(j.id);
+    const transfers = Object.values((await f.service.read()).operations).filter(
+      (op) => op.jobId === j.id && op.kind !== "collection",
+    );
+    assert.equal(transfers.length, 1);
+    assert.equal(
+      final.evidence.result,
+      final.productionState === "produced" ? "pass" : "fail",
+    );
+    assert.equal(
+      transfers[0].kind,
+      final.productionState === "produced" ? "release" : "refund",
+    );
+    assert.equal(
+      final.paymentState,
+      final.productionState === "produced" ? "released" : "refunded",
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("background reconciliation recovers a crash between final outcome and transfer allocation", async () => {
+  for (const outcome of ["produced", "failed"]) {
+    const f = fixture();
+    try {
+      const j = await paid(f);
+      await mutate(f.store, (s) => {
+        const current = s.jobs[j.id];
+        current.productionState = outcome;
+        current.evidence = { result: outcome === "produced" ? "pass" : "fail" };
+        s.machines.phomemo_01.activeJobId = j.id;
+        s.machines.phomemo_01.ready = false;
+      });
+      // A new service sees only persisted state, with no allocation yet made.
+      const restarted = new Service(
+        f.store,
+        f.device,
+        f.service.payment,
+        f.service.config,
+      );
+      await restarted.tick();
+      await restarted.tick();
+      const transfers = Object.values(
+        (await f.service.read()).operations,
+      ).filter((op) => op.jobId === j.id && op.kind !== "collection");
+      assert.equal(transfers.length, 1);
+      assert.equal(
+        transfers[0].kind,
+        outcome === "produced" ? "release" : "refund",
+      );
+      assert.equal(
+        (await f.service.job(j.id)).paymentState,
+        outcome === "produced" ? "released" : "refunded",
+      );
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("background reconciliation retries a proven unsubmitted transfer after its prerequisite is repaired", async () => {
+  class Prerequisite extends MockPayment {
+    ready = false;
+    calls = 0;
+    override async transfer(j: Job, m: Machine, op: Operation) {
+      this.calls++;
+      if (!this.ready) throw new Error("OWNER_ADDRESS_REQUIRED");
+      return super.transfer(j, m, op);
+    }
+  }
+  const payment = new Prerequisite(),
+    f = fixture(payment);
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    assert.equal((await f.service.job(j.id)).paymentState, "release_pending");
+    payment.ready = true;
+    await f.service.tick();
+    await f.service.tick();
+    assert.equal((await f.service.job(j.id)).paymentState, "released");
+    assert.equal(payment.calls, 2);
+    assert.equal(
+      Object.values((await f.service.read()).operations).filter(
+        (op) => op.jobId === j.id && op.kind === "release",
+      ).length,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("handling requires explicit boolean confirmations rather than truthy values", async () => {
+  const f = fixture();
+  try {
+    const j = await paid(f);
+    await f.service.dispatch(j.id);
+    await f.service.reconcile(j.id);
+    for (const value of ["false", "true", 1, [], {}]) {
+      await assert.rejects(
+        f.service.prepare(j.id, {
+          removed: value,
+          labeled: true,
+          stored: true,
+          cleared: true,
+        }),
+        /Confirm removal/,
+      );
+    }
+    assert.equal(
+      (await f.service.job(j.id)).fulfillmentState,
+      "awaiting_owner",
+    );
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.activeJobId,
+      j.id,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("retrying approval preserves an existing quote and does not strand checkout", async () => {
+  const f = fixture();
+  try {
+    const j = await approved(f);
+    const quoted = await f.service.quote(j.id);
+    const retried = await f.service.approve(j.id, {
+      specVersion: j.specVersion,
+      artifactSha256: j.artifact.sha256,
+    });
+    assert.equal(retried.productionState, "quoted");
+    assert.equal(retried.quote!.id, quoted.quote!.id);
+    await f.service.quote(j.id);
+    assert.equal(
+      (await f.service.checkout(j.id, "approval-retry-checkout")).paymentState,
+      "held",
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("cancelled orders cannot be reopened by stale approval or specification requests", async () => {
+  const f = fixture();
+  try {
+    const j = await approved(f);
+    await f.service.quote(j.id);
+    await f.service.cancel(j.id);
+    await assert.rejects(
+      f.service.approve(j.id, {
+        specVersion: j.specVersion,
+        artifactSha256: j.artifact.sha256,
+      }),
+      /cannot be reapproved/,
+    );
+    await assert.rejects(f.service.revise(j.id, spec, j.artifact), /cancelled/);
+    await assert.rejects(f.service.quote(j.id), /active order/);
+    assert.equal((await f.service.job(j.id)).productionState, "cancelled");
+    assert.equal(
+      (await f.service.read()).machines.phomemo_01.reservation,
+      undefined,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("replaying an older calibration resolution cannot clear a newer execution", async () => {
+  const f = fixture();
+  try {
+    const calibrationArtwork = await draft(f, "team_owner");
+    const calibration = await f.service.startCalibration(
+      "phomemo_01",
+      "team_owner",
+      spec,
+      calibrationArtwork.artifact,
+      "old-calibration-resolution",
+      true,
+    );
+    await f.service.resolveCalibration("phomemo_01", {
+      attemptId: calibration.attemptId,
+      inspected: true,
+      result: "failed",
+      reason: "Owner inspected failed calibration and cleared its paper path",
+    });
+    const next = await paid(f);
+    await f.service.dispatch(next.id);
+    const before = (await f.service.read()).machines.phomemo_01;
+    await assert.rejects(
+      f.service.resolveCalibration("phomemo_01", {
+        attemptId: calibration.attemptId,
+        inspected: true,
+        result: "failed",
+        reason: "Stale repeated inspection from an older calibration screen",
+      }),
+      /no longer the active/,
+    );
+    assert.deepEqual((await f.service.read()).machines.phomemo_01, before);
+    assert.equal(before.activeJobId, next.id);
+  } finally {
+    f.close();
+  }
+});
+
+test("a stale content inspection cannot authorize a newly revised unclear specification", async () => {
+  const f = fixture();
+  let unblock!: () => void;
+  try {
+    const j = await draft(f, "r1", { permission: "unclear" });
+    const original = f.service.job.bind(f.service);
+    let enter!: () => void,
+      armed = true;
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    f.service.job = async (id, actor) => {
+      const snapshot = await original(id, actor);
+      if (armed) {
+        armed = false;
+        enter();
+        await gate;
+      }
+      return snapshot;
+    };
+    const reviewing = f.service.operatorReview(
+      j.id,
+      "pass",
+      "Owner inspected permission for the original artwork",
+    );
+    await entered;
+    await f.service.revise(
+      j.id,
+      { ...spec, permission: "unclear", quantity: 2 },
+      j.artifact,
+    );
+    const rejected = assert.rejects(reviewing, /no longer current/);
+    unblock();
+    await rejected;
+    const final = await f.service.job(j.id);
+    assert.equal(final.specVersion, 2);
+    assert.equal(final.spec.quantity, 2);
+    assert.equal(final.spec.permission, "unclear");
+    assert.equal(final.productionState, "needs_review");
+    assert.equal(final.approvedSpecHash, undefined);
+  } finally {
+    unblock?.();
+    f.close();
+  }
+});
+
+test("authenticated calibration revocation clears stale inspection provenance and prevents stale resume", async () => {
+  for (const calibrated of [false, undefined]) {
+    const f = fixture();
+    try {
+      const j = await draft(f);
+      const inspectionAt = now();
+      await mutate(f.store, (s) => {
+        s.machines.phomemo_01.calibrationAt = inspectionAt;
+      });
+      f.service.node.call = async () => ({
+        ready: false,
+        ...(calibrated === undefined ? {} : { calibrated }),
+        reason:
+          "Device or camera configuration changed; physical calibration required",
+      });
+      await f.service.probeAvailability();
+      const machine = (await f.service.read()).machines.phomemo_01;
+      assert.equal(machine.ready, false);
+      assert.equal(machine.paused, true);
+      assert.equal(machine.calibrated, calibrated === false ? false : true);
+      assert.equal(
+        machine.calibrationAt,
+        calibrated === false ? undefined : inspectionAt,
+      );
+      await f.service.approve(j.id, {
+        specVersion: j.specVersion,
+        artifactSha256: j.artifact.sha256,
+      });
+      await assert.rejects(f.service.quote(j.id), /No ready machine/);
+    } finally {
+      f.close();
+    }
   }
 });

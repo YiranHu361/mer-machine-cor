@@ -84,3 +84,33 @@ test('standard x402 header codecs round-trip payload and emit only confirmed set
  assert.deepEqual(JSON.parse(Buffer.from(header!,'base64').toString()),{success:true,transaction:hash,network:'eip155:84532',payer,amount:'250000'});
  assert.equal(x402PaymentResponseHeader({...receipt,status:'pending'}),undefined);assert.equal(x402PaymentResponseHeader({...receipt,mode:'mock'}),undefined);assert.equal(x402PaymentResponseHeader({...receipt,kind:'release'}),undefined);
 });
+
+test('failed initial durable collection checkpoint cannot submit a settlement',async()=>{
+ const {adapter,settlements}=setup();
+ const operation=await payload(adapter,op());
+ operation.onSubmitted=async()=>{throw new Error('fixture store offline');};
+ await assert.rejects(()=>adapter.collect(operation),/fixture store offline/);
+ assert.equal(settlements(),0);
+});
+
+test('lost second collection checkpoint preserves the known settlement hash',async()=>{
+ const {adapter,settlements}=setup();
+ const operation=await payload(adapter,op());
+ let checkpoints=0;
+ operation.onSubmitted=async receipt=>{if(++checkpoints===2){assert.equal(receipt.transactionHash,hash);throw new Error('fixture store offline');}};
+ const result=await adapter.collect(operation);
+ assert.equal(result.status,'pending');
+ assert.equal(result.transactionHash,hash);
+ assert.match(result.reason!,/durable checkpoint/);
+ assert.equal(settlements(),1);
+});
+
+test('failed release checkpoint cannot broadcast and unknown broadcast keeps exact hash',async()=>{
+ let broadcasts=0;
+ const wallet={account:{address:treasury},prepareTransactionRequest:async()=>({}),signTransaction:async()=>('0x01')};
+ const {adapter}=setup({options:{walletClient:wallet},rpc:{sendRawTransaction:async()=>{broadcasts++;throw new Error('fixture lost broadcast response');}}});
+ await assert.rejects(()=>adapter.release({...op(),ownerAddress:owner,onSubmitted:async()=>{throw new Error('fixture store offline');}}),/fixture store offline/);
+ assert.equal(broadcasts,0);
+ const submitted=await adapter.release({...op(),ownerAddress:owner});
+ assert.equal(submitted.status,'pending');assert.match(submitted.transactionHash!,/^0x[0-9a-f]{64}$/);assert.equal(broadcasts,1);
+});

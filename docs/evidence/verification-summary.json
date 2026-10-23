@@ -1,16 +1,17 @@
 {
-  "recordedAt": "2026-10-23T06:33:41.388477+00:00",
-  "localTime": "2026-10-22T23:33:41.388477-07:00",
-  "sourceStateSha256": "df79eeaa51dc73755f3b807324d1c4cfbe8d977ef7911625d0c05ea7fa9889e2",
+  "recordedAt": "2026-10-23T07:40:53.999Z",
+  "sourceStateSha256": "85a2ce5f44d36ab43f3daab7ee22914d40fd539fba1d2b4f86d082219f4d0c33",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 37,
-    "node": 45,
-    "paymentClaudeFixtures": 19,
+    "backendApplicationAndProcessRecovery": 53,
+    "node": 65,
+    "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserWalletUnit": 8,
-    "actualApplicationBrowser": 3,
-    "apiFixtureBrowser": 2,
+    "browserScenarios": 17,
+    "browserEngines": 3,
+    "uniqueTestCases": 173,
+    "testExecutionsIncludingThreeEngines": 207,
     "failedFinalTests": 0,
     "skippedFinalTests": 0
   },
@@ -28,9 +29,13 @@
   "liveClaudeCalls": 0,
   "asiOneDiscovery": "NOT_TESTED",
   "logHashes": {
-    ".data/backend-final.log": "ae9c6e2c1ed48d2832dbd6bdedaf87107734e3b4cf9fe383006d6ba6858de203",
-    ".data/final-checks.log": "2e3def643be7ae51ece95f24bd1f6219ef5bad533f1cb0f9e63d84ff8a9e5893",
-    "web/evidence/final-browser-report.json": "ecf64e333e95e07e3ca2f5b8c3a43e8b20e910ad88c9a3010c72d53d975c2d57"
+    ".data/overnight-software-check.log": "ec4c0aef4bb05992a4ca9be3a8c5931cb10ac8707f35788ce108b1bba2d08389",
+    ".data/overnight-web-build.log": "23321965f8f6ac40986d2dbc75c9b42d3bd00a35ce4e3c6a3e10ed687cd93130",
+    ".data/overnight-software-acceptance.log": "6324e5ed8b264dbdc16fa9644c937c47d8610dedcff63d34d3bd3960660f5c92",
+    ".data/overnight-calibration.log": "1ba93b928382ba61eaf119839e669be4399500aad487fd7e58875396f0442b22",
+    ".data/overnight-spacetime.log": "f0beb4094db037f89605e1cb61a8becb5f24e7bbb3127e89f16ce0c8ffaec7a7",
+    ".data/overnight-fetch-local.log": "f7c2b4537c093888fe5b699f96ceb2e8d958f05bcb2282f46af67717697df8f3"
   },
-  "notes": "Final post-test source normalization removed trailing empty lines in generated bindings only; no executable behavior changed."
+  "notes": "October 23 overnight verified checkpoint; further scheduled audits continue until 9 a.m. Pacific. See overnight-qa.json for per-engine evidence and scope.",
+  "localTimeZone": "America/Los_Angeles"
 }

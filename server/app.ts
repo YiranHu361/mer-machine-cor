@@ -88,6 +88,7 @@ export function createApp(
   );
   app.use(express.json({ limit: "100kb" }));
   app.use((req, res, next) => {
+    req.body ??= {};
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
     res.setHeader("Cache-Control", "no-store");
@@ -208,12 +209,11 @@ export function createApp(
     );
     if (role === "owner") {
       const provided = String(req.body.accessCode ?? "");
+      const providedBytes = Buffer.from(provided),
+        expectedBytes = Buffer.from(service.config.ownerCode);
       const valid =
-        provided.length === service.config.ownerCode.length &&
-        timingSafeEqual(
-          Buffer.from(provided),
-          Buffer.from(service.config.ownerCode),
-        );
+        providedBytes.length === expectedBytes.length &&
+        timingSafeEqual(providedBytes, expectedBytes);
       requireThat(
         valid,
         "ACCESS_CODE",
@@ -338,50 +338,61 @@ export function createApp(
     );
     await mkdir(join(service.config.dataDir, "assets"), { recursive: true });
     const assets: Asset[] = [];
-    for (const f of files) {
-      requireThat(
-        ["image/png", "image/jpeg", "image/webp"].includes(f.mimetype),
-        "IMAGE_TYPE",
-        "Only PNG, JPEG and WebP artwork is supported.",
-        422,
-      );
-      const assetId = id("asset"),
-        path = join(service.config.dataDir, "assets", assetId);
-      await writeFile(path, f.buffer);
-      try {
-        const { stdout } = await exec(
-          "uv",
-          [
-            "run",
-            "--project",
-            resolve("node"),
-            "python",
-            "-c",
-            'import sys,json; from PIL import Image; Image.MAX_IMAGE_PIXELS=20000000; im=Image.open(sys.argv[1]); im.load(); assert im.format in ["PNG","JPEG","WEBP"]; print(json.dumps({"width":im.width,"height":im.height}))',
-            path,
-          ],
-          { timeout: 30000, maxBuffer: 50000 },
-        );
-        const dimensions = JSON.parse(stdout);
-        assets.push({
-          id: assetId,
-          ownerId: a.id,
-          path,
-          url: `/assets/${assetId}`,
-          sha256: createHash("sha256").update(f.buffer).digest("hex"),
-          mime: f.mimetype,
-          width: dimensions.width,
-          height: dimensions.height,
-          createdAt: now(),
-        });
-      } catch {
-        await unlink(path).catch(() => {});
-        throw new Problem(
-          "INVALID_IMAGE",
-          "This image cannot be decoded safely. Use a smaller PNG, JPEG or WebP.",
+    const stagedPaths: string[] = [];
+    try {
+      for (const f of files) {
+        requireThat(
+          ["image/png", "image/jpeg", "image/webp"].includes(f.mimetype),
+          "IMAGE_TYPE",
+          "Only PNG, JPEG and WebP artwork is supported.",
           422,
         );
+        const assetId = id("asset"),
+          path = join(service.config.dataDir, "assets", assetId);
+        stagedPaths.push(path);
+        await writeFile(path, f.buffer);
+        try {
+          const { stdout } = await exec(
+            "uv",
+            [
+              "run",
+              "--project",
+              resolve("node"),
+              "python",
+              "-c",
+              'import sys,json; from PIL import Image; Image.MAX_IMAGE_PIXELS=20000000; im=Image.open(sys.argv[1]); im.load(); assert im.format in ["PNG","JPEG","WEBP"]; print(json.dumps({"width":im.width,"height":im.height,"mime":{"PNG":"image/png","JPEG":"image/jpeg","WEBP":"image/webp"}[im.format]}))',
+              path,
+            ],
+            { timeout: 30000, maxBuffer: 50000 },
+          );
+          const dimensions = JSON.parse(stdout);
+          assets.push({
+            id: assetId,
+            ownerId: a.id,
+            path,
+            url: `/assets/${assetId}`,
+            sha256: createHash("sha256").update(f.buffer).digest("hex"),
+            mime: dimensions.mime,
+            width: dimensions.width,
+            height: dimensions.height,
+            createdAt: now(),
+          });
+        } catch {
+          await unlink(path).catch(() => {});
+          throw new Problem(
+            "INVALID_IMAGE",
+            "This image cannot be decoded safely. Use a smaller PNG, JPEG or WebP.",
+            422,
+          );
+        }
       }
+    } catch (error) {
+      // An upload batch is all-or-nothing. Remove earlier decoded files too
+      // when a later member fails, rather than leaving unowned artwork behind.
+      await Promise.all(
+        stagedPaths.map((path) => unlink(path).catch(() => {})),
+      );
+      throw error;
     }
     await mutate(service.store, (s) => {
       for (const asset of assets) s.assets[asset.id] = asset;
@@ -496,9 +507,11 @@ export function createApp(
     const a = await owned(req);
     const old = await service.job(String(req.params.id));
     requireThat(
-      old.paymentState === "unpaid" && !old.attemptId,
+      old.paymentState === "unpaid" &&
+        !old.attemptId &&
+        old.productionState !== "cancelled",
       "LOCKED",
-      "Paid or dispatched orders cannot change.",
+      "Cancelled, paid or dispatched orders cannot change.",
     );
     res.json({
       job: view(
@@ -611,27 +624,22 @@ export function createApp(
       404,
     );
     const m = (await service.read()).machines[j.machineId!];
-    const u = new URL(frameUrl, m.nodeUrl ?? service.config.nodeUrl);
     requireThat(
-      u.origin === new URL(m.nodeUrl ?? service.config.nodeUrl).origin,
-      "INVALID_FRAME",
-      "Frame reference is outside the configured node.",
-      403,
-    );
-    const response = await fetch(u, {
-      headers: {
-        Authorization: `Bearer ${process.env.FABRARY_NODE_KEY ?? ""}`,
-      },
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-    });
-    requireThat(
-      response.ok,
+      service.node.fetchFrame,
       "FRAME_UNAVAILABLE",
-      "The recorded frame cannot be loaded.",
+      "The recorded frame cannot be loaded. Ask the owner to check the camera node.",
       502,
     );
-    res.type("png").send(Buffer.from(await response.arrayBuffer()));
+    try {
+      const bytes = await service.node.fetchFrame(frameUrl, m);
+      res.type("png").send(bytes);
+    } catch {
+      throw new Problem(
+        "FRAME_UNAVAILABLE",
+        "The recorded frame cannot be loaded. Ask the owner to check the camera node.",
+        502,
+      );
+    }
   });
   app.get("/assets/:id", async (req, res) => {
     const assetId = String(req.params.id),
@@ -647,7 +655,7 @@ export function createApp(
       Number.isFinite(expires) &&
       expires >= Date.now() / 1000 &&
       expires <= Date.now() / 1000 + 600 &&
-      sig.length === expected.length &&
+      /^[0-9a-f]{64}$/i.test(sig) &&
       timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
     if (!signed) {
       const a = await actor(req);
@@ -796,7 +804,11 @@ export function createApp(
       }
       if (body.priceCard) {
         for (const j of Object.values(s.jobs).filter(
-          (j) => j.machineId === m.id && j.paymentState === "unpaid" && j.quote,
+          (j) =>
+            j.machineId === m.id &&
+            j.paymentState === "unpaid" &&
+            j.productionState !== "cancelled" &&
+            j.quote,
         )) {
           delete j.quote;
           delete j.approvedSpecHash;
@@ -863,7 +875,8 @@ export function createApp(
       "Capture a calibration result frame first.",
       404,
     );
-    res.type("png").send(await service.node.fetchFrame(c.evidence.url, m));
+    const bytes = await service.node.fetchFrame(c.evidence.url, m);
+    res.type("png").send(bytes);
   });
   app.post("/api/owner/machines/:id/calibration/resolve", async (req, res) => {
     await owner(req);
@@ -888,6 +901,22 @@ export function createApp(
       "INSPECTION_REQUIRED",
       "Inspect calibration output before confirming calibration.",
     );
+    const sameAttempt = (current: Machine) =>
+      current.activeJobId === m.activeJobId && !current.reservation;
+    // Remove availability before contacting the node so a quote cannot reserve
+    // the machine while its calibration confirmation is still in flight.
+    await mutate(service.store, (s) => {
+      const current = s.machines[m.id];
+      requireThat(
+        sameAttempt(current),
+        "MACHINE_BUSY",
+        "The machine changed during calibration. Refresh before confirming it.",
+      );
+      current.calibrated = false;
+      current.ready = false;
+      current.paused = true;
+      current.reason = "Owner calibration confirmation is in progress.";
+    });
     let result;
     try {
       result = await service.node.call(
@@ -904,6 +933,7 @@ export function createApp(
       );
     } catch (e) {
       await mutate(service.store, (s) => {
+        if (!sameAttempt(s.machines[m.id])) return;
         s.machines[m.id].calibrated = false;
         s.machines[m.id].paused = true;
         s.machines[m.id].ready = false;
@@ -914,6 +944,7 @@ export function createApp(
     if (result.calibrated !== true) {
       await mutate(service.store, (s) => {
         const m = s.machines[String(req.params.id)];
+        if (!sameAttempt(m)) return;
         m.calibrated = false;
         m.ready = false;
         m.paused = true;
@@ -929,6 +960,11 @@ export function createApp(
     }
     const machine = await mutate(service.store, (s) => {
       const m = s.machines[String(req.params.id)];
+      requireThat(
+        sameAttempt(m),
+        "MACHINE_BUSY",
+        "The machine moved to another attempt during calibration. Refresh before confirming it.",
+      );
       m.calibrated = true;
       m.calibrationAt = now();
       m.activeJobId = null;

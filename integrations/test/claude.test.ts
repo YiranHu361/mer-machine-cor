@@ -10,3 +10,25 @@ test('vision pass requires explicit usable, visible and matching observations',(
 test('stale frame or absent completion cannot call provider or pass',async()=>{let calls=0;const provider=new ClaudeProvider({apiKey:'unit-test-only',fetch:(async()=>{calls++;throw new Error('must not call');}) as typeof fetch});const input={approvedArtifact:image,resultFrame:{...image,bytes:Buffer.from('camera')},capturedAt:new Date(Date.now()-300_000).toISOString(),completionCredible:true,jobId:'j1',machineId:'m1'};assert.equal((await provider.verifyOutput(input)).result,'review');assert.equal((await provider.verifyOutput({...input,capturedAt:new Date().toISOString(),completionCredible:false})).result,'review');assert.equal(calls,0);});
 test('Messages API contains real image blocks and parses response',async()=>{let body:any;const provider=new ClaudeProvider({apiKey:'unit-test-only',fetch:(async(url,init)=>{assert.equal(url,'https://api.anthropic.com/v1/messages');body=JSON.parse(String(init?.body));return new Response(JSON.stringify({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify(draft)}]}),{status:200});}) as typeof fetch});const result=await provider.draftIntake({intent:'Club sticker',images:[image]});assert.equal(result.model,DEFAULT_CLAUDE_MODEL);assert.ok(body.messages[0].content.some((v:any)=>v.type==='image'&&v.source.type==='base64'));assert.equal(body.temperature,undefined);});
 test('missing Claude key is a specific blocked prerequisite',()=>{assert.throws(()=>new ClaudeProvider({apiKey:''}),/ANTHROPIC_API_KEY/);});
+
+test('identical baseline and result cannot call Claude or authorize release',async()=>{
+ let calls=0;
+ const provider=new ClaudeProvider({apiKey:'unit-test-only',fetch:(async()=>{calls++;throw new Error('must not call');}) as typeof fetch});
+ const frame={...image,bytes:Buffer.from('same camera frame')};
+ const result=await provider.verifyOutput({approvedArtifact:image,baselineFrame:frame,resultFrame:frame,capturedAt:new Date().toISOString(),completionCredible:true,jobId:'j1',machineId:'m1'});
+ assert.equal(result.result,'review');assert.match(result.reason,/baseline/);assert.equal(calls,0);
+});
+
+test('vision invalid images, service failures, and incomplete responses require review',async()=>{
+ for (const response of [new Response('unavailable',{status:503}),new Response(JSON.stringify({stop_reason:'max_tokens',content:[]}),{status:200}),new Response('{invalid',{status:200})]) {
+  const provider=new ClaudeProvider({apiKey:'unit-test-only',fetch:(async()=>response) as typeof fetch});
+  const input={approvedArtifact:image,resultFrame:{...image,bytes:Buffer.from('camera')},capturedAt:new Date().toISOString(),completionCredible:true,jobId:'j1',machineId:'m1'};
+  assert.equal((await provider.verifyOutput(input)).result,'review');
+  assert.equal((await provider.verifyOutput({...input,resultFrame:{...image,bytes:Buffer.alloc(0)}})).result,'review');
+ }
+});
+
+test('contradictory visible matching output cannot produce an automatic failure',()=>{
+ const result=parseVisionResult(JSON.stringify({result:'fail',reason:'Output visibly matches the approved artwork',usableFrame:true,visibleOutput:true,matchesApproved:true}));
+ assert.equal(result.result,'review');
+});

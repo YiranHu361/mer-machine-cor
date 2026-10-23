@@ -1,0 +1,790 @@
+{
+  "config": {
+    "argv": [
+      "/opt/homebrew/Cellar/node/25.8.1_1/bin/node",
+      "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/node_modules/.bin/playwright",
+      "test"
+    ],
+    "configFile": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/playwright.config.ts",
+    "rootDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "snapshotDir": "/Users/yiranhu/.codex/.chatgpt-projects/g-p-6adab9c94f2081919df83b087229aa25/fabrary/web/tests",
+        "testIgnore": [],
+        "testMatch": "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+        "timeout": 90000,
+        "use": {
+          "browserName": "firefox",
+          "baseURL": "http://127.0.0.1:4318",
+          "trace": "off",
+          "actionTimeout": 20000,
+          "navigationTimeout": 20000,
+          "screenshot": "only-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "evidence/overnight-firefox-browser.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "accessibility.spec.ts",
+      "file": "accessibility.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "requester intake and production preview pass accessibility and 320px reflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2719,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:23.423Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "requester-intake-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItaW50YWtlLTMyMCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMwp9"
+                    },
+                    {
+                      "name": "requester-intake-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItaW50YWtlLTE0NDAiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjMKfQ=="
+                    },
+                    {
+                      "name": "requester-preview-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItcHJldmlldy0zMjAiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjEKfQ=="
+                    },
+                    {
+                      "name": "requester-preview-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJyZXF1ZXN0ZXItcHJldmlldy0xNDQwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDIxCn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-d6b8d17090358c316e83",
+          "file": "accessibility.spec.ts",
+          "line": 62,
+          "column": 1
+        },
+        {
+          "title": "owner login and every dashboard tab pass accessibility and narrow reflow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4152,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:26.559Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "owner-login-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1sb2dpbiIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMAp9"
+                    },
+                    {
+                      "name": "owner-login-mobile-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1sb2dpbi1tb2JpbGUiLAogICJ2aW9sYXRpb25zIjogW10sCiAgInJ1bGVzUGFzc2VkIjogMjAKfQ=="
+                    },
+                    {
+                      "name": "owner-orders-handling-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1vcmRlcnMtaGFuZGxpbmctMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDI4Cn0="
+                    },
+                    {
+                      "name": "owner-orders-handling-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1vcmRlcnMtaGFuZGxpbmctMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyOAp9"
+                    },
+                    {
+                      "name": "owner-machines-policy-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1tYWNoaW5lcy1wb2xpY3ktMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDI3Cn0="
+                    },
+                    {
+                      "name": "owner-machines-policy-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1tYWNoaW5lcy1wb2xpY3ktMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyNwp9"
+                    },
+                    {
+                      "name": "owner-payment-records-320-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1wYXltZW50LXJlY29yZHMtMzIwIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDIyCn0="
+                    },
+                    {
+                      "name": "owner-payment-records-1440-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJvd25lci1wYXltZW50LXJlY29yZHMtMTQ0MCIsCiAgInZpb2xhdGlvbnMiOiBbXSwKICAicnVsZXNQYXNzZWQiOiAyMgp9"
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-f3fe3d6dac392752f534",
+          "file": "accessibility.spec.ts",
+          "line": 114,
+          "column": 1
+        },
+        {
+          "title": "initial service failure has an accessible retry and recovers without reloading",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 461,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:30.715Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "service-unavailable-accessibility",
+                      "contentType": "application/json",
+                      "body": "ewogICJzdGF0ZSI6ICJzZXJ2aWNlLXVuYXZhaWxhYmxlIiwKICAidmlvbGF0aW9ucyI6IFtdLAogICJydWxlc1Bhc3NlZCI6IDE5Cn0="
+                    }
+                  ]
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "ddd864604af8a6a0198f-c9984caed529caf58a30",
+          "file": "accessibility.spec.ts",
+          "line": 161,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "owner-records.spec.ts",
+      "file": "owner-records.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "owner recovery forms validate references and submit measured trial records (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 420,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:31.187Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-d774aa7ef0fa88f9f5ef",
+          "file": "owner-records.spec.ts",
+          "line": 3,
+          "column": 1
+        },
+        {
+          "title": "requester specification suggestions preserve approval and manual fallback (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 361,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:31.611Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-7c74ce0b60ef5dd6cd45",
+          "file": "owner-records.spec.ts",
+          "line": 239,
+          "column": 1
+        },
+        {
+          "title": "owner queue finds actionable orders, keeps history and supports keyboard views at narrow widths (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 483,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:31.976Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-e76e00d0b539b71fd2d2",
+          "file": "owner-records.spec.ts",
+          "line": 411,
+          "column": 1
+        },
+        {
+          "title": "a clear owner counter keeps archived orders reachable through finite pages and search (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 276,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:32.467Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-10dcbd0d0a1be2dd4dc2",
+          "file": "owner-records.spec.ts",
+          "line": 550,
+          "column": 1
+        },
+        {
+          "title": "requester identity changes discard private artwork, drafts and saved order selection (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2845,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:32.747Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-1e12d5513883f7ad5e2e",
+          "file": "owner-records.spec.ts",
+          "line": 638,
+          "column": 1
+        },
+        {
+          "title": "late upload results from an expired requester cannot restore private state (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3067,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:35.595Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-553321c6cc02fa477f09",
+          "file": "owner-records.spec.ts",
+          "line": 817,
+          "column": 3
+        },
+        {
+          "title": "late create results from an expired requester cannot restore private state (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3228,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:38.667Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6aa0c0cc3a01621fc899-146085626cfc56c283f3",
+          "file": "owner-records.spec.ts",
+          "line": 817,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "resilience.spec.ts",
+      "file": "resilience.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "invalid and failed uploads preserve the form and allow a deliberate retry (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 207,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:41.902Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-0cbd3510de8ee1df02bd",
+          "file": "resilience.spec.ts",
+          "line": 96,
+          "column": 1
+        },
+        {
+          "title": "a failed production image blocks approval and has a working preview retry (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 242,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:42.112Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-b9e7e81da6781a533509",
+          "file": "resilience.spec.ts",
+          "line": 167,
+          "column": 1
+        },
+        {
+          "title": "an older receipt response never appears on a newly selected order (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 391,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:42.359Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-9585787c0467b917c18d",
+          "file": "resilience.spec.ts",
+          "line": 207,
+          "column": 1
+        },
+        {
+          "title": "an expired owner session clears private dashboard data and offers sign-in (UI fixture)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3598,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:42.753Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c1cdccb29e536012e9c2-2b03a2c1a6a17d86b0a4",
+          "file": "resilience.spec.ts",
+          "line": 263,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "workflow.spec.ts",
+      "file": "workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "requester and owner complete an honest simulated order, independent handling, refund and pickup",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4561,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:46.360Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-05d3a4df0e3481a3dc39",
+          "file": "workflow.spec.ts",
+          "line": 5,
+          "column": 1
+        },
+        {
+          "title": "intake validates specifications, review returns to approval, and expired/offline states recover",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3313,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:50.925Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-28bdb19b3e325145217e",
+          "file": "workflow.spec.ts",
+          "line": 293,
+          "column": 1
+        },
+        {
+          "title": "live subscription updates the open owner dashboard with polling disabled",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 694,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T07:38:54.242Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c601ceb5ecfc8efa4a14-121331f264c95c8918d3",
+          "file": "workflow.spec.ts",
+          "line": 467,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-23T07:38:23.081Z",
+    "duration": 32033.233,
+    "expected": 17,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
