@@ -130,15 +130,13 @@ async function reflow(page: Page, label: string) {
   ).toBeLessThanOrEqual(dimensions.viewport + 1);
 }
 async function readable(page: Page, selector: string, label: string) {
-  const sizes = await page
-    .locator(selector)
-    .evaluateAll((elements) =>
-      elements.map((element) => ({
-        text: element.textContent?.slice(0, 80),
-        content: element.scrollWidth,
-        visible: element.clientWidth,
-      })),
-    );
+  const sizes = await page.locator(selector).evaluateAll((elements) =>
+    elements.map((element) => ({
+      text: element.textContent?.slice(0, 80),
+      content: element.scrollWidth,
+      visible: element.clientWidth,
+    })),
+  );
   expect(sizes.length, label + " must be present").toBeGreaterThan(0);
   for (const size of sizes)
     expect(size.content, `${label}: ${size.text}`).toBeLessThanOrEqual(
@@ -320,6 +318,7 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
       exact: true,
     }),
   ).toBeVisible();
+  let settingsVisited = false;
   for (const viewport of [
     { width: 390, height: 664 },
     { width: 844, height: 320 },
@@ -346,9 +345,16 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
       .getByRole("tab", { name: "Machines & policy", exact: true })
       .tap();
     await readable(page, ".machine-reason", "The entire saved machine reason");
-    await page
-      .getByText("Media, prices, hours & policy", { exact: true })
-      .tap();
+    const settings = page.locator(".machine-settings");
+    if (!settingsVisited) {
+      await settings
+        .getByText("Media, prices, hours & policy", { exact: true })
+        .tap();
+      settingsVisited = true;
+    } else {
+      // Owner panels now preserve drafts and disclosure state across views.
+      await expect(settings).toHaveAttribute("open", "");
+    }
     await expect(
       page.getByLabel("Collection point", { exact: true }),
     ).toBeVisible();
@@ -362,5 +368,10 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
       .getByRole("tab", { name: "Orders & handling", exact: true })
       .tap();
   }
+  await page.getByRole("tab", { name: "Machines & policy", exact: true }).tap();
+  await page.getByText("Media, prices, hours & policy", { exact: true }).tap();
+  await expect(
+    page.getByLabel("Collection point", { exact: true }),
+  ).toBeHidden();
   await context.close();
 });

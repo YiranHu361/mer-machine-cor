@@ -34,7 +34,13 @@ export class SqliteStore implements Store {
       )
       .run(JSON.stringify(data), version);
     if (r.changes) {
-      for (const fn of this.listeners) fn();
+      // Notifications cannot turn a committed write into an apparent failure.
+      // One disconnected consumer must not suppress the remaining consumers.
+      for (const fn of [...this.listeners]) {
+        try {
+          fn();
+        } catch {}
+      }
       return true;
     }
     return false;
@@ -52,13 +58,35 @@ export class SqliteStore implements Store {
 export async function mutate<T>(
   store: Store,
   fn: (state: State) => T,
+  options: { onNotCommitted?: () => void | Promise<void> } = {},
 ): Promise<T> {
-  for (let retry = 0; retry < 25; retry++) {
-    const s = await store.read();
-    const result = fn(s.data);
-    if (await store.compareAndSet(s.version, s.data)) return result;
+  let commitOutcomeUncertain = false;
+  try {
+    for (let retry = 0; retry < 25; retry++) {
+      const s = await store.read();
+      const result = fn(s.data);
+      let committed;
+      try {
+        committed = await store.compareAndSet(s.version, s.data);
+      } catch (error) {
+        // A remote reducer can commit after its response is lost. Neither a
+        // thrown write nor a subsequent stale read proves it safe to clean up.
+        commitOutcomeUncertain = true;
+        throw error;
+      }
+      if (committed) return result;
+    }
+    throw new Error(
+      "Concurrent state changes exceeded retry limit; retry the request.",
+    );
+  } catch (error) {
+    if (!commitOutcomeUncertain) {
+      try {
+        await options.onNotCommitted?.();
+      } catch {
+        // Cleanup is best effort and must preserve the original failure.
+      }
+    }
+    throw error;
   }
-  throw new Error(
-    "Concurrent state changes exceeded retry limit; retry the request.",
-  );
 }

@@ -35,6 +35,9 @@ import {
   type Job,
 } from "./model.ts";
 const exec = promisify(execFile);
+const removeFiles = async (paths: string[]) => {
+  await Promise.all(paths.map((path) => unlink(path).catch(() => {})));
+};
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024, files: 4, fields: 4 },
@@ -73,6 +76,7 @@ const machineSchema = z
     ownerAddress: z
       .string()
       .regex(/^0x[0-9a-fA-F]{40}$/)
+      .nullable()
       .optional(),
   })
   .strict();
@@ -394,14 +398,16 @@ export function createApp(
     } catch (error) {
       // An upload batch is all-or-nothing. Remove earlier decoded files too
       // when a later member fails, rather than leaving unowned artwork behind.
-      await Promise.all(
-        stagedPaths.map((path) => unlink(path).catch(() => {})),
-      );
+      await removeFiles(stagedPaths);
       throw error;
     }
-    await mutate(service.store, (s) => {
-      for (const asset of assets) s.assets[asset.id] = asset;
-    });
+    await mutate(
+      service.store,
+      (s) => {
+        for (const asset of assets) s.assets[asset.id] = asset;
+      },
+      { onNotCommitted: () => removeFiles(stagedPaths) },
+    );
     res
       .status(201)
       .json({ assets: assets.map(({ path, ownerId, ...asset }) => asset) });
@@ -444,44 +450,58 @@ export function createApp(
     const source = s.assets[spec.assetIds[0]];
     const assetId = id("preview"),
       path = join(service.config.dataDir, "assets", assetId + ".png");
-    await exec(
-      "uv",
-      [
-        "run",
-        "--project",
-        resolve("node"),
-        "fabrary-prepare",
-        source.path,
-        path,
-        "--output-type",
-        spec.outputType,
-        "--width-mm",
-        String(spec.widthMm),
-        "--height-mm",
-        String(spec.heightMm),
-        "--crop",
-        spec.crop,
-        ...spec.assetIds.slice(1).flatMap((a) => ["--extra", s.assets[a].path]),
-      ],
-      { timeout: 30000, maxBuffer: 50000 },
-    );
-    const bytes = await readFile(path);
+    let bytes: Buffer;
+    try {
+      await exec(
+        "uv",
+        [
+          "run",
+          "--project",
+          resolve("node"),
+          "fabrary-prepare",
+          source.path,
+          path,
+          "--output-type",
+          spec.outputType,
+          "--width-mm",
+          String(spec.widthMm),
+          "--height-mm",
+          String(spec.heightMm),
+          "--crop",
+          spec.crop,
+          ...spec.assetIds
+            .slice(1)
+            .flatMap((a) => ["--extra", s.assets[a].path]),
+        ],
+        { timeout: 30000, maxBuffer: 50000 },
+      );
+      bytes = await readFile(path);
+    } catch (error) {
+      // No asset registration has started yet, so this unique output is safe
+      // to remove even when the encoder left a partial file before failing.
+      await removeFiles([path]);
+      throw error;
+    }
     const artifact = {
       id: assetId,
       url: `/assets/${assetId}`,
       sha256: createHash("sha256").update(bytes).digest("hex"),
     };
-    await mutate(service.store, (s) => {
-      s.assets[assetId] = {
-        ...artifact,
-        path,
-        mime: "image/png",
-        ownerId,
-        width: 0,
-        height: 0,
-        createdAt: now(),
-      };
-    });
+    await mutate(
+      service.store,
+      (s) => {
+        s.assets[assetId] = {
+          ...artifact,
+          path,
+          mime: "image/png",
+          ownerId,
+          width: 0,
+          height: 0,
+          createdAt: now(),
+        };
+      },
+      { onNotCommitted: () => removeFiles([path]) },
+    );
     return artifact;
   };
   app.post("/api/jobs", async (req, res) => {
@@ -812,15 +832,24 @@ export function createApp(
           "MACHINE_BUSY",
           "Machine started an order during configuration.",
         );
-      const { inspected, cleared, ...patch } = body;
+      const card = body.priceCard;
+      const priceChanged =
+        card !== undefined &&
+        (card.consumables !== m.priceCard.consumables ||
+          card.machine !== m.priceCard.machine ||
+          card.handling !== m.priceCard.handling ||
+          card.platform !== m.priceCard.platform);
+      const { inspected, cleared, ownerAddress, ...patch } = body;
       Object.assign(m, patch);
+      if (ownerAddress === null) delete m.ownerAddress;
+      else if (ownerAddress !== undefined) m.ownerAddress = ownerAddress;
       if (body.paused !== undefined) {
         m.ready = !body.paused;
         m.reason = body.paused
           ? "Paused by owner."
           : "Owner inspected and cleared the machine.";
       }
-      if (body.priceCard) {
+      if (priceChanged) {
         for (const j of Object.values(s.jobs).filter(
           (j) =>
             j.machineId === m.id &&

@@ -164,45 +164,56 @@ test("invalid and failed uploads preserve the form and allow a deliberate retry 
   expect(uploads).toBe(2);
 });
 
-test("a failed production image blocks approval and has a working preview retry (UI fixture)", async ({
-  page,
-}) => {
-  const job = fixtureJob("job_preview", "Preview recovery fixture");
-  job.artifact.url = "/fixture-production-preview.png";
-  let available = false;
-  await page.route("**/fixture-production-preview.png", async (route) => {
-    if (!available)
-      return route.fulfill({ status: 503, body: "Temporarily unavailable" });
-    await route.fulfill({
-      status: 200,
-      contentType: "image/png",
-      body: await readFile(resolve("tests/fixtures/makers.png")),
+for (const failure of ["unavailable", "corrupt"] as const)
+  test(`a ${failure} production image blocks approval and has a working preview retry (UI fixture)`, async ({
+    page,
+  }) => {
+    const job = fixtureJob("job_preview", "Preview recovery fixture");
+    job.artifact.url = "/fixture-production-preview.png";
+    let available = false;
+    await page.route("**/fixture-production-preview.png*", async (route) => {
+      if (!available)
+        return route.fulfill({
+          status: failure === "corrupt" ? 200 : 503,
+          contentType: "image/png",
+          body: "Temporarily unavailable",
+        });
+      await route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: await readFile(resolve("tests/fixtures/makers.png")),
+      });
     });
+    await requesterFixture(page, [job]);
+    await page.goto("/");
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "production preview is unavailable" }),
+    ).toContainText("production preview is unavailable");
+    await expect(
+      page.getByRole("button", {
+        name: "Approve production file",
+        exact: true,
+      }),
+    ).toBeDisabled();
+    available = true;
+    await page
+      .getByRole("button", { name: /retry.*preview|reload.*preview/i })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Approve production file",
+        exact: true,
+      }),
+    ).toBeEnabled();
+    await expect(page.getByAltText(/Actual production preview/)).toBeVisible();
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "production preview is unavailable" }),
+    ).toHaveCount(0);
   });
-  await requesterFixture(page, [job]);
-  await page.goto("/");
-  await expect(
-    page
-      .getByRole("alert")
-      .filter({ hasText: "production preview is unavailable" }),
-  ).toContainText("production preview is unavailable");
-  await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
-  ).toBeDisabled();
-  available = true;
-  await page
-    .getByRole("button", { name: /retry.*preview|reload.*preview/i })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Approve production file", exact: true }),
-  ).toBeEnabled();
-  await expect(page.getByAltText(/Actual production preview/)).toBeVisible();
-  await expect(
-    page
-      .getByRole("alert")
-      .filter({ hasText: "production preview is unavailable" }),
-  ).toHaveCount(0);
-});
 
 test("an older receipt response never appears on a newly selected order (UI fixture)", async ({
   page,

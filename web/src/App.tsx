@@ -16,6 +16,9 @@ import {
   TrialEconomicsForm,
   type TrialEconomics,
 } from "./OwnerRecords";
+import { useOwnerFormGuard } from "./owner-form-guard";
+import { ResultImage, retryImageSource } from "./ResultImage";
+import { OwnerDraftProvider } from "./owner-drafts";
 import {
   readStoredValue,
   writeStoredValue,
@@ -626,7 +629,14 @@ function RequesterApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [spec, setSpec] = useState<Spec>({
+  // Keep empty and incomplete native number input text until submission.
+  // Converting every keystroke turns a cleared field (or "5e") into zero.
+  type SpecDraft = Omit<Spec, "widthMm" | "heightMm" | "quantity"> & {
+    widthMm: number | string;
+    heightMm: number | string;
+    quantity: number | string;
+  };
+  const [spec, setSpec] = useState<SpecDraft>({
     assetIds: [],
     intent: "",
     outputType: "sticker",
@@ -639,15 +649,21 @@ function RequesterApp({
   });
   const [budgetEnabled, setBudgetEnabled] = useState(false);
   const [budget, setBudget] = useState("3.00");
+  const numericSpec: Spec = {
+    ...spec,
+    widthMm: Number(spec.widthMm),
+    heightMm: Number(spec.heightMm),
+    quantity: Number(spec.quantity),
+  };
   const pristineDraft = useRef(spec);
-  const draftSignature = (value: Spec) =>
+  const draftSignature = (value: SpecDraft) =>
     JSON.stringify([
       value.assetIds,
       value.intent,
       value.outputType,
-      value.widthMm,
-      value.heightMm,
-      value.quantity,
+      value.widthMm === "" ? "" : Number(value.widthMm),
+      value.heightMm === "" ? "" : Number(value.heightMm),
+      value.quantity === "" ? "" : Number(value.quantity),
       value.material,
       value.permission,
       value.crop,
@@ -861,9 +877,9 @@ function RequesterApp({
       quantity:
         type === "3d"
           ? 1
-          : type === "instax"
-            ? Math.min(s.quantity, 3)
-            : s.quantity,
+          : Number.isInteger(Number(s.quantity)) && Number(s.quantity) > 0
+            ? Math.min(Number(s.quantity), type === "instax" ? 3 : 10)
+            : 1,
       widthMm: type === "instax" ? 54 : 53,
       heightMm: type === "instax" ? 86 : 50,
       material:
@@ -979,10 +995,18 @@ function RequesterApp({
       );
       return;
     }
-    if (spec.outputType === "3d" && !completePreparedModel(spec)) {
+    if (spec.outputType === "3d" && !completePreparedModel(numericSpec)) {
       setError(
         "This prepared model needs inspected overall dimensions, a single color and an estimated machine time before it can be approved.",
       );
+      return;
+    }
+    if (
+      [numericSpec.widthMm, numericSpec.heightMm, numericSpec.quantity].some(
+        (value) => !Number.isInteger(value) || value <= 0,
+      )
+    ) {
+      setError("Enter positive whole numbers for width, height and quantity.");
       return;
     }
     if (
@@ -992,8 +1016,8 @@ function RequesterApp({
       setError("Set a positive budget cap in dollars.");
       return;
     }
-    const value = {
-      ...spec,
+    const value: Spec = {
+      ...numericSpec,
       budgetMandate: budgetEnabled
         ? { enabled: true as const, capCents: Math.round(Number(budget) * 100) }
         : undefined,
@@ -1226,7 +1250,7 @@ function RequesterApp({
                       parts are not supported. This hardware path is unverified.
                     </Notice>
                     {spec.preparedModelId && (
-                      <PreparedModelFacts details={spec} />
+                      <PreparedModelFacts details={numericSpec} />
                     )}
                     {catalog.length ? (
                       <Field label="Owner-prepared model">
@@ -1390,7 +1414,7 @@ function RequesterApp({
                       disabled={spec.outputType !== "sticker"}
                       value={spec.widthMm}
                       onChange={(e) => {
-                        const widthMm = Number(e.currentTarget.value);
+                        const widthMm = e.currentTarget.value;
                         setSpec((s) => ({
                           ...s,
                           widthMm,
@@ -1407,7 +1431,7 @@ function RequesterApp({
                       disabled={spec.outputType !== "sticker"}
                       value={spec.heightMm}
                       onChange={(e) => {
-                        const heightMm = Number(e.currentTarget.value);
+                        const heightMm = e.currentTarget.value;
                         setSpec((s) => ({
                           ...s,
                           heightMm,
@@ -1430,7 +1454,7 @@ function RequesterApp({
                       step="1"
                       value={spec.quantity}
                       onChange={(e) => {
-                        const quantity = Number(e.currentTarget.value);
+                        const quantity = e.currentTarget.value;
                         setSpec((s) => ({
                           ...s,
                           quantity,
@@ -1791,6 +1815,9 @@ function ProductionPreview({
   const [loadedSource, setLoadedSource] = useState<string | null>(null);
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
+  const [retryKey, setRetryKey] = useState("");
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const previewImage = useRef<HTMLImageElement>(null);
   const failed = Boolean(source && failedSource === source);
   const loading = Boolean(source && loadedSource !== source && !failed);
   return (
@@ -1799,15 +1826,20 @@ function ProductionPreview({
       aria-busy={loading}
     >
       <div className="preview-ruler">{job.spec.widthMm} mm</div>
-      {source && !failed ? (
+      {source && !failed && (
         <div className="production-paper">
           <img
+            ref={previewImage}
+            tabIndex={-1}
             key={`${source}-${retry}`}
-            src={source}
+            src={retryImageSource(source, retryKey)}
             alt={`Actual production preview: ${outputLabels[job.spec.outputType]}, ${job.spec.widthMm} by ${job.spec.heightMm} millimeters`}
             onLoad={() => {
+              const restoreFocus =
+                document.activeElement === retryButton.current;
               setLoadedSource(source);
               onReady(true);
+              if (restoreFocus) previewImage.current?.focus();
             }}
             onError={() => {
               setFailedSource(source);
@@ -1815,16 +1847,23 @@ function ProductionPreview({
             }}
           />
         </div>
-      ) : (
-        <Notice kind="error">
-          The production preview is unavailable. Load it before approving.
+      )}
+      {(!source || failed || (loading && retry > 0)) && (
+        <Notice kind={!source || failed ? "error" : "info"}>
+          {!source || failed
+            ? "The production preview is unavailable. Load it before approving."
+            : "Retrying the production preview. Approval waits for the image to load."}
           {source && (
             <button
+              ref={retryButton}
               className="text-button"
               type="button"
+              aria-disabled={loading}
               onClick={() => {
+                if (loading) return;
                 setFailedSource(null);
                 setLoadedSource(null);
+                setRetryKey(crypto.randomUUID());
                 setRetry((attempt) => attempt + 1);
               }}
             >
@@ -2156,12 +2195,10 @@ function OrderDetail({
             </Badge>
           </div>
           {job.evidence.url ? (
-            <a href={job.evidence.url} target="_blank" rel="noreferrer">
-              <img
-                src={job.evidence.url}
-                alt={`Result evidence for order ${shortId(job.id)}`}
-              />
-            </a>
+            <ResultImage
+              src={job.evidence.url}
+              alt={`Result evidence for order ${shortId(job.id)}`}
+            />
           ) : (
             <Notice>
               No usable result frame was recorded. The owner must inspect this
@@ -2334,6 +2371,13 @@ function OwnerApp({
   const [mode, setMode] = useState("simulation");
   const [nodeUrl, setNodeUrl] = useState("");
   const [tab, setTab] = useState("queue");
+  const [visitedTabs, setVisitedTabs] = useState(["queue"]);
+  const selectTab = (id: string) => {
+    setVisitedTabs((visited) =>
+      visited.includes(id) ? visited : [...visited, id],
+    );
+    setTab(id);
+  };
   const [orderFilter, setOrderFilter] = useState("action");
   const [orderSearch, setOrderSearch] = useState("");
   const [orderPage, setOrderPage] = useState(1);
@@ -2366,23 +2410,19 @@ function OwnerApp({
     };
   }, []);
   const refresh = useCallback(async () => {
-    if (!ownerMounted.current || session?.role !== "owner") return;
+    if (!ownerMounted.current || session?.role !== "owner") return false;
     const request = ++dashboardGate.current.issued;
     try {
       const next = await api<NonNullable<typeof dashboard>>("/owner/dashboard");
-      if (
-        !ownerMounted.current ||
-        !acceptSnapshot(dashboardGate.current, request, next.revision)
-      )
-        return;
+      if (!ownerMounted.current) return false;
+      if (!acceptSnapshot(dashboardGate.current, request, next.revision))
+        return true;
       setDashboard(next);
       setConnected(true);
+      return true;
     } catch (error) {
-      if (
-        !ownerMounted.current ||
-        !currentSnapshotError(dashboardGate.current, request)
-      )
-        return;
+      if (!ownerMounted.current) return false;
+      if (!currentSnapshotError(dashboardGate.current, request)) return true;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
         setDashboard(null);
         setSession(null);
@@ -2391,6 +2431,7 @@ function OwnerApp({
         );
       }
       setConnected(false);
+      return false;
     }
   }, [session]);
   useEffect(() => {
@@ -2418,7 +2459,11 @@ function OwnerApp({
     setMessage("");
     try {
       await fn();
-      await refresh();
+      const refreshed = await refresh();
+      if (!refreshed && ownerMounted.current)
+        setMessage(
+          "The change was accepted, but the latest workshop state could not be loaded. Your entered values are kept; use Refresh before making another change.",
+        );
       return true;
     } catch (e) {
       setError((e as Error).message);
@@ -2570,405 +2615,450 @@ function OwnerApp({
           >
             Open owner workshop
           </Button>
-          {error && <Notice kind="error">{error}</Notice>}
+          {error && (
+            <Notice kind="error" focusOnShow>
+              {error}
+            </Notice>
+          )}
           <small>The access code stays out of the requester interface.</small>
         </form>
       </div>
     );
   return (
-    <div
-      className="owner-workshop"
-      onFocusCapture={(event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
-        const order = target.closest<HTMLElement>("[data-owner-order]");
-        if (order?.dataset.ownerOrder) {
-          focusedOrder.current = { id: order.dataset.ownerOrder, target };
-          setRetainedOrderId(order.dataset.ownerOrder);
-        } else focusedOrder.current = null;
-      }}
+    <OwnerDraftProvider
+      pendingWork={Boolean(busy)}
+      jobIds={jobs
+        .filter(
+          (job) =>
+            job.quote && ["produced", "failed"].includes(job.productionState),
+        )
+        .map((job) => job.id)}
+      paymentJobIds={jobs
+        .filter(
+          (job) =>
+            [
+              "collection_pending",
+              "release_pending",
+              "refund_pending",
+            ].includes(job.paymentState) &&
+            dashboard?.ledger.some(
+              (record) =>
+                record.jobId === job.id &&
+                record.mode === "testnet" &&
+                String(record.status || record.state) === "pending" &&
+                Boolean(record.receipt) &&
+                Boolean(record.id),
+            ),
+        )
+        .map((job) => job.id)}
     >
-      <section className="owner-intro">
-        <div>
-          <p className="quiet">Owner workshop</p>
-          <h1>Keep the counter moving.</h1>
-          <p>Clear a machine after handling. Pickup can happen later.</p>
+      <div
+        className="owner-workshop"
+        onFocusCapture={(event) => {
+          const target = event.target;
+          if (!(target instanceof HTMLElement)) return;
+          const order = target.closest<HTMLElement>("[data-owner-order]");
+          if (order?.dataset.ownerOrder) {
+            focusedOrder.current = { id: order.dataset.ownerOrder, target };
+            setRetainedOrderId(order.dataset.ownerOrder);
+          } else focusedOrder.current = null;
+        }}
+      >
+        <section className="owner-intro">
+          <div>
+            <p className="quiet">Owner workshop</p>
+            <h1>Keep the counter moving.</h1>
+            <p>Clear a machine after handling. Pickup can happen later.</p>
+          </div>
+          <div className="owner-stats">
+            <div>
+              <strong>
+                {machines.filter((m) => m.ready && !m.paused).length}
+              </strong>
+              <span>ready machines</span>
+            </div>
+            <div>
+              <strong>{handling.length}</strong>
+              <span>to prepare</span>
+            </div>
+            <div>
+              <strong>{attention.length}</strong>
+              <span>need review</span>
+            </div>
+          </div>
+        </section>
+        {!connected && (
+          <Notice kind="error">
+            Workshop updates are disconnected. Confirm the service connection
+            before taking an action.{" "}
+            <button className="text-button" onClick={refresh}>
+              Refresh
+            </button>
+          </Notice>
+        )}
+        {error && (
+          <Notice kind="error" focusOnShow>
+            {error}
+          </Notice>
+        )}
+        {message && <Notice kind="success">{message}</Notice>}
+        <div className="owner-tabs" role="tablist" aria-label="Workshop views">
+          {[
+            ["queue", "Orders & handling"],
+            ["machines", "Machines & policy"],
+            ["payments", "Payment records"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              aria-controls={`owner-${id}`}
+              id={`tab-${id}`}
+              tabIndex={tab === id ? 0 : -1}
+              onClick={() => selectTab(id)}
+              onKeyDown={(e) => {
+                if (
+                  ["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)
+                ) {
+                  e.preventDefault();
+                  const list = ["queue", "machines", "payments"];
+                  const next =
+                    e.key === "Home"
+                      ? list[0]
+                      : e.key === "End"
+                        ? list[2]
+                        : list[
+                            (list.indexOf(tab) +
+                              (e.key === "ArrowRight" ? 1 : 2)) %
+                              3
+                          ];
+                  selectTab(next);
+                  document.getElementById(`tab-${next}`)?.focus();
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <div className="owner-stats">
-          <div>
-            <strong>
-              {machines.filter((m) => m.ready && !m.paused).length}
-            </strong>
-            <span>ready machines</span>
-          </div>
-          <div>
-            <strong>{handling.length}</strong>
-            <span>to prepare</span>
-          </div>
-          <div>
-            <strong>{attention.length}</strong>
-            <span>need review</span>
-          </div>
-        </div>
-      </section>
-      {!connected && (
-        <Notice kind="error">
-          Workshop updates are disconnected. Confirm the service connection
-          before taking an action.{" "}
-          <button className="text-button" onClick={refresh}>
-            Refresh
-          </button>
-        </Notice>
-      )}
-      {error && <Notice kind="error">{error}</Notice>}
-      {message && <Notice kind="success">{message}</Notice>}
-      <div className="owner-tabs" role="tablist" aria-label="Workshop views">
-        {[
-          ["queue", "Orders & handling"],
-          ["machines", "Machines & policy"],
-          ["payments", "Payment records"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            aria-controls={`owner-${id}`}
-            id={`tab-${id}`}
-            tabIndex={tab === id ? 0 : -1}
-            onClick={() => setTab(id)}
-            onKeyDown={(e) => {
-              if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) {
-                e.preventDefault();
-                const list = ["queue", "machines", "payments"];
-                const next =
-                  e.key === "Home"
-                    ? list[0]
-                    : e.key === "End"
-                      ? list[2]
-                      : list[
-                          (list.indexOf(tab) +
-                            (e.key === "ArrowRight" ? 1 : 2)) %
-                            3
-                        ];
-                setTab(next);
-                document.getElementById(`tab-${next}`)?.focus();
-              }
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {!dashboard ? (
-        <div className="loading-shell">Loading workshop records…</div>
-      ) : (
-        <>
-          {["queue", "machines", "payments"]
-            .filter((id) => id !== tab)
-            .map((id) => (
-              <div
-                key={id}
-                id={`owner-${id}`}
-                role="tabpanel"
-                aria-labelledby={`tab-${id}`}
-                hidden
-              />
-            ))}
-          <div
-            role="tabpanel"
-            id={`owner-${tab}`}
-            aria-labelledby={`tab-${tab}`}
-          >
-            {tab === "queue" ? (
-              <>
-                <div className="queue-summary">
-                  <h2 ref={queueHeading} tabIndex={-1}>
-                    {active.length
-                      ? "Production in progress"
-                      : handling.length
-                        ? "Items need preparation"
-                        : attention.length
-                          ? "Orders need review"
-                          : jobs.some((job) =>
-                                [
-                                  "collection_pending",
-                                  "release_pending",
-                                  "refund_pending",
-                                ].includes(job.paymentState),
-                              )
-                            ? "Payments need follow-up"
-                            : jobs.some(
+        {!dashboard ? (
+          <div className="loading-shell">Loading workshop records…</div>
+        ) : (
+          <>
+            <div
+              role="tabpanel"
+              id="owner-queue"
+              aria-labelledby="tab-queue"
+              hidden={tab !== "queue"}
+            >
+              {visitedTabs.includes("queue") && (
+                <>
+                  <div className="queue-summary">
+                    <h2 ref={queueHeading} tabIndex={-1}>
+                      {active.length
+                        ? "Production in progress"
+                        : handling.length
+                          ? "Items need preparation"
+                          : attention.length
+                            ? "Orders need review"
+                            : jobs.some((job) =>
+                                  [
+                                    "collection_pending",
+                                    "release_pending",
+                                    "refund_pending",
+                                  ].includes(job.paymentState),
+                                )
+                              ? "Payments need follow-up"
+                              : jobs.some(
+                                    (job) =>
+                                      job.fulfillmentState ===
+                                      "ready_for_pickup",
+                                  )
+                                ? "Items await collection"
+                                : "The counter is clear."}
+                    </h2>
+                    <p>
+                      {jobs.length
+                        ? "Orders below retain separate production, payment and collection states."
+                        : "New requester orders will appear here. Register and calibrate a device to start."}
+                    </p>
+                  </div>
+                  {jobs.length ? (
+                    <>
+                      <div
+                        className="queue-tools"
+                        role="search"
+                        aria-label="Find workshop orders"
+                        ref={queueStart}
+                        tabIndex={-1}
+                      >
+                        <Field label="Find an order">
+                          <input
+                            type="search"
+                            value={orderSearch}
+                            onChange={(event) => {
+                              setRetainedOrderId(null);
+                              setOrderSearch(event.target.value);
+                            }}
+                            placeholder="Order, artwork or machine"
+                          />
+                        </Field>
+                        <Field label="Show orders">
+                          <select
+                            value={orderFilter}
+                            onChange={(event) => {
+                              setRetainedOrderId(null);
+                              setOrderFilter(event.target.value);
+                            }}
+                          >
+                            <option value="all">
+                              All orders ({jobs.length})
+                            </option>
+                            <option value="action">
+                              Need owner action (
+                              {jobs.filter(needsOwnerAction).length})
+                            </option>
+                            <option value="pickup">
+                              Ready for pickup (
+                              {
+                                jobs.filter(
                                   (job) =>
                                     job.fulfillmentState === "ready_for_pickup",
-                                )
-                              ? "Items await collection"
-                              : "The counter is clear."}
-                  </h2>
-                  <p>
-                    {jobs.length
-                      ? "Orders below retain separate production, payment and collection states."
-                      : "New requester orders will appear here. Register and calibrate a device to start."}
-                  </p>
-                </div>
-                {jobs.length ? (
-                  <>
-                    <div
-                      className="queue-tools"
-                      role="search"
-                      aria-label="Find workshop orders"
-                      ref={queueStart}
-                      tabIndex={-1}
-                    >
-                      <Field label="Find an order">
-                        <input
-                          type="search"
-                          value={orderSearch}
-                          onChange={(event) => {
-                            setRetainedOrderId(null);
-                            setOrderSearch(event.target.value);
-                          }}
-                          placeholder="Order, artwork or machine"
-                        />
-                      </Field>
-                      <Field label="Show orders">
-                        <select
-                          value={orderFilter}
-                          onChange={(event) => {
-                            setRetainedOrderId(null);
-                            setOrderFilter(event.target.value);
-                          }}
+                                ).length
+                              }
+                              )
+                            </option>
+                            <option value="production">
+                              In production ({active.length})
+                            </option>
+                            <option value="completed">
+                              Collected or cancelled (
+                              {
+                                jobs.filter(
+                                  (job) =>
+                                    ["collected", "cancelled"].includes(
+                                      job.fulfillmentState,
+                                    ) || job.productionState === "cancelled",
+                                ).length
+                              }
+                              )
+                            </option>
+                          </select>
+                        </Field>
+                        <p className="queue-count" role="status">
+                          {retainedOrder
+                            ? `${visibleJobs.length} of ${matchingJobs.length} matching orders shown. Your selected order stays on this page.`
+                            : matchingJobs.length > pageSize
+                              ? `${pageStart + 1}–${pageStart + visibleJobs.length} of ${matchingJobs.length} matching`
+                              : `${matchingJobs.length} of ${jobs.length}`}{" "}
+                          {!retainedOrder &&
+                            `${jobs.length === 1 ? "order" : "orders"} shown`}
+                        </p>
+                      </div>
+                      {matchingJobs.length ? (
+                        <div className="owner-job-list">
+                          {visibleJobs.map((job) => (
+                            <div key={job.id} data-owner-order={job.id}>
+                              <OwnerJob
+                                job={job}
+                                ledger={dashboard.ledger}
+                                busy={busy}
+                                health={health}
+                                action={(action, body) =>
+                                  act(`${job.id}-${action}`, () =>
+                                    request(
+                                      `/owner/jobs/${job.id}/${action}`,
+                                      body || {},
+                                    ),
+                                  )
+                                }
+                                simulation={(outcome) =>
+                                  act(`${job.id}-simulation`, () =>
+                                    request(
+                                      `/owner/simulation/${job.machineId}`,
+                                      {
+                                        outcome,
+                                      },
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="empty queue-empty">
+                          <h3>
+                            {orderFilter === "action" && !orderSearch.trim()
+                              ? "No orders need owner action."
+                              : "No orders match."}
+                          </h3>
+                          <p>
+                            {orderFilter === "action" && !orderSearch.trim()
+                              ? "The counter is clear. Open all orders to check production or revisit a past order."
+                              : "Try another order number, artwork description or view."}
+                          </p>
+                          <button
+                            className="secondary"
+                            onClick={resetOrderFilters}
+                          >
+                            Show all orders
+                          </button>
+                        </div>
+                      )}
+                      {pageCount > 1 && (
+                        <nav
+                          className="queue-pagination"
+                          aria-label="Order pages"
                         >
-                          <option value="all">
-                            All orders ({jobs.length})
+                          <button
+                            className="secondary"
+                            disabled={currentPage === 1}
+                            onClick={() => moveOrderPage(currentPage - 1)}
+                          >
+                            Previous orders
+                          </button>
+                          <span>
+                            Page {currentPage} of {pageCount}
+                          </span>
+                          <button
+                            className="secondary"
+                            disabled={currentPage === pageCount}
+                            onClick={() => moveOrderPage(currentPage + 1)}
+                          >
+                            Next orders
+                          </button>
+                        </nav>
+                      )}
+                    </>
+                  ) : (
+                    <div className="empty">
+                      <h3>No orders yet.</h3>
+                      <p>
+                        Open the requester counter in another browser session to
+                        create an order.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div
+              role="tabpanel"
+              id="owner-machines"
+              aria-labelledby="tab-machines"
+              hidden={tab !== "machines"}
+            >
+              {visitedTabs.includes("machines") && (
+                <>
+                  <div className="section-heading">
+                    <div>
+                      <h2>Your machines</h2>
+                      <p>
+                        Pairing, configuration, calibration, listing and
+                        readiness are distinct facts.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="owner-machine-list">
+                    {machines.map((machine) => (
+                      <OwnerMachine
+                        key={machine.id}
+                        machine={machine}
+                        busy={busy}
+                        action={(action, body) =>
+                          act(`${machine.id}-${action}`, () =>
+                            request(
+                              `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
+                              body,
+                              action === "calibrate" ? undefined : "PATCH",
+                            ),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                  <form
+                    className="register-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void act("register", async () => {
+                        await request("/owner/machines", {
+                          model,
+                          mode,
+                          ...(nodeUrl ? { nodeUrl } : {}),
+                        });
+                        setNodeUrl("");
+                      });
+                    }}
+                  >
+                    <div>
+                      <h2>Add a supported machine</h2>
+                      <p>
+                        Known-model adapters only. Unfamiliar-machine onboarding
+                        is planned.
+                      </p>
+                    </div>
+                    <div className="form-grid">
+                      <Field label="Supported model">
+                        <select
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                        >
+                          <option value="phomemo-m02pro">Phomemo M02Pro</option>
+                          <option value="instax-mini-link-3">
+                            Instax Mini Link 3
                           </option>
-                          <option value="action">
-                            Need owner action (
-                            {jobs.filter(needsOwnerAction).length})
-                          </option>
-                          <option value="pickup">
-                            Ready for pickup (
-                            {
-                              jobs.filter(
-                                (job) =>
-                                  job.fulfillmentState === "ready_for_pickup",
-                              ).length
-                            }
-                            )
-                          </option>
-                          <option value="production">
-                            In production ({active.length})
-                          </option>
-                          <option value="completed">
-                            Collected or cancelled (
-                            {
-                              jobs.filter(
-                                (job) =>
-                                  ["collected", "cancelled"].includes(
-                                    job.fulfillmentState,
-                                  ) || job.productionState === "cancelled",
-                              ).length
-                            }
-                            )
+                          <option value="bambu-a1-mini">
+                            Bambu Lab A1 mini
                           </option>
                         </select>
                       </Field>
-                      <p className="queue-count" role="status">
-                        {retainedOrder
-                          ? `${visibleJobs.length} of ${matchingJobs.length} matching orders shown. Your selected order stays on this page.`
-                          : matchingJobs.length > pageSize
-                            ? `${pageStart + 1}–${pageStart + visibleJobs.length} of ${matchingJobs.length} matching`
-                            : `${matchingJobs.length} of ${jobs.length}`}{" "}
-                        {!retainedOrder &&
-                          `${jobs.length === 1 ? "order" : "orders"} shown`}
-                      </p>
+                      <Field label="Device mode">
+                        <select
+                          value={mode}
+                          onChange={(e) => setMode(e.target.value)}
+                        >
+                          <option value="simulation">
+                            Simulation · no physical job
+                          </option>
+                          <option value="hardware">
+                            Hardware · requires configured node
+                          </option>
+                        </select>
+                      </Field>
                     </div>
-                    {matchingJobs.length ? (
-                      <div className="owner-job-list">
-                        {visibleJobs.map((job) => (
-                          <div key={job.id} data-owner-order={job.id}>
-                            <OwnerJob
-                              job={job}
-                              ledger={dashboard.ledger}
-                              busy={busy}
-                              health={health}
-                              action={(action, body) =>
-                                act(`${job.id}-${action}`, () =>
-                                  request(
-                                    `/owner/jobs/${job.id}/${action}`,
-                                    body || {},
-                                  ),
-                                )
-                              }
-                              simulation={(outcome) =>
-                                act(`${job.id}-simulation`, () =>
-                                  request(
-                                    `/owner/simulation/${job.machineId}`,
-                                    {
-                                      outcome,
-                                    },
-                                  ),
-                                )
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="empty queue-empty">
-                        <h3>
-                          {orderFilter === "action" && !orderSearch.trim()
-                            ? "No orders need owner action."
-                            : "No orders match."}
-                        </h3>
-                        <p>
-                          {orderFilter === "action" && !orderSearch.trim()
-                            ? "The counter is clear. Open all orders to check production or revisit a past order."
-                            : "Try another order number, artwork description or view."}
-                        </p>
-                        <button
-                          className="secondary"
-                          onClick={resetOrderFilters}
-                        >
-                          Show all orders
-                        </button>
-                      </div>
+                    {mode === "hardware" && (
+                      <Field
+                        label="Configured node URL"
+                        hint="The server must have the node credential in its local environment. Registration does not establish calibration."
+                      >
+                        <input
+                          type="url"
+                          value={nodeUrl}
+                          onChange={(e) => setNodeUrl(e.target.value)}
+                          placeholder="http://127.0.0.1:4319"
+                          required
+                        />
+                      </Field>
                     )}
-                    {pageCount > 1 && (
-                      <nav
-                        className="queue-pagination"
-                        aria-label="Order pages"
-                      >
-                        <button
-                          className="secondary"
-                          disabled={currentPage === 1}
-                          onClick={() => moveOrderPage(currentPage - 1)}
-                        >
-                          Previous orders
-                        </button>
-                        <span>
-                          Page {currentPage} of {pageCount}
-                        </span>
-                        <button
-                          className="secondary"
-                          disabled={currentPage === pageCount}
-                          onClick={() => moveOrderPage(currentPage + 1)}
-                        >
-                          Next orders
-                        </button>
-                      </nav>
-                    )}
-                  </>
-                ) : (
-                  <div className="empty">
-                    <h3>No orders yet.</h3>
-                    <p>
-                      Open the requester counter in another browser session to
-                      create an order.
-                    </p>
-                  </div>
-                )}
-              </>
-            ) : tab === "machines" ? (
-              <>
-                <div className="section-heading">
-                  <div>
-                    <h2>Your machines</h2>
-                    <p>
-                      Pairing, configuration, calibration, listing and readiness
-                      are distinct facts.
-                    </p>
-                  </div>
-                </div>
-                <div className="owner-machine-list">
-                  {machines.map((machine) => (
-                    <OwnerMachine
-                      key={machine.id}
-                      machine={machine}
-                      busy={busy}
-                      action={(action, body) =>
-                        act(`${machine.id}-${action}`, () =>
-                          request(
-                            `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
-                            body,
-                            action === "calibrate" ? undefined : "PATCH",
-                          ),
-                        )
-                      }
-                    />
-                  ))}
-                </div>
-                <form
-                  className="register-form"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void act("register", async () => {
-                      await request("/owner/machines", {
-                        model,
-                        mode,
-                        ...(nodeUrl ? { nodeUrl } : {}),
-                      });
-                      setNodeUrl("");
-                    });
-                  }}
-                >
-                  <div>
-                    <h2>Add a supported machine</h2>
-                    <p>
-                      Known-model adapters only. Unfamiliar-machine onboarding
-                      is planned.
-                    </p>
-                  </div>
-                  <div className="form-grid">
-                    <Field label="Supported model">
-                      <select
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                      >
-                        <option value="phomemo-m02pro">Phomemo M02Pro</option>
-                        <option value="instax-mini-link-3">
-                          Instax Mini Link 3
-                        </option>
-                        <option value="bambu-a1-mini">Bambu Lab A1 mini</option>
-                      </select>
-                    </Field>
-                    <Field label="Device mode">
-                      <select
-                        value={mode}
-                        onChange={(e) => setMode(e.target.value)}
-                      >
-                        <option value="simulation">
-                          Simulation · no physical job
-                        </option>
-                        <option value="hardware">
-                          Hardware · requires configured node
-                        </option>
-                      </select>
-                    </Field>
-                  </div>
-                  {mode === "hardware" && (
-                    <Field
-                      label="Configured node URL"
-                      hint="The server must have the node credential in its local environment. Registration does not establish calibration."
+                    <Button
+                      className="primary"
+                      type="submit"
+                      busy={busy === "register"}
                     >
-                      <input
-                        type="url"
-                        value={nodeUrl}
-                        onChange={(e) => setNodeUrl(e.target.value)}
-                        placeholder="http://127.0.0.1:4319"
-                        required
-                      />
-                    </Field>
-                  )}
-                  <Button
-                    className="primary"
-                    type="submit"
-                    busy={busy === "register"}
-                  >
-                    Register supported device
-                  </Button>
-                </form>
-              </>
-            ) : (
+                      Register supported device
+                    </Button>
+                  </form>
+                </>
+              )}
+            </div>
+            <div
+              role="tabpanel"
+              id="owner-payments"
+              aria-labelledby="tab-payments"
+              hidden={tab !== "payments"}
+            >
               <section className="payment-records">
                 <h2>Platform-managed test hold</h2>
                 <p>
@@ -2980,11 +3070,11 @@ function OwnerApp({
                 </p>
                 <LedgerList ledger={dashboard.ledger} />
               </section>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+            </div>
+          </>
+        )}
+      </div>
+    </OwnerDraftProvider>
   );
 }
 function OwnerMachine({
@@ -2996,33 +3086,32 @@ function OwnerMachine({
   busy: string;
   action: (name: string, body: unknown) => Promise<boolean>;
 }) {
-  const [settings, setSettings] = useState({
-    mediaRemaining: m.mediaRemaining,
+  const settingsFromMachine = (m: Machine) => ({
+    mediaRemaining: String(m.mediaRemaining),
     material: m.material,
     collectionPoint: m.collectionPoint,
     listed: m.listed,
-    priceCard: { ...m.priceCard },
+    priceCard: {
+      consumables: String(m.priceCard.consumables),
+      machine: String(m.priceCard.machine),
+      handling: String(m.priceCard.handling),
+      platform: String(m.priceCard.platform),
+    },
     hours: { ...m.hours },
-    maxJobSeconds: m.maxJobSeconds,
-    policy: m.policy || { authorizedArtwork: true, maxQuantity: 10 },
+    maxJobSeconds: String(m.maxJobSeconds),
+    policy: {
+      authorizedArtwork: m.policy?.authorizedArtwork ?? true,
+      maxQuantity: String(m.policy?.maxQuantity ?? 10),
+    },
     ownerAddress: m.ownerAddress || "",
   });
+  const [settings, setSettings] = useState(() => settingsFromMachine(m));
   const [inspected, setInspected] = useState(false);
   const [dirty, setDirty] = useState(false);
+  useOwnerFormGuard(dirty || busy === `${m.id}-settings`);
   useEffect(() => {
-    if (!dirty)
-      setSettings({
-        mediaRemaining: m.mediaRemaining,
-        material: m.material,
-        collectionPoint: m.collectionPoint,
-        listed: m.listed,
-        priceCard: { ...m.priceCard },
-        hours: { ...m.hours },
-        maxJobSeconds: m.maxJobSeconds,
-        policy: m.policy || { authorizedArtwork: true, maxQuantity: 10 },
-        ownerAddress: m.ownerAddress || "",
-      });
-  }, [m, dirty]);
+    if (!dirty) setSettings(settingsFromMachine(m));
+  }, [m]);
   const update = (value: Partial<typeof settings>) => {
     setDirty(true);
     setSettings((s) => ({ ...s, ...value }));
@@ -3118,189 +3207,216 @@ function OwnerMachine({
       <details className="machine-settings">
         <summary>Media, prices, hours & policy</summary>
         <form
+          aria-busy={Boolean(busy)}
           onSubmit={async (e) => {
             e.preventDefault();
             if (
               await action("settings", {
                 ...settings,
-                ownerAddress: settings.ownerAddress || undefined,
+                mediaRemaining: Number(settings.mediaRemaining),
+                maxJobSeconds: Number(settings.maxJobSeconds),
+                policy: {
+                  ...settings.policy,
+                  maxQuantity: Number(settings.policy.maxQuantity),
+                },
+                priceCard: {
+                  consumables: Number(settings.priceCard.consumables),
+                  machine: Number(settings.priceCard.machine),
+                  handling: Number(settings.priceCard.handling),
+                  platform: Number(settings.priceCard.platform),
+                },
+                ownerAddress: settings.ownerAddress || null,
               })
             )
               setDirty(false);
           }}
         >
-          <div className="form-grid">
-            <Field label="Media remaining (estimated)">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                required
-                value={settings.mediaRemaining}
-                onChange={(e) =>
-                  update({ mediaRemaining: Number(e.target.value) })
-                }
-              />
-            </Field>
-            <Field label="Loaded material">
-              <input
-                required
-                value={settings.material}
-                onChange={(e) => update({ material: e.target.value })}
-              />
-            </Field>
-            <Field label="Open from (UTC)">
-              <select
-                value={settings.hours.start}
-                onChange={(e) =>
-                  update({
-                    hours: { ...settings.hours, start: Number(e.target.value) },
-                  })
-                }
-              >
-                {Array.from({ length: 24 }, (_, h) => (
-                  <option key={h} value={h}>
-                    {String(h).padStart(2, "0")}:00
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Open until (UTC)">
-              <select
-                value={settings.hours.end}
-                onChange={(e) =>
-                  update({
-                    hours: { ...settings.hours, end: Number(e.target.value) },
-                  })
-                }
-              >
-                {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
-                  <option key={h} value={h}>
-                    {String(h).padStart(2, "0")}:00
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Maximum job time (seconds)">
-              <input
-                type="number"
-                min="1"
-                required
-                value={settings.maxJobSeconds}
-                onChange={(e) =>
-                  update({ maxJobSeconds: Number(e.target.value) })
-                }
-              />
-            </Field>
-            <Field label="Collection point">
-              <input
-                required
-                value={settings.collectionPoint}
-                onChange={(e) => update({ collectionPoint: e.target.value })}
-              />
-            </Field>
-          </div>
-          <div className="form-grid">
-            <Field label="Maximum quantity per job">
-              <input
-                type="number"
-                min="1"
-                max="10"
-                step="1"
-                required
-                value={settings.policy.maxQuantity}
-                onChange={(e) =>
-                  update({
-                    policy: {
-                      ...settings.policy,
-                      maxQuantity: Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field
-              label="Owner test payout address"
-              hint="Public Base Sepolia address only. Keep wallet keys in the server environment."
-            >
-              <input
-                value={settings.ownerAddress}
-                pattern="0x[0-9a-fA-F]{40}"
-                placeholder="0x…"
-                onChange={(e) => update({ ownerAddress: e.target.value })}
-              />
-            </Field>
-          </div>
-          <label className="check policy-check">
-            <input
-              type="checkbox"
-              checked={settings.policy.authorizedArtwork}
-              onChange={(e) =>
-                update({
-                  policy: {
-                    ...settings.policy,
-                    authorizedArtwork: e.target.checked,
-                  },
-                })
-              }
-            />
-            <span>
-              Require confirmed artwork permission for unattended production
-            </span>
-          </label>
-          <h4>Price card · USD cents</h4>
-          <div className="form-grid price-grid">
-            {(
-              [
-                "consumables",
-                "machine",
-                "handling",
-                "platform",
-              ] as (keyof Price)[]
-            ).map((key) => (
-              <Field
-                label={key.charAt(0).toUpperCase() + key.slice(1)}
-                key={key}
-              >
+          <fieldset disabled={Boolean(busy)}>
+            <div className="form-grid">
+              <Field label="Media remaining (estimated)">
                 <input
                   type="number"
                   min="0"
                   step="1"
                   required
-                  value={settings.priceCard[key]}
+                  value={settings.mediaRemaining}
+                  onChange={(e) => update({ mediaRemaining: e.target.value })}
+                />
+              </Field>
+              <Field label="Loaded material">
+                <input
+                  required
+                  value={settings.material}
+                  onChange={(e) => update({ material: e.target.value })}
+                />
+              </Field>
+              <Field label="Open from (UTC)">
+                <select
+                  value={settings.hours.start}
                   onChange={(e) =>
                     update({
-                      priceCard: {
-                        ...settings.priceCard,
-                        [key]: Number(e.target.value),
+                      hours: {
+                        ...settings.hours,
+                        start: Number(e.target.value),
+                      },
+                    })
+                  }
+                >
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Open until (UTC)">
+                <select
+                  value={settings.hours.end}
+                  onChange={(e) =>
+                    update({
+                      hours: { ...settings.hours, end: Number(e.target.value) },
+                    })
+                  }
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
+                    <option key={h} value={h}>
+                      {String(h).padStart(2, "0")}:00
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Maximum job time (seconds)">
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={settings.maxJobSeconds}
+                  onChange={(e) => update({ maxJobSeconds: e.target.value })}
+                />
+              </Field>
+              <Field label="Collection point">
+                <input
+                  required
+                  value={settings.collectionPoint}
+                  onChange={(e) => update({ collectionPoint: e.target.value })}
+                />
+              </Field>
+            </div>
+            <div className="form-grid">
+              <Field label="Maximum quantity per job">
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="1"
+                  required
+                  value={settings.policy.maxQuantity}
+                  onChange={(e) =>
+                    update({
+                      policy: {
+                        ...settings.policy,
+                        maxQuantity: e.target.value,
                       },
                     })
                   }
                 />
               </Field>
-            ))}
-          </div>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={settings.listed}
-              onChange={(e) => update({ listed: e.target.checked })}
-            />
-            <span>List this machine for requester discovery</span>
-          </label>
-          <p className="fine-print">
-            Only supported materials and low-risk outputs are accepted. Unclear
-            artwork permission requires owner review. Local limits still apply
-            at the node.
-          </p>
-          <Button
-            className="primary"
-            busy={busy === `${m.id}-settings`}
-            disabled={Boolean(busy)}
-            type="submit"
-          >
-            Save machine settings
-          </Button>
+              <Field
+                label="Owner test payout address"
+                hint="Public Base Sepolia address only. Leave blank to remove a configured address. Keep wallet keys in the server environment."
+              >
+                <input
+                  value={settings.ownerAddress}
+                  pattern="0x[0-9a-fA-F]{40}"
+                  placeholder="0x…"
+                  onChange={(e) => update({ ownerAddress: e.target.value })}
+                />
+              </Field>
+            </div>
+            <label className="check policy-check">
+              <input
+                type="checkbox"
+                checked={settings.policy.authorizedArtwork}
+                onChange={(e) =>
+                  update({
+                    policy: {
+                      ...settings.policy,
+                      authorizedArtwork: e.target.checked,
+                    },
+                  })
+                }
+              />
+              <span>
+                Require confirmed artwork permission for unattended production
+              </span>
+            </label>
+            <h4>Price card · USD cents</h4>
+            <div className="form-grid price-grid">
+              {(
+                [
+                  "consumables",
+                  "machine",
+                  "handling",
+                  "platform",
+                ] as (keyof Price)[]
+              ).map((key) => (
+                <Field
+                  label={key.charAt(0).toUpperCase() + key.slice(1)}
+                  key={key}
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={settings.priceCard[key]}
+                    onChange={(e) =>
+                      update({
+                        priceCard: {
+                          ...settings.priceCard,
+                          [key]: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </Field>
+              ))}
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.listed}
+                onChange={(e) => update({ listed: e.target.checked })}
+              />
+              <span>List this machine for requester discovery</span>
+            </label>
+            <p className="fine-print">
+              Only supported materials and low-risk outputs are accepted.
+              Unclear artwork permission requires owner review. Local limits
+              still apply at the node.
+            </p>
+            <Button
+              className="primary"
+              busy={busy === `${m.id}-settings`}
+              disabled={Boolean(busy)}
+              type="submit"
+            >
+              Save machine settings
+            </Button>
+            {dirty && (
+              <button
+                className="secondary"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  setSettings(settingsFromMachine(m));
+                  setDirty(false);
+                }}
+              >
+                Discard machine edits
+              </button>
+            )}
+          </fieldset>
         </form>
       </details>
     </article>
@@ -3848,12 +3964,11 @@ function OwnerJob({
           </summary>
           <div className="evidence-review">
             {j.evidence.url ? (
-              <a href={j.evidence.url} target="_blank" rel="noreferrer">
-                <img
-                  src={j.evidence.url}
-                  alt={`Evidence for order ${shortId(j.id)}`}
-                />
-              </a>
+              <ResultImage
+                src={j.evidence.url}
+                alt={`Evidence for order ${shortId(j.id)}`}
+                owner
+              />
             ) : (
               <Notice>
                 No usable result frame was recorded. Inspect the physical
@@ -3990,6 +4105,7 @@ function OwnerJob({
       />
       {j.quote && ["produced", "failed"].includes(j.productionState) && (
         <TrialEconomicsForm
+          jobId={j.id}
           economics={j.economics}
           simulation={health?.mode !== "hardware"}
           busy={Boolean(busy)}

@@ -953,3 +953,226 @@ test("calibration authorization and machine lookup fail before generating orphan
     f.close();
   }
 });
+
+test("owner payout address updates distinguish omission, valid replacement and explicit clear without storing null", async () => {
+  const f = fixture();
+  try {
+    const nodePolicies: Record<string, unknown>[] = [];
+    f.service.node.call = async (path, body) => {
+      assert.equal(path, "/machines/phomemo_01/policy");
+      nodePolicies.push(body as Record<string, unknown>);
+      return { updated: true };
+    };
+    const owner = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    const address = "0x" + "12".repeat(20);
+    const assigned = await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ ownerAddress: address })
+      .expect(200);
+    assert.equal(assigned.body.machine.ownerAddress, address);
+    assert.equal(
+      (await f.store.read()).data.machines.phomemo_01.ownerAddress,
+      address,
+    );
+    const omitted = await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ listed: false })
+      .expect(200);
+    assert.equal(omitted.body.machine.ownerAddress, address);
+    assert.equal(
+      (await f.store.read()).data.machines.phomemo_01.ownerAddress,
+      address,
+    );
+    const cleared = await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ ownerAddress: null })
+      .expect(200);
+    assert.equal(Object.hasOwn(cleared.body.machine, "ownerAddress"), false);
+    assert.equal(
+      Object.hasOwn(
+        (await f.store.read()).data.machines.phomemo_01,
+        "ownerAddress",
+      ),
+      false,
+    );
+    const omittedAfterClear = await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ listed: false })
+      .expect(200);
+    assert.equal(
+      Object.hasOwn(omittedAfterClear.body.machine, "ownerAddress"),
+      false,
+    );
+    const replacement = "0x" + "aB".repeat(20);
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ ownerAddress: replacement })
+      .expect(200);
+    assert.equal(
+      (await f.store.read()).data.machines.phomemo_01.ownerAddress,
+      replacement,
+    );
+    const before = await f.store.read(),
+      calls = nodePolicies.length;
+    for (const invalid of [
+      "",
+      " ",
+      "0x" + "a".repeat(39),
+      "0x" + "a".repeat(41),
+      "0x" + "z".repeat(40),
+      12,
+      {},
+      false,
+    ]) {
+      const response = await owner
+        .patch("/api/owner/machines/phomemo_01")
+        .send({ ownerAddress: invalid })
+        .expect(422);
+      assert.equal(response.body.error.code, "INVALID_INPUT");
+      assert.deepEqual(await f.store.read(), before);
+    }
+    assert.equal(nodePolicies.length, calls);
+    for (const policy of nodePolicies)
+      assert.equal(Object.hasOwn(policy, "ownerAddress"), false);
+    assert.deepEqual(before.data.operations, {});
+    assert.equal(f.service.payment.mode, "mock");
+  } finally {
+    f.close();
+  }
+});
+
+test("unchanged full settings preserve quoted approval and reservation using the current price card after concurrent saves", async () => {
+  const f = fixture();
+  try {
+    let interleave: (() => Promise<void>) | undefined;
+    f.service.node.call = async (path) => {
+      assert.equal(path, "/machines/phomemo_01/policy");
+      const concurrentSave = interleave;
+      interleave = undefined;
+      await concurrentSave?.();
+      return { updated: true };
+    };
+    const owner = request.agent(f.app),
+      requester = request.agent(f.app);
+    await owner
+      .post("/api/session")
+      .send({ role: "owner", accessCode: "test-owner-code" })
+      .expect(200);
+    await requester
+      .post("/api/session")
+      .send({ role: "requester" })
+      .expect(200);
+    const uploaded = await requester
+      .post("/api/uploads")
+      .attach("images", image, {
+        filename: "settings.png",
+        contentType: "image/png",
+      })
+      .expect(201);
+    const created = await requester
+      .post("/api/jobs")
+      .send(spec(uploaded.body.assets[0].id))
+      .expect(201);
+    const jobId = created.body.job.id;
+    await mutate(f.store, (s) =>
+      Object.assign(s.machines.phomemo_01, {
+        calibrated: true,
+        listed: true,
+        ready: true,
+        paused: false,
+        hours: { start: 0, end: 24 },
+      }),
+    );
+    const approveAndQuote = async () => {
+      const job = await f.service.job(jobId);
+      await requester
+        .post(`/api/jobs/${jobId}/approve`)
+        .send({
+          specVersion: job.specVersion,
+          artifactSha256: job.artifact.sha256,
+        })
+        .expect(200);
+      await requester.post(`/api/jobs/${jobId}/quote`).send({}).expect(200);
+    };
+    await approveAndQuote();
+    const before = await f.service.read(),
+      m = before.machines.phomemo_01;
+    const settings = {
+      listed: m.listed,
+      paused: m.paused,
+      inspected: true,
+      cleared: true,
+      mediaRemaining: m.mediaRemaining,
+      material: m.material,
+      priceCard: m.priceCard,
+      hours: m.hours,
+      maxJobSeconds: m.maxJobSeconds,
+      collectionPoint: m.collectionPoint,
+      policy: m.policy,
+    };
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send(settings)
+      .expect(200);
+    const unchanged = await f.service.read();
+    assert.deepEqual(unchanged.jobs[jobId], before.jobs[jobId]);
+    assert.deepEqual(unchanged.machines.phomemo_01.reservation, m.reservation);
+
+    // Another save changes prices and quotes again while the first request is
+    // awaiting the node. Its newly quoted current card matches this request.
+    const nextCard = {
+      ...m.priceCard,
+      consumables: m.priceCard.consumables + 7,
+    };
+    let concurrent: Awaited<ReturnType<typeof f.service.read>> | undefined;
+    interleave = async () => {
+      await owner
+        .patch("/api/owner/machines/phomemo_01")
+        .send({ priceCard: nextCard })
+        .expect(200);
+      await approveAndQuote();
+      concurrent = await f.service.read();
+    };
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ ...settings, priceCard: nextCard })
+      .expect(200);
+    assert(concurrent);
+    const preserved = await f.service.read();
+    assert.deepEqual(preserved.jobs[jobId], concurrent.jobs[jobId]);
+    assert.deepEqual(
+      preserved.machines.phomemo_01.reservation,
+      concurrent.machines.phomemo_01.reservation,
+    );
+
+    // The inverse race is a real change: a request matching its old preflight
+    // snapshot must invalidate a newly quoted card that changed in the meantime.
+    interleave = async () => {
+      await owner
+        .patch("/api/owner/machines/phomemo_01")
+        .send({ priceCard: { ...nextCard, handling: nextCard.handling + 9 } })
+        .expect(200);
+      await approveAndQuote();
+      concurrent = await f.service.read();
+    };
+    await owner
+      .patch("/api/owner/machines/phomemo_01")
+      .send({ ...settings, priceCard: nextCard })
+      .expect(200);
+    const changed = await f.service.read(),
+      job = changed.jobs[jobId];
+    assert.equal(job.quote, undefined);
+    assert.equal(job.approvedSpecHash, undefined);
+    assert.equal(job.productionState, "specified");
+    assert.equal(changed.machines.phomemo_01.reservation, undefined);
+    assert.equal(job.history.length, concurrent.jobs[jobId].history.length + 1);
+    assert.equal(job.history.at(-1)?.event, "price_changed");
+    assert.deepEqual(changed.operations, {});
+  } finally {
+    f.close();
+  }
+});

@@ -151,14 +151,43 @@ remain historical evidence; they were not rerun for volume.
 Earlier failing/affected-only diagnostic reports are private under `.data/`;
 final reports are `web/evidence/overnight-third-*-browser.json`.
 
+## Verified fourth checkpoint, 03:27 Pacific
+
+Continuation from commit `171fdd2` completed numeric input, owner form and queue-draft recovery, media failures, and definite-versus-uncertain persistence audits. The overnight task remains active through 9:00 a.m. Pacific. Source fingerprint:
+
+`74849a208a4d3708940ed51dab77341f1037d021dc905eb2e4b78ed303e5185b`
+
+- Requester and owner numeric fields keep empty or incomplete native input text while typing. Validated numeric values are submitted only after the form is complete; failed saves retain exact visible values. Format changes and explicit discard restore valid defaults.
+- Owner workshop views preserve mounted drafts. Trial measurements and payment references also survive queue paging, search and filters in private, per-order memory. Native leave-page warnings cover dirty drafts even while their order is off screen. Explicit discard, accepted saves, settled/ineligible payment records and owner-session expiry clear the relevant warning. This memory is not durable browser storage; a forced browser/OS termination can still lose an unsaved draft.
+- Owner machine, trial and payment inputs lock during a pending submission. A successful write followed by a failed dashboard refresh now says the change was accepted but cannot yet be refreshed; submitted values remain visible. New saved trial measurements cannot silently overwrite local edits. Failed or uncertain payment/trial responses use reconciliation copy rather than claiming the stored state is unchanged.
+- Clearing an optional payout address now sends an explicit null that removes the stored property; omission preserves it. Unchanged full settings saves preserve existing quote, approval, history and reservation. Real price changes still invalidate unpaid quotes, using current state inside each atomic update; concurrent fresh-state directions are tested. These are offline fixtures and do not send a payment.
+- Result images that are unauthorized, missing or corrupt show readable recovery text, simulation/camera provenance and a retry action while retaining the recorded outcome. Malformed image sources cannot crash the interface on retry. Explicit retries use fresh same-origin URL keys to avoid reusing a failed decode. Production-preview and evidence retry controls preserve keyboard focus during loading, ignore duplicate activation and respect a newer focus choice; approval still waits for the actual preview.
+- New asset files are cleaned only after a definitely uncommitted registration failure or partial encoder failure. Any throwing compare-and-set remains uncertain and keeps files, including a delayed commit behind a stale read. Already registered previews remain preserved if a later order mutation fails. SQLite refresh-listener exceptions cannot turn a committed write into a failed response or suppress another subscriber. Eight isolated storage-fault regressions cover these boundaries; retained runtime/data was not fault-injected.
+- Latest backend/node code was activated with retained Spacetime data/assets/journals. The already-open built owner view disconnected, natively reconnected and received independent pause/resume mutations with polling disabled: 2 opens, 1 error and 4 refreshes. [Current reconnect proof](evidence/overnight-fourth-sse-reconnect.json).
+
+| Check                                | Result                                       |
+| ------------------------------------ | -------------------------------------------- |
+| Backend/application/process/realtime | 71 passed                                    |
+| Python node                          | 67 passed in 5.52s                           |
+| Payment/Claude and Fetch fixtures    | 25+5 passed                                  |
+| Storage/wallet unit                  | 20 passed                                    |
+| Built-application browser scenarios  | 89 passed in each of Chromium/Firefox/WebKit |
+| Automated accessibility              | 39 A/AA scans, no detected violations        |
+| Build/strict types/secret scan       | Passed                                       |
+| Actual local restart/SSE reconnect   | Passed; polling disabled                     |
+
+That is 277 unique software cases or 455 executions including the three browser engines, with no final failed/skipped/flaky cases. The full software check and build followed all final application changes. New browser recovery cases use isolated API boundaries; new persistence tests use temporary stores/files. Unchanged finite simulation loops, database restart/CAS and dependency audits remain historical evidence. No physical/live acceptance was substituted. The first built Firefox run passed 88/89; its touch test assumed tab switching closed machine settings. The revised test explicitly checks retained disclosure state across views and touch closure afterward. The affected case then passed; final reports below use the corrected test. No application change was needed for that diagnostic.
+
+[Current machine-readable checkpoint](evidence/overnight-fourth-qa.json), [full report](test-report.md), [mobile result-image recovery](../web/evidence/overnight-evidence-recovery-320.png), [current reconnect](evidence/overnight-fourth-sse-reconnect.json), [reconnected owner view](../web/evidence/overnight-fourth-sse-reconnected.png). Earlier failed/affected-only diagnostic reports remain private under `.data/`; final reports are `web/evidence/overnight-fourth-*-browser.json`.
+
 ## Next useful audits
 
-Completed: touch/reflow/storage/reordered refresh/SSE reconnect/artwork isolation, navigation/document recovery, malformed API/catalog validation and live queue/focus behavior. Continue with a new boundary or reproduced failure:
+Completed: the earlier touch/storage/navigation/refresh/preview/queue work plus requester/owner numeric editing, machine settings, per-order trial/payment draft recovery, asset-registration fault boundaries and media retry. Continue only with a new boundary, reproduced failure or unresolved diagnostic:
 
-1. Owner machine/policy/payment/trial forms: unsaved changes, failed saves, switching views, and typing temporarily empty/partial numeric values; keep configured values and explicit confirmations truthful. Use isolated API fixtures and avoid actual configuration changes.
-2. Storage/persistence failures during asset preparation and mutation responses: distinguish definite failure from uncertain commit before cleaning files or suggesting retry. Preserve all existing private data and avoid destructive fault injection against the retained runtime.
-3. Media and error copy on expired/unauthorized/corrupt evidence or previews, plus pending payment/review states where a clear next action may still be missing. Reproduce specific UI failures; no live model/wallet/hardware tests.
-4. Review any newly fixed boundary independently, run affected checks, and update this log. Do not repeat unchanged suites/finite jobs simply to fill time. If useful independent work is exhausted, remain quiet until a meaningful change or the cutoff.
+1. Owner pickup-code, handling and operator-review forms still use component-local draft state. The new cache intentionally covers trial/payment only. Probe explicit queue paging/filtering/search or live state changes for loss of these other drafts; preserve privacy and explicit operator confirmations. Use isolated API fixtures.
+2. Bounded recovery for a request that never finishes (as distinct from an explicit HTTP error): upload/prepare, owner saves and checkout/dispatch. Inspect actual timeout/cancellation behavior and distinguish an uncertain commit from a safe retry. No live wallet, model provider, hardware or retained-store fault injection.
+3. Confirm responsive/keyboard clarity for any newly fixed boundary, including pending-save focus and unavailable calibration media where a useful next action may still be missing. Reproduce a specific issue before changing it. Native device/browser acceptance remains blocked.
+4. Review new fixes independently, rerun affected checks and update this log. Avoid unchanged suite/finite-job reruns for volume. If useful independent work is exhausted or externally blocked, stay quiet until a meaningful change or the cutoff.
 5. At 9:00 a.m. Pacific, perform final relevant health/source/evidence checks, leave the morning handoff and disable the heartbeat. Keep physical/live prerequisites honest and leave this chat unarchived.
 
 ## Morning handoff requirements
