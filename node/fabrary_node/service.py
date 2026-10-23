@@ -284,6 +284,7 @@ class NodeService:
                 raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
             return self.acceptance(existing, False)
         expected_mode = require_expected_mode(payload, config["mode"])
+        self.journal.reject_cancelled(request, _scope)
         state = self.validate_acceptance_policy(machine_id, parameters, _scope)
         configuration_binding = state["configurationBinding"]
         if config["outputType"] == "3d" and config["mode"] == "hardware":
@@ -317,6 +318,25 @@ class NodeService:
             if row["outcome"] == "lost_ack":
                 raise NodeError("simulated_lost_ack", "Simulation: acknowledgment lost after durable acceptance; reconcile this attempt", 503)
         return self.acceptance(row, created)
+
+    async def cancel_before_acceptance(self, *, token: str, job_id: str, attempt_id: str, machine_id: str,
+                                       artifact_sha256: str, parameters: dict, target_scope: str, expires_at: int | float) -> dict:
+        if not all(isinstance(value, str) for value in (token, job_id, attempt_id, machine_id, artifact_sha256)) or not isinstance(parameters, dict) or isinstance(expires_at, bool) or not isinstance(expires_at, (int, float)) or not math.isfinite(expires_at):
+            raise NodeError("request", "Cancellation request fields have invalid types", 422)
+        if not isinstance(target_scope, str) or target_scope not in {"dispatch", "calibration"}:
+            raise NodeError("request", "Cancellation target scope must be dispatch or calibration", 422)
+        request = {"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id, "artifact_sha256": artifact_sha256,
+            "parameters": parameters, "expires_at": expires_at, "target_scope": target_scope}
+        payload = verify_token(token, self.token_secret, scope="cancel_before_acceptance", expected=request)
+        # New cancellations bind the current mode. Exact durable proof replay
+        # remains read-only after reconfiguration, using its original signed mode.
+        mode = require_expected_mode(payload, payload.get("expected_mode"))
+        config = self.machine(machine_id)
+        if not all(1 <= len(value) <= 128 for value in (job_id, attempt_id)) or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256):
+            raise NodeError("request", "Invalid job, attempt or artifact hash", 422)
+        if not self.journal.cancelled(request):
+            require_expected_mode(payload, config["mode"])
+        return self.journal.cancel_before_acceptance(request, target_scope, mode)
 
     @staticmethod
     def acceptance(row: dict, created: bool) -> dict:

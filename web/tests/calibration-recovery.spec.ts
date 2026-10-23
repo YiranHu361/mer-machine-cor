@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const at = "2026-10-23T10:30:00.000Z";
 const calibration = (suffix = "one") => ({
   id: `calibration_${suffix}`,
+  version: 1,
   machineId: "calibration_recovery_fixture",
   checkoutKey: undefined as string | undefined,
   attemptId: `calibration_attempt_${suffix}`,
@@ -31,6 +32,7 @@ function lookupRecord(
     lifecycle: {
       activeJobId: active,
       calibrationActive: Boolean(active),
+      canRequestCancellation: false,
       canRequestNew: !active,
       context: "c".repeat(64),
       contextMatch: null,
@@ -138,6 +140,7 @@ async function fixture(
           calibrationActive: Boolean(
             state.calibration && machine.activeJobId === state.calibration.id,
           ),
+          canRequestCancellation: false,
           canRequestNew:
             !machine.activeJobId && machine.paired && machine.configured,
           context: "c".repeat(64),
@@ -271,7 +274,7 @@ for (const changed of ["attempt", "frame", "adapter"] as const)
   }) => {
     const state = await fixture(page);
     const inspected = page.getByLabel(
-      "I inspected the physical output and fresh result evidence after this attempt completed.",
+      "I inspected this device and the output state for this calibration attempt.",
       { exact: true },
     );
     const reason = page.getByLabel("Calibration inspection reason", {
@@ -576,7 +579,7 @@ test("a malformed optional calibration status stays recoverable instead of blank
   await retry.focus();
   await retry.press("Enter");
   const inspected = page.getByLabel(
-    "I inspected the physical output and fresh result evidence after this attempt completed.",
+    "I inspected this device and the output state for this calibration attempt.",
     { exact: true },
   );
   await expect(inspected).toBeFocused();

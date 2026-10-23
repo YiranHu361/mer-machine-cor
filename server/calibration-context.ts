@@ -109,6 +109,23 @@ export function calibrationLifecycle(
       calibration && machine.activeJobId === calibration.id,
     ),
     canRequestNew: reasonCode === "NEW_CALIBRATION_ALLOWED",
+    canRequestCancellation: Boolean(
+      calibration &&
+      machine.activeJobId === calibration.id &&
+      ["dispatched", "needs_review"].includes(calibration.productionState) &&
+      !calibration.executionCancellation &&
+      !calibration.evidence &&
+      !calibration.history.some((entry) =>
+        [
+          "calibration_accepted",
+          "calibration_status",
+          "calibration_operator_resolution",
+          "calibration_inspected",
+        ].includes(entry.event),
+      ) &&
+      (!calibration.calibrationDeviceContext ||
+        calibration.calibrationDeviceContext === context),
+    ),
     context,
     contextMatch: calibration?.calibrationDeviceContext
       ? calibration.calibrationDeviceContext === context
@@ -116,6 +133,66 @@ export function calibrationLifecycle(
     reasonCode,
     reason,
   };
+}
+
+export function calibrationRetirement(
+  state: State,
+  machineId: string,
+  body: any,
+) {
+  requireThat(
+    body &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      Object.keys(body).every((key) =>
+        [
+          "attemptId",
+          "expectedVersion",
+          "expectedContext",
+          "inspected",
+          "reason",
+        ].includes(key),
+      ) &&
+      typeof body.attemptId === "string" &&
+      body.attemptId.length >= 1 &&
+      body.attemptId.length <= 128 &&
+      Number.isSafeInteger(body.expectedVersion) &&
+      body.expectedVersion > 0 &&
+      typeof body.expectedContext === "string" &&
+      /^[0-9a-f]{64}$/.test(body.expectedContext) &&
+      body.inspected === true &&
+      typeof body.reason === "string" &&
+      body.reason.trim().length >= 10 &&
+      body.reason.length <= 1000,
+    "INSPECTION_REQUIRED",
+    "Refresh the exact saved calibration and record its version, current device context, inspection and a specific reason of 10 to 1000 characters.",
+    422,
+  );
+  const machine = ownValue(state.machines, machineId);
+  requireThat(machine, "NOT_FOUND", "Machine not found.", 404);
+  const calibration = Object.values(state.calibrations ?? {}).find(
+    (c) => c.machineId === machineId && c.attemptId === body.attemptId,
+  );
+  requireThat(
+    calibration,
+    "CALIBRATION_NOT_FOUND",
+    "This calibration attempt does not belong to the machine.",
+    404,
+  );
+  requireThat(
+    machine.activeJobId === calibration.id &&
+      calibration.version === body.expectedVersion,
+    "CALIBRATION_NOT_CURRENT",
+    "The saved calibration changed. Refresh before inspecting this attempt again.",
+  );
+  requireThat(
+    body.expectedContext === calibrationDeviceContext(machine) &&
+      (!calibration.calibrationDeviceContext ||
+        calibration.calibrationDeviceContext === body.expectedContext),
+    "CALIBRATION_CONTEXT_CHANGED",
+    "This calibration belongs to a different device setup. Keep it blocked and inspect the current configuration.",
+  );
+  return { machine, calibration, reason: body.reason.trim() as string };
 }
 
 export function requireCalibrationStart(

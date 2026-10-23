@@ -36,6 +36,11 @@ class Journal:
         CREATE UNIQUE INDEX IF NOT EXISTS one_active_per_machine ON attempts(machine_id)
           WHERE status IN ('accepted','running','uncertain');
         CREATE TABLE IF NOT EXISTS machine_state (machine_id TEXT PRIMARY KEY, state TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS cancelled_attempts (
+          attempt_id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, job_id TEXT NOT NULL,
+          binding TEXT NOT NULL, target_scope TEXT NOT NULL, expected_mode TEXT NOT NULL, cancelled_at TEXT NOT NULL,
+          UNIQUE(machine_id,job_id)
+        );
         CREATE TABLE IF NOT EXISTS frames (frame_id TEXT PRIMARY KEY, machine_id TEXT NOT NULL,
           job_id TEXT NOT NULL, attempt_id TEXT NOT NULL, phase TEXT NOT NULL, source TEXT NOT NULL,
           captured_at TEXT NOT NULL, metadata TEXT NOT NULL);
@@ -64,11 +69,14 @@ class Journal:
             self.db.execute("BEGIN IMMEDIATE")
             try:
                 yield
-            except BaseException:
-                self.db.execute("ROLLBACK")
-                raise
-            else:
                 self.db.execute("COMMIT")
+            except BaseException:
+                # A failed commit must not leave a transaction open. If SQLite
+                # committed before an acknowledgement error, retain that durable
+                # fact and let an exact retry recover it without another action.
+                if self.db.in_transaction:
+                    self.db.execute("ROLLBACK")
+                raise
 
     def machine(self, machine_id: str) -> dict:
         with self.lock:
@@ -94,9 +102,47 @@ class Journal:
             row = self.db.execute("SELECT * FROM attempts WHERE machine_id=? ORDER BY accepted_at DESC LIMIT 1", (machine_id,)).fetchone()
             return dict(row) if row else None
 
+    def cancelled(self, request: dict) -> dict | None:
+        with self.lock:
+            row = self.db.execute("SELECT * FROM cancelled_attempts WHERE attempt_id=? OR (machine_id=? AND job_id=?) LIMIT 1",
+                (request["attempt_id"], request["machine_id"], request["job_id"])).fetchone()
+            return dict(row) if row else None
+
+    def reject_cancelled(self, request: dict, scope: str) -> None:
+        row = self.cancelled(request)
+        if row:
+            binding = canonical({k: request[k] for k in ("machine_id", "job_id", "attempt_id", "artifact_sha256", "parameters")})
+            if row["binding"] != binding or row["target_scope"] != scope:
+                raise NodeError("attempt_conflict", "Cancelled machine/job identity already binds another authorization", 409)
+            raise NodeError("attempt_cancelled", "This authorization was durably cancelled before acceptance; it cannot run", 409)
+
+    @staticmethod
+    def cancellation_proof(row: dict) -> dict:
+        return {"status": "cancelled_before_acceptance", **json.loads(row["binding"]),
+            "target_scope": row["target_scope"], "expected_mode": row["expected_mode"], "cancelled_at": row["cancelled_at"]}
+
+    def cancel_before_acceptance(self, request: dict, target_scope: str, expected_mode: str) -> dict:
+        binding = canonical({k: request[k] for k in ("machine_id", "job_id", "attempt_id", "artifact_sha256", "parameters")})
+        with self.transaction():
+            accepted = self.db.execute("SELECT attempt_id FROM attempts WHERE attempt_id=? OR (machine_id=? AND job_id=?) LIMIT 1",
+                (request["attempt_id"], request["machine_id"], request["job_id"])).fetchone()
+            if accepted:
+                raise NodeError("attempt_already_accepted", "A durable execution attempt already exists; reconcile it instead of cancelling acceptance", 409)
+            previous = self.cancelled(request)
+            if previous:
+                if previous["binding"] != binding or previous["target_scope"] != target_scope or previous["expected_mode"] != expected_mode:
+                    raise NodeError("attempt_conflict", "Cancelled machine/job identity already binds another authorization", 409)
+                return self.cancellation_proof(previous)
+            self.db.execute("INSERT INTO cancelled_attempts VALUES (?,?,?,?,?,?,?)", (request["attempt_id"], request["machine_id"],
+                request["job_id"], binding, target_scope, expected_mode, now()))
+            self.audit(request["machine_id"], request["attempt_id"], "cancelled_before_acceptance", target_scope)
+            proof = self.cancellation_proof(self.cancelled(request))
+        return proof
+
     def accept(self, request: dict, outcome: str, scope: str = "dispatch", configuration_binding: str | None = None) -> tuple[dict, bool]:
         binding = canonical({k: request[k] for k in ("machine_id", "job_id", "attempt_id", "artifact_sha256", "parameters")})
         with self.transaction():
+            self.reject_cancelled(request, scope)
             existing = self.get(request["attempt_id"])
             if existing:
                 if existing["binding"] != binding or existing["scope"] != scope:

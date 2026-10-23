@@ -82,6 +82,7 @@ async function fixture(
   };
   const calibration = {
     id: "calibration_frame_first",
+    version: 1,
     machineId: machine.id,
     attemptId: "calibration_attempt_first",
     productionState: "produced",
@@ -169,6 +170,7 @@ async function fixture(
         lifecycle: {
           activeJobId: null,
           calibrationActive: false,
+          canRequestCancellation: false,
           canRequestNew: true,
           context: "c".repeat(64),
           contextMatch: null,

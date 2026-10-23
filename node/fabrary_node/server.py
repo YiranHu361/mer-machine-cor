@@ -1,4 +1,4 @@
-"""Run the five Fabrary tools over authenticated HTTP and FastMCP."""
+"""Run the Fabrary tools over authenticated HTTP and FastMCP."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -61,6 +61,14 @@ def create_app(service: NodeService) -> FastAPI:
             artifact_url=artifact_url, artifact_sha256=artifact_sha256, parameters=parameters, expires_at=expires_at)
 
     @mcp.tool
+    async def cancel_before_acceptance(token: str, job_id: str, attempt_id: str, machine_id: str,
+                                       artifact_sha256: str, parameters: dict, target_scope: str, expires_at: int | float) -> dict:
+        """Durably prevent an unaccepted exact authorization from ever starting; never stop a device."""
+        return await service.cancel_before_acceptance(token=token, job_id=job_id, attempt_id=attempt_id,
+            machine_id=machine_id, artifact_sha256=artifact_sha256, parameters=parameters,
+            target_scope=target_scope, expires_at=expires_at)
+
+    @mcp.tool
     async def camera_snapshot(token: str, machine_id: str, job_id: str, attempt_id: str, phase: str = "result") -> dict:
         """Capture fresh authorized evidence. Simulation images are labeled."""
         return await service.camera_snapshot(token=token, machine_id=machine_id, job_id=job_id, attempt_id=attempt_id, phase=phase)
@@ -108,6 +116,14 @@ def create_app(service: NodeService) -> FastAPI:
         if set(body) != required:
             raise NodeError("request", "Run request is missing required fields or contains unknown fields", 422)
         return await service.run_job(**body)
+
+    @app.post("/tools/cancel_before_acceptance")
+    async def http_cancel(request: Request):
+        body = await json_object(request)
+        required = {"token", "job_id", "attempt_id", "machine_id", "artifact_sha256", "parameters", "target_scope", "expires_at"}
+        if set(body) != required:
+            raise NodeError("request", "Cancellation requires the exact signed content and target scope", 422)
+        return await service.cancel_before_acceptance(**body)
 
     @app.post("/tools/camera_snapshot")
     async def http_camera(request: Request):

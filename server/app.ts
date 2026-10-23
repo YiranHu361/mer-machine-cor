@@ -1188,32 +1188,33 @@ export function createApp(
       ),
     });
   });
+  const calibrationView = (calibration: Job | null | undefined) =>
+    calibration
+      ? {
+          ...calibration,
+          evidence: calibration.evidence
+            ? {
+                ...calibration.evidence,
+                frame: undefined,
+                url: evidenceUrl(calibration, true),
+              }
+            : undefined,
+        }
+      : null;
+  const calibrationResponse = (result: any) => ({
+    ...result,
+    calibration: calibrationView(result.calibration),
+    ...(Object.hasOwn(result, "requestedCalibration")
+      ? { requestedCalibration: calibrationView(result.requestedCalibration) }
+      : {}),
+  });
   app.get("/api/owner/machines/:id/calibration", async (req, res) => {
     await owner(req);
     const result = await service.calibrationStatus(
       String(req.params.id),
       req.query.requestKey,
     );
-    const calibrationView = (calibration: Job | null | undefined) =>
-      calibration
-        ? {
-            ...calibration,
-            evidence: calibration.evidence
-              ? {
-                  ...calibration.evidence,
-                  frame: undefined,
-                  url: evidenceUrl(calibration, true),
-                }
-              : undefined,
-          }
-        : null;
-    res.json({
-      ...result,
-      calibration: calibrationView(result.calibration),
-      ...(Object.hasOwn(result, "requestedCalibration")
-        ? { requestedCalibration: calibrationView(result.requestedCalibration) }
-        : {}),
-    });
+    res.json(calibrationResponse(result));
   });
   app.get("/api/owner/machines/:id/calibration/evidence", async (req, res) => {
     await owner(req);
@@ -1260,6 +1261,28 @@ export function createApp(
     const bytes = await service.node.fetchFrame(c.evidence.url, m);
     res.type("png").send(bytes);
   });
+  app.post("/api/owner/machines/:id/calibration/reject", async (req, res) => {
+    await owner(req);
+    res.json(
+      calibrationResponse(
+        await service.rejectCalibration(String(req.params.id), req.body),
+      ),
+    );
+  });
+  app.post(
+    "/api/owner/machines/:id/calibration/cancel-before-acceptance",
+    async (req, res) => {
+      await owner(req);
+      res.json(
+        calibrationResponse(
+          await service.cancelCalibrationBeforeAcceptance(
+            String(req.params.id),
+            req.body,
+          ),
+        ),
+      );
+    },
+  );
   app.post("/api/owner/machines/:id/calibration/resolve", async (req, res) => {
     await owner(req);
     res.json(await service.resolveCalibration(String(req.params.id), req.body));
@@ -1292,6 +1315,11 @@ export function createApp(
       !req.body.attemptId || target,
       "CALIBRATION_NOT_FOUND",
       "This calibration attempt does not belong to the machine.",
+    );
+    requireThat(
+      !target?.calibrationInspection && !target?.executionCancellation,
+      "CALIBRATION_REJECTED",
+      "This calibration was rejected or cancelled and cannot be used as calibration proof. Explicitly authorize a fresh supervised calibration.",
     );
     requireThat(
       !target?.calibrationDeviceContext ||

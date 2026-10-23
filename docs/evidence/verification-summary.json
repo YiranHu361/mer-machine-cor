@@ -1,19 +1,19 @@
 {
-  "recordedAt": "2026-10-23T12:39:19.514Z",
-  "sourceStateSha256": "a4aa36960485dc5a187c48b1041bc39a52051bd88ca8ffa0ccd62146c76a3c89",
+  "recordedAt": "2026-10-23T13:05:19.699Z",
+  "sourceStateSha256": "98594282729c9c222f7c461c5ac91fdcb7b91be8246965919002096fd9c0192a",
   "status": "PARTIAL_REQUIRED_ACCEPTANCE_BLOCKED",
   "software": {
-    "backendApplicationAndProcessRecovery": 180,
-    "node": 89,
+    "backendApplicationAndProcessRecovery": 201,
+    "node": 107,
     "paymentClaudeFixtures": 25,
     "fetchBridgeUnit": 5,
     "browserStorageAndWalletUnit": 29,
-    "browserScenarios": 182,
+    "browserScenarios": 198,
     "browserEngines": 3,
-    "uniqueTestCases": 510,
+    "uniqueTestCases": 565,
+    "testExecutionsIncludingThreeEngines": 961,
     "failedFinalTests": 0,
-    "skippedFinalTests": 0,
-    "browserProvenance": "Eighth182perengine retained unchanged; ninth actual-app workflow3perengine rerun"
+    "skippedFinalTests": 0
   },
   "additionalActualChecks": [
     "SpacetimeDB CAS/access isolation/subscriptions",
@@ -83,13 +83,19 @@
     ".data/overnight-eighth-creation-restart-final.log": "97c620c56224d01d89ab61720d360a5432a31445d5604926150c47e5c370bcf2",
     ".data/overnight-eighth-chromium-browser.log": "05c95677b1ae588fcc13585b16766fdb3cb7f894bcda21505d29f6f46a083a68",
     ".data/overnight-eighth-firefox-browser.log": "0c69f6ccd44dd317d2128dfbb850cceb1b4d1279b23753e4a63073a655baa981",
-    ".data/overnight-eighth-webkit-browser.log": "972039e58abe9a1c102f8705932332b831b9c710b83eaaab546ea502dcebaf2d"
+    ".data/overnight-eighth-webkit-browser.log": "972039e58abe9a1c102f8705932332b831b9c710b83eaaab546ea502dcebaf2d",
+    ".data/overnight-tenth-software-final.log": "fc80b87593b860ca5343ee1e481b65b371161b463671b14ce94bccb2153bfd4c",
+    ".data/overnight-tenth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-tenth-calibration-acceptance-final.log": "893bc11b5bb594210d4abcee422b6911ff386d611840132ee1ba77d2878d129b",
+    ".data/overnight-tenth-chromium-browser.log": "b0f15fee16e3d39fd6f8d3c488313dd1a9210929a337d788083761d8c57a1036",
+    ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
+    ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
   },
-  "notes": "Ninth authorization follow-up; full UI/unchanged integration evidence retained from eighth. See overnight-ninth-qa.json for exact provenance. Work continues through9a.m.Pacific; physical/live acceptance blocked.",
+  "notes": "October 23 tenth overnight checkpoint; see overnight-tenth-qa.json for current evidence. First through ninth checkpoint JSON files are historical. Audits continue until 9 a.m. Pacific.",
   "localTimeZone": "America/Los_Angeles",
   "secretScan": {
     "status": "PASS",
-    "candidateFiles": 264,
+    "candidateFiles": 287,
     "configuredSecretsFound": 0,
     "privateFilesIgnored": true,
     "privatePermissions": [

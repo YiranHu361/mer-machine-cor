@@ -1,6 +1,6 @@
 # Machine node implementation and verification
 
-The node is a separate local Python process. It exposes the same five functions through JSON HTTP and FastMCP: `get_capabilities`, `get_status`, `run_job`, `camera_snapshot`, and `abort`. Simulation is a device boundary and produces labeled synthetic evidence. It does not establish any physical acceptance result.
+The node is a separate local Python process. It exposes the same six functions through JSON HTTP and FastMCP: `get_capabilities`, `get_status`, `run_job`, `camera_snapshot`, `abort`, and `cancel_before_acceptance`. Simulation is a device boundary and produces labeled synthetic evidence. It does not establish any physical acceptance result.
 
 ## Setup
 
@@ -106,3 +106,11 @@ Prepared 3D contract correction: the focused catalog/policy/signed-characteristi
 ## New authorization mode and legacy replay
 
 Every new dispatch, calibration, camera and abort token carries signed `expected_mode`, matching the configured node. Backend and node must be updated/restarted together. A mode-less legacy token may only read its exact durable accepted attempt through run-job replay; it cannot authorize new output, capture or stop. Reissue short-lived camera/abort tokens through the backend. An old attempt's private configuration binding must match before capture or stop; replacement devices/cameras require fresh supervised calibration. No hardware acceptance is implied by these software guards.
+
+## Cancellation before acceptance and unusable calibration output
+
+`cancel_before_acceptance` is a signed recovery operation for one exact dispatch/calibration machine, job, attempt, artifact and approved parameter tuple. It creates a durable SQLite cancellation record only when no execution attempt exists. Acceptance checks that record in its own atomic transaction, including after a delayed artifact download. The operation never fetches an artifact, captures a frame, starts a worker or sends stop. Existing accepted/running/uncertain/terminal attempts refuse this cancellation and require their existing reconciliation path. Exact cancellation proof can be recovered after a lost reply/restart; never delete the journal to bypass it. A current404 status lookup is insufficient evidence that a request cannot later be accepted.
+
+The backend validates the full proof, mode and bounded clock tolerance before retiring its matching calibration intent or allocating a customer refund. Newer owner/configuration/payment state wins inside CAS retries. Device clocks need to remain within the signed authorization and proof tolerance. Uncertain replies preserve the blocked attempt; there is no automatic replacement output.
+
+Completed but unusable calibration output is a separate rejected inspection. The node execution remains completed; the backend stays paused/unready/uncalibrated and requires a fresh supervised request. An old rejected/cancelled result cannot later become calibration proof.

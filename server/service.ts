@@ -33,7 +33,12 @@ import {
   expectedCalibrationContext,
   requestedCalibrationKey,
   requireCalibrationStart,
+  calibrationRetirement,
 } from "./calibration-context.ts";
+import {
+  cancellationProof,
+  executionCancellationContext,
+} from "./execution-cancellation.ts";
 export interface Config {
   mode: "simulation" | "hardware";
   paymentMode: "mock" | "testnet";
@@ -293,6 +298,7 @@ export class Service {
             needs_review: "uncertain",
             running: "running",
             dispatched: "accepted",
+            cancelled: "cancelled_before_acceptance",
           } as Record<string, string>
         )[calibration.productionState] ?? "unknown",
       ...(reason ? { reason } : {}),
@@ -421,6 +427,13 @@ export class Service {
             : undefined;
         if (
           current.productionState !== state ||
+          !current.history.some((entry) =>
+            [
+              "calibration_accepted",
+              "calibration_status",
+              "calibration_operator_resolution",
+            ].includes(entry.event),
+          ) ||
           (freshEvidence &&
             JSON.stringify(freshEvidence) !== JSON.stringify(current.evidence))
         ) {
@@ -457,6 +470,175 @@ export class Service {
           )
         : status,
     );
+  }
+  private async requestExecutionCancellation(
+    state: State,
+    job: Job,
+    machine: Machine,
+    scope: "dispatch" | "calibration",
+    reason: string,
+  ) {
+    const observed = executionCancellationContext(state, job);
+    const pending = await mutate(this.store, (s) => {
+      const current =
+        scope === "calibration" ? s.calibrations?.[job.id] : s.jobs[job.id];
+      requireThat(
+        current &&
+          executionCancellationContext(s, current) === observed &&
+          s.machines[machine.id].activeJobId === job.id,
+        "CANCELLATION_NOT_CURRENT",
+        "The saved attempt changed. Keep it blocked and refresh before requesting cancellation again.",
+      );
+      s.machines[machine.id].ready = false;
+      s.machines[machine.id].paused = true;
+      record(current, "execution_cancellation_requested", reason);
+      return executionCancellationContext(s, current);
+    });
+    const proof = cancellationProof(
+      await this.node.call(
+        "cancel_before_acceptance",
+        {
+          ...this.node.token(job, machine, "cancel_before_acceptance", {
+            targetScope: scope,
+          }),
+          machine_id: machine.id,
+          job_id: job.id,
+          attempt_id: job.attemptId,
+          artifact_sha256: job.artifact.sha256,
+          parameters: parameters(job),
+          target_scope: scope,
+        },
+        machine,
+      ),
+      job,
+      machine,
+      scope,
+    );
+    return { pending, proof };
+  }
+  async rejectCalibration(machineId: string, body: any) {
+    const state = await this.read();
+    const { machine, calibration, reason } = calibrationRetirement(
+      state,
+      machineId,
+      body,
+    );
+    requireThat(
+      calibration.productionState === "produced" &&
+        !calibration.calibrationInspection,
+      "CALIBRATION_NOT_COMPLETED",
+      "Only the current completed calibration output can be rejected as unusable.",
+    );
+    const observed = calibrationOperationContext(
+      state,
+      machineId,
+      calibration.id,
+    );
+    const pending = await mutate(this.store, (s) => {
+      requireThat(
+        calibrationOperationContext(s, machineId, calibration.id) === observed,
+        "CALIBRATION_NOT_CURRENT",
+        "The calibration changed before inspection. Refresh its saved result.",
+      );
+      s.machines[machineId].ready = false;
+      s.machines[machineId].paused = true;
+      s.machines[machineId].calibrated = false;
+      record(
+        s.calibrations![calibration.id],
+        "calibration_rejection_requested",
+        reason,
+      );
+      return calibrationOperationContext(s, machineId, calibration.id);
+    });
+    const result = await this.node.call(
+      "/reconcile",
+      {
+        machine_id: machineId,
+        job_id: calibration.id,
+        attempt_id: calibration.attemptId,
+        inspected: true,
+        result: "completed",
+        reason,
+      },
+      machine,
+    );
+    requireThat(
+      result &&
+        result.machine_id === machineId &&
+        result.job_id === calibration.id &&
+        result.attempt_id === calibration.attemptId &&
+        result.mode === machine.mode &&
+        result.execution_status === "completed" &&
+        result.stop_pending === false,
+      "CALIBRATION_COMPLETION_UNCONFIRMED",
+      "The node did not confirm that this exact completed execution has settled. Keep the calibration blocked and refresh its status.",
+      502,
+    );
+    await mutate(this.store, (s) => {
+      requireThat(
+        calibrationOperationContext(s, machineId, calibration.id) === pending,
+        "CALIBRATION_NOT_CURRENT",
+        "The calibration changed while inspection was recorded. The newer saved state was preserved.",
+      );
+      const current = s.calibrations![calibration.id],
+        m = s.machines[machineId];
+      current.calibrationInspection = {
+        outcome: "rejected",
+        reason,
+        recordedAt: now(),
+        attemptId: current.attemptId!,
+      };
+      record(current, "calibration_output_rejected", reason);
+      m.activeJobId = null;
+      m.calibrated = false;
+      delete m.calibrationAt;
+      m.ready = false;
+      m.paused = true;
+      m.reason =
+        "Completed calibration output was inspected and rejected as unusable. Fix the cause before explicitly authorizing a new supervised calibration.";
+    });
+    return this.calibrationStatus(machineId, calibration.checkoutKey);
+  }
+  async cancelCalibrationBeforeAcceptance(machineId: string, body: any) {
+    const state = await this.read();
+    const { machine, calibration, reason } = calibrationRetirement(
+      state,
+      machineId,
+      body,
+    );
+    requireThat(
+      calibrationLifecycle(state, machineId, this.config.mode, calibration.id)
+        .canRequestCancellation,
+      "CALIBRATION_CANCELLATION_UNAVAILABLE",
+      "This saved attempt is already known to the node or is no longer eligible. Refresh and resolve its existing execution; never start it again.",
+    );
+    const { pending, proof } = await this.requestExecutionCancellation(
+      state,
+      calibration,
+      machine,
+      "calibration",
+      reason,
+    );
+    await mutate(this.store, (s) => {
+      const current = s.calibrations![calibration.id],
+        m = s.machines[machineId];
+      requireThat(
+        executionCancellationContext(s, current) === pending,
+        "CANCELLATION_NOT_CURRENT",
+        "The saved calibration changed while cancellation was confirmed. The newer state was preserved; refresh its exact record.",
+      );
+      current.executionCancellation = proof;
+      current.productionState = "cancelled";
+      record(current, "calibration_cancelled_before_acceptance", reason);
+      m.activeJobId = null;
+      m.calibrated = false;
+      delete m.calibrationAt;
+      m.ready = false;
+      m.paused = true;
+      m.reason =
+        "The node confirmed this exact calibration authorization was cancelled before acceptance. A new supervised calibration requires fresh explicit authorization.";
+    });
+    return this.calibrationStatus(machineId, calibration.checkoutKey);
   }
   async resolveCalibration(machineId: string, body: any) {
     requireThat(
@@ -1750,22 +1932,42 @@ export class Service {
           m,
         );
       else {
-        await this.resolveEvidence(
-          jobId,
-          {
+        const { pending, proof } = await this.requestExecutionCancellation(
+          s,
+          j,
+          m,
+          "dispatch",
+          reason,
+        );
+        await mutate(this.store, (currentState) => {
+          const current = currentState.jobs[jobId],
+            machine = currentState.machines[m.id];
+          requireThat(
+            executionCancellationContext(currentState, current) === pending,
+            "CANCELLATION_NOT_CURRENT",
+            "The saved order changed while cancellation was confirmed. Its newer state and payment were preserved; refresh before deciding what to do next.",
+          );
+          current.executionCancellation = proof;
+          current.evidence = {
             capturedAt: now(),
             machineId: m.id,
             jobId: j.id,
             result: "fail",
             reason:
-              "Owner inspected failure; authenticated node confirms no recorded acceptance. " +
+              "The node durably cancelled this exact authorization before acceptance. " +
               reason,
             source: m.mode,
             completionCredible: false,
             operatorOverride: true,
-          },
-          reason,
-        );
+          };
+          current.productionState = "failed";
+          current.fulfillmentState = "awaiting_owner";
+          machine.ready = false;
+          machine.paused = true;
+          machine.reason = current.evidence.reason;
+          record(current, "operator_override", reason);
+        });
+        await this.transfer(jobId, "refund");
         return this.job(jobId);
       }
       let evidence: any;

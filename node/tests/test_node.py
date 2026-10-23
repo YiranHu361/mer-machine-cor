@@ -242,7 +242,7 @@ async def test_journal_process_exclusivity(service, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_actual_http_and_fastmcp_same_five_tools(service, artifact):
+async def test_actual_http_and_fastmcp_same_tools(service, artifact):
     import socket
     import uvicorn
     sock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -264,7 +264,7 @@ async def test_actual_http_and_fastmcp_same_five_tools(service, artifact):
         transport=StreamableHttpTransport(url+"/mcp/",headers={"Authorization":"Bearer "+KEY})
         async with Client(transport) as client:
             listed=await client.list_tools()
-            assert {tool.name for tool in listed} == {"get_capabilities","get_status","run_job","camera_snapshot","abort"}
+            assert {tool.name for tool in listed} == {"get_capabilities","get_status","run_job","camera_snapshot","abort","cancel_before_acceptance"}
             result=await client.call_tool("get_status",{"machine_id":"phomemo_01","job_id":"job_1","attempt_id":"attempt_1"})
             assert not result.is_error
         await wait_done(service)

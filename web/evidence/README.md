@@ -1,10 +1,10 @@
 # Browser verification evidence
 
-Current checkpoint: 2026-10-23 05:35 Pacific. **182 scenarios passed in each of Chromium, Firefox and WebKit**, with 45 automated A/AA scans and no detected violations. 29 API/storage/wallet units passed. Final reports: `overnight-eighth-{chromium,firefox,webkit}-browser.json`; [source/counts/scope](../../docs/evidence/overnight-eighth-qa.json), [ongoing log](../../docs/overnight-qa.md).
+Current checkpoint: 2026-10-23 06:04 Pacific. **198 cases pass in each of Chromium, Firefox and WebKit**; 48 automated A/AA scans find 0 violations. Keyboard and visual checks are separate; this is not full accessibility conformance. [Source/counts/provenance](../../docs/evidence/overnight-tenth-qa.json), [ongoing QA](../../docs/overnight-qa.md). Final reports: `overnight-tenth-{chromium,firefox,webkit}-browser.json`.
 
-[Fresh calibration preparation at 320px](overnight-calibration-retry-320.png) shows intercepted APIs, fresh unchecked readiness and distinct retained inactive history. New cases cover exact checkpoint recovery, stale/unknown permissions, same-history draft retention, generation/busy ordering and mobile keyboard recovery. No physical job was started.
+[Local calibration error recovery at 320px](overnight-calibration-operator-error-320.png) uses intercepted APIs: the local alert and enabled Refresh stay visible/focused, and newer operator focus is respected. [Fresh preparation](overnight-calibration-retry-320.png) retains saved history, uses fresh unchecked readiness and labels local unsent cancellation explicitly. Separate buttons distinguish unusable-output rejection and durable cancellation before device acceptance. No physical operation is represented by these fixtures.
 
-The [actual reconnected owner view](overnight-eighth-sse-reconnected.png) used retained SpacetimeDB/simulation/mock with polling disabled. [Requester drafts](overnight-requester-drafts-320.png) remain in private session memory; forced termination can lose unsaved data. Native iOS, full accessibility conformance, hardware output, funded payments and live model calls remain unverified.
+[Actual owner reconnect](overnight-tenth-sse-reconnected.png) uses retained Spacetime/simulation/mock with polling disabled. [Requester drafts](overnight-requester-drafts-320.png) remain private session memory and can be lost on forced termination. Native iOS, physical output, funded payments and live providers remain unverified. The newly proven media-estimate accounting gap is the next repair.
 
 The following entries are historical implementation baselines.
 

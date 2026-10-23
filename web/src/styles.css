@@ -2471,6 +2471,36 @@ main {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.calibration-state-heading:focus {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+.calibration-inspection {
+  margin-top: 20px;
+  max-width: 700px;
+}
+.calibration-inspection > p,
+.calibration-negative-action p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.calibration-inspection > .secondary {
+  margin-top: 18px;
+}
+.calibration-negative-action {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px dashed var(--line);
+}
+.calibration-negative-action p {
+  margin: 0 0 12px;
+}
+.calibration-action-recovery .text-button {
+  display: block;
+  margin-top: 12px;
+}
 .calibration-resolution {
   margin-top: 20px;
   border-top: 1px dashed var(--line);

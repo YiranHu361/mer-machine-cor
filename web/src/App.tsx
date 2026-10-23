@@ -2906,7 +2906,11 @@ function OwnerApp({
     e.onerror = () => setConnected(false);
     return () => e.close();
   }, [session?.role, refresh]);
-  const act = async (name: string, fn: () => Promise<void>) => {
+  const act = async (
+    name: string,
+    fn: () => Promise<void>,
+    onError?: (error: Error) => void,
+  ) => {
     invalidateSnapshots(dashboardGate.current);
     setBusy(name);
     setError("");
@@ -2920,7 +2924,8 @@ function OwnerApp({
         );
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (onError) onError(e as Error);
+      else setError((e as Error).message);
       return false;
     } finally {
       setBusy("");
@@ -3422,37 +3427,43 @@ function OwnerApp({
                         machine={machine}
                         busy={busy}
                         action={(action, body, options) =>
-                          act(`${machine.id}-${action}`, async () => {
-                            try {
-                              const result = await api<{ machine?: Machine }>(
-                                `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
-                                body,
-                                action === "calibrate" ? undefined : "PATCH",
-                                {
-                                  headers: options?.fingerprint
-                                    ? { "If-Match": `"${options.fingerprint}"` }
-                                    : undefined,
-                                },
-                              );
-                              if (result.machine)
-                                options?.onAccepted?.(result.machine);
-                              setMessage(
-                                "The saved workshop state is shown below.",
-                              );
-                            } catch (error) {
-                              if (
-                                error instanceof ApiError &&
-                                [
-                                  "STALE_MACHINE_SETTINGS",
-                                  "MACHINE_POLICY_RECONCILIATION",
-                                ].includes(error.code)
-                              ) {
-                                options?.onConflict?.();
-                                await refresh();
+                          act(
+                            `${machine.id}-${action}`,
+                            async () => {
+                              try {
+                                const result = await api<{ machine?: Machine }>(
+                                  `/owner/machines/${machine.id}${action === "calibrate" ? "/calibrate" : ""}`,
+                                  body,
+                                  action === "calibrate" ? undefined : "PATCH",
+                                  {
+                                    headers: options?.fingerprint
+                                      ? {
+                                          "If-Match": `"${options.fingerprint}"`,
+                                        }
+                                      : undefined,
+                                  },
+                                );
+                                if (result.machine)
+                                  options?.onAccepted?.(result.machine);
+                                setMessage(
+                                  "The saved workshop state is shown below.",
+                                );
+                              } catch (error) {
+                                if (
+                                  error instanceof ApiError &&
+                                  [
+                                    "STALE_MACHINE_SETTINGS",
+                                    "MACHINE_POLICY_RECONCILIATION",
+                                  ].includes(error.code)
+                                ) {
+                                  options?.onConflict?.();
+                                  await refresh();
+                                }
+                                throw error;
                               }
-                              throw error;
-                            }
-                          })
+                            },
+                            options?.onError,
+                          )
                         }
                       />
                     ))}
@@ -3570,6 +3581,7 @@ function OwnerMachine({
       fingerprint?: string;
       onAccepted?: (machine: Machine) => void;
       onConflict?: () => void;
+      onError?: (error: Error) => void;
     },
   ) => Promise<boolean>;
 }) {
@@ -3629,8 +3641,12 @@ function OwnerMachine({
     setDirty(false);
     setRejectedSave(false);
   };
-  const checkedAction = async (name: string, body: unknown) => {
-    const accepted = await action(name, body);
+  const checkedAction = async (
+    name: string,
+    body: unknown,
+    onError?: (error: Error) => void,
+  ) => {
+    const accepted = await action(name, body, { onError });
     if (accepted) setInspected(false);
     return accepted;
   };
@@ -3722,7 +3738,9 @@ function OwnerMachine({
       {m.mode === "hardware" && (
         <PhysicalCalibration
           machine={m}
-          finalize={(body) => checkedAction("calibrate", body)}
+          finalize={(body, onError) =>
+            checkedAction("calibrate", body, onError)
+          }
         />
       )}
       <details className="machine-settings">
@@ -3981,6 +3999,28 @@ type Calibration = {
   checkoutKey?: string;
   calibrationDeviceContext?: string;
   attemptId: string;
+  version: number;
+  createdAt?: string;
+  artifact?: { sha256: string };
+  specVersion?: number;
+  spec?: Spec;
+  calibrationInspection?: {
+    outcome: "rejected";
+    reason: string;
+    recordedAt: string;
+    attemptId: string;
+  };
+  executionCancellation?: {
+    status: "cancelled_before_acceptance";
+    machine_id: string;
+    job_id: string;
+    attempt_id: string;
+    artifact_sha256: string;
+    parameters: Record<string, unknown>;
+    target_scope: "calibration";
+    expected_mode: "hardware" | "simulation";
+    cancelled_at: string;
+  };
   productionState?: string;
   reason?: string;
   evidence?: {
@@ -3995,12 +4035,16 @@ function PhysicalCalibration({
   finalize,
 }: {
   machine: Machine;
-  finalize: (body: unknown) => Promise<boolean>;
+  finalize: (
+    body: unknown,
+    onError?: (error: Error) => void,
+  ) => Promise<boolean>;
 }) {
   type Lifecycle = {
     activeJobId: string | null;
     calibrationActive: boolean;
     canRequestNew: boolean;
+    canRequestCancellation: boolean;
     context: string;
     reasonCode: string;
     reason: string;
@@ -4063,6 +4107,13 @@ function PhysicalCalibration({
   const [resolution, setResolution] = useState("completed");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const actionErrorNotice = useRef<HTMLDivElement>(null);
+  const pendingActionFocus = useRef<{
+    initiator: Element | null;
+    generation: number;
+    context: string;
+  } | null>(null);
   const [lookupKnown, setLookupKnown] = useState(false);
   const [lookupBusy, setLookupBusy] = useState(false);
   const permissionContext = JSON.stringify([
@@ -4075,8 +4126,9 @@ function PhysicalCalibration({
   const knownPermissionContext = useRef<string | null>(null);
   const recoveryControl = useRef<HTMLElement | null>(null);
   const prepareButton = useRef<HTMLButtonElement>(null);
+  const stateHeading = useRef<HTMLElement>(null);
   const pendingRecoveryFocus = useRef<{
-    initiator: HTMLButtonElement;
+    initiator: HTMLElement;
     recovered: boolean;
     generation: number;
   } | null>(null);
@@ -4103,11 +4155,35 @@ function PhysicalCalibration({
     calibration?.id,
     calibration?.attemptId,
     calibration?.productionState,
+    calibration?.calibrationInspection,
+    calibration?.executionCancellation,
     calibration?.evidence?.url,
     calibration?.evidence?.capturedAt,
     calibration?.evidence?.machineId,
     calibration?.evidence?.jobId,
   ]);
+  const actionContext = JSON.stringify([
+    m.id,
+    m.registrationId,
+    m.mode,
+    m.outputType,
+    m.adapterVersion,
+    m.material,
+    m.paired,
+    m.configured,
+    calibration?.id,
+    calibration?.attemptId,
+    calibration?.productionState,
+    calibration?.calibrationInspection,
+    calibration?.executionCancellation,
+    calibration?.evidence,
+  ]);
+  const liveActionContext = useRef(actionContext);
+  liveActionContext.current = actionContext;
+  useEffect(() => {
+    pendingActionFocus.current = null;
+    setActionError("");
+  }, [actionContext]);
   useEffect(() => {
     // An inspection is a fresh confirmation of this exact attempt and frame.
     // A newer saved attempt must not inherit an earlier checked confirmation.
@@ -4125,6 +4201,55 @@ function PhysicalCalibration({
       readGate.current.queued = null;
     };
   }, []);
+  const cancellationParameters = (saved: Calibration) =>
+    saved.spec && {
+      ...(saved.spec.outputType === "3d"
+        ? {
+            depthMm: saved.spec.depthMm,
+            color: saved.spec.color,
+            estimatedSeconds: saved.spec.estimatedSeconds,
+          }
+        : {}),
+      outputType: saved.spec.outputType,
+      widthMm: saved.spec.widthMm,
+      heightMm: saved.spec.heightMm,
+      quantity: saved.spec.quantity,
+      material: saved.spec.material,
+      crop: saved.spec.crop,
+      specVersion: saved.specVersion,
+    };
+  const validCancellation = (saved: Calibration) => {
+    const proof = saved.executionCancellation;
+    const expected = cancellationParameters(saved);
+    return Boolean(
+      proof &&
+      typeof proof === "object" &&
+      !Array.isArray(proof) &&
+      proof.status === "cancelled_before_acceptance" &&
+      proof.machine_id === m.id &&
+      proof.job_id === saved.id &&
+      proof.attempt_id === saved.attemptId &&
+      /^[a-f0-9]{64}$/i.test(saved.artifact?.sha256 || "") &&
+      proof.artifact_sha256 === saved.artifact?.sha256 &&
+      proof.target_scope === "calibration" &&
+      ["hardware", "simulation"].includes(proof.expected_mode) &&
+      Number.isFinite(Date.parse(proof.cancelled_at)) &&
+      Date.parse(proof.cancelled_at) <= Date.now() + 60000 &&
+      (saved.createdAt === undefined ||
+        (Number.isFinite(Date.parse(saved.createdAt)) &&
+          Date.parse(proof.cancelled_at) >=
+            Date.parse(saved.createdAt) - 60000)) &&
+      expected &&
+      proof.parameters &&
+      typeof proof.parameters === "object" &&
+      !Array.isArray(proof.parameters) &&
+      Object.keys(proof.parameters).length === Object.keys(expected).length &&
+      Object.entries(expected).every(
+        ([field, value]) =>
+          value !== undefined && proof.parameters[field] === value,
+      ),
+    );
+  };
   const validCalibration = (value: unknown): value is Calibration => {
     const saved = value as Calibration | null;
     return Boolean(
@@ -4132,6 +4257,22 @@ function PhysicalCalibration({
       typeof saved === "object" &&
       !Array.isArray(saved) &&
       saved.machineId === m.id &&
+      Number.isInteger(saved.version) &&
+      saved.version > 0 &&
+      (saved.calibrationInspection === undefined ||
+        (saved.calibrationInspection !== null &&
+          typeof saved.calibrationInspection === "object" &&
+          !Array.isArray(saved.calibrationInspection) &&
+          saved.calibrationInspection.outcome === "rejected" &&
+          saved.calibrationInspection.attemptId === saved.attemptId &&
+          typeof saved.calibrationInspection.reason === "string" &&
+          saved.calibrationInspection.reason.trim().length >= 10 &&
+          saved.calibrationInspection.reason.trim().length <= 1000 &&
+          Number.isFinite(Date.parse(saved.calibrationInspection.recordedAt)) &&
+          saved.productionState === "produced")) &&
+      (saved.executionCancellation === undefined ||
+        (saved.productionState === "cancelled" && validCancellation(saved))) &&
+      (saved.productionState !== "cancelled" || validCancellation(saved)) &&
       [saved.id, saved.attemptId, saved.productionState].every(
         (field) => typeof field === "string" && field.trim().length > 0,
       ) &&
@@ -4177,6 +4318,14 @@ function PhysicalCalibration({
             ) ||
             typeof life.calibrationActive !== "boolean" ||
             typeof life.canRequestNew !== "boolean" ||
+            typeof life.canRequestCancellation !== "boolean" ||
+            (life.canRequestCancellation &&
+              (!life.calibrationActive ||
+                life.contextMatch === false ||
+                !saved ||
+                !["dispatched", "needs_review"].includes(
+                  saved.productionState || "",
+                ))) ||
             typeof life.context !== "string" ||
             !/^[a-f0-9]{64}$/i.test(life.context) ||
             ![life.reasonCode, life.reason].every(
@@ -4354,7 +4503,9 @@ function PhysicalCalibration({
     !dashboardBlocked &&
     !unresolvedStart &&
     (!calibration ||
-      ["produced", "failed"].includes(calibration.productionState || "")),
+      ["produced", "failed", "cancelled"].includes(
+        calibration.productionState || "",
+      )),
   );
   const showStartForm = Boolean(
     preparation || (!calibration && lookupKnown && !unresolvedStart),
@@ -4365,6 +4516,8 @@ function PhysicalCalibration({
     (!preparation || preparation.historicalId === calibration?.id);
   const canInspect =
     lookupKnown &&
+    !calibration?.calibrationInspection &&
+    !calibration?.executionCancellation &&
     lifecycle?.contextMatch !== false &&
     (!unresolvedStart || lifecycle?.calibrationActive === true) &&
     !dashboardBlocked &&
@@ -4373,12 +4526,31 @@ function PhysicalCalibration({
     m.paired &&
     m.configured &&
     Boolean(lifecycle?.calibrationActive || lifecycle?.canRequestNew);
+  const canConfirm = canInspect && calibration?.productionState === "produced";
+  const canNegativeCleanup =
+    lookupKnown &&
+    lifecycle?.calibrationActive === true &&
+    lifecycle.contextMatch !== false &&
+    !dashboardBlocked &&
+    !calibration?.calibrationInspection &&
+    !calibration?.executionCancellation;
+  const canReject =
+    canNegativeCleanup && calibration?.productionState === "produced";
+  const canResolve =
+    canInspect &&
+    lifecycle?.calibrationActive === true &&
+    ["needs_review", "failed"].includes(calibration?.productionState || "");
+  const canCancel =
+    canNegativeCleanup && lifecycle?.canRequestCancellation === true;
+  const canDescribe = Boolean(
+    canConfirm || canResolve || canReject || canCancel,
+  );
   useEffect(() => {
     if (
       !preparation &&
       !unresolvedStart &&
       (!calibration ||
-        ["produced", "failed", "needs_review"].includes(
+        ["produced", "failed", "cancelled", "needs_review"].includes(
           calibration.productionState || "",
         ))
     )
@@ -4397,7 +4569,16 @@ function PhysicalCalibration({
     fn: (isCurrent: () => boolean) => Promise<unknown>,
   ) => {
     if (!mounted.current) return;
-    if (["start", "finalize", "resolve"].includes(name)) {
+    const localRecovery = ["finalize", "resolve", "reject", "cancel"].includes(
+      name,
+    );
+    const initiator = document.activeElement;
+    const context = liveActionContext.current;
+    if (localRecovery) {
+      setActionError("");
+      setInspected(false);
+    }
+    if (["start", "finalize", "resolve", "reject", "cancel"].includes(name)) {
       readGate.current.generation++;
       setLookupKnown(false);
     }
@@ -4409,7 +4590,12 @@ function PhysicalCalibration({
     try {
       await fn(isCurrent);
     } catch (e) {
-      if (isCurrent()) setError((e as Error).message);
+      if (isCurrent()) {
+        if (localRecovery && context === liveActionContext.current) {
+          setActionError((e as Error).message);
+          pendingActionFocus.current = { initiator, generation, context };
+        } else if (!localRecovery) setError((e as Error).message);
+      }
     } finally {
       if (isCurrent()) setBusy("");
     }
@@ -4418,6 +4604,7 @@ function PhysicalCalibration({
     const requestedDevice = liveDeviceContext.current;
     void run("refresh", async () => {
       const recovered = await refresh();
+      if (recovered) setActionError("");
       if (!mounted.current || requestedDevice !== liveDeviceContext.current)
         return;
       pendingRecoveryFocus.current = {
@@ -4437,7 +4624,9 @@ function PhysicalCalibration({
       recoveredControl?.isConnected &&
       !recoveredControl.matches(":disabled")
         ? recoveredControl
-        : request.initiator;
+        : request.recovered && stateHeading.current
+          ? stateHeading.current
+          : request.initiator;
     pendingRecoveryFocus.current = null;
     // Focus after the pending controls have re-enabled in the committed DOM.
     requestAnimationFrame(() => {
@@ -4463,6 +4652,105 @@ function PhysicalCalibration({
       });
     });
   }, [recoverySequence, busy, lookupBusy]);
+  useEffect(() => {
+    const request = pendingActionFocus.current;
+    if (!request || busy || !actionError) return;
+    pendingActionFocus.current = null;
+    requestAnimationFrame(() => {
+      if (
+        !mounted.current ||
+        request.generation !== readGate.current.generation ||
+        request.context !== liveActionContext.current
+      )
+        return;
+      const active = document.activeElement;
+      if (active !== request.initiator && active !== document.body) return;
+      const target = actionErrorNotice.current;
+      if (!target?.isConnected || !target.getClientRects().length) return;
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "nearest", behavior: "instant" });
+    });
+  }, [actionError, busy]);
+  const recordNegativeOutcome = (kind: "reject" | "cancel") => {
+    if (
+      !calibration ||
+      !lifecycle ||
+      !inspected ||
+      reason.trim().length < 10 ||
+      reason.trim().length > 1000 ||
+      busy ||
+      lookupBusy ||
+      !(kind === "reject" ? canReject : canCancel)
+    )
+      return;
+    const target = calibration;
+    const expectedContext = lifecycle.context;
+    const expectedMode = m.mode;
+    const capturedReason = reason.trim();
+    const initiator =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : document.body;
+    void run(kind, async (isCurrent) => {
+      const result = await api<{
+        calibration: Calibration | null;
+        requestedCalibration?: Calibration | null;
+      }>(
+        `/owner/machines/${m.id}/calibration/${kind === "reject" ? "reject" : "cancel-before-acceptance"}`,
+        {
+          attemptId: target.attemptId,
+          expectedVersion: target.version,
+          expectedContext,
+          inspected: true,
+          reason: capturedReason,
+        },
+      );
+      const saved = [result?.calibration, result?.requestedCalibration].find(
+        (value) =>
+          value?.id === target.id && value?.attemptId === target.attemptId,
+      );
+      if (
+        !validCalibration(saved) ||
+        saved.version <= target.version ||
+        saved.artifact?.sha256 !== target.artifact?.sha256 ||
+        saved.calibrationDeviceContext !== target.calibrationDeviceContext ||
+        JSON.stringify(cancellationParameters(saved)) !==
+          JSON.stringify(cancellationParameters(target)) ||
+        (kind === "reject"
+          ? saved.calibrationInspection?.outcome !== "rejected" ||
+            saved.calibrationInspection.reason !== capturedReason
+          : !validCancellation(saved) ||
+            saved.executionCancellation?.expected_mode !== expectedMode ||
+            saved.executionCancellation?.artifact_sha256 !==
+              target.artifact?.sha256 ||
+            JSON.stringify(cancellationParameters(saved)) !==
+              JSON.stringify(cancellationParameters(target)))
+      )
+        throw new ApiError(
+          "The recovery response could not be matched to this exact saved attempt. Its result is unknown; refresh the saved calibration status before deciding what to do next.",
+          "invalid_response",
+          0,
+          true,
+        );
+      if (!isCurrent()) return;
+      setInspected(false);
+      setReason("");
+      setResolution("completed");
+      const recovered = await refresh();
+      if (!recovered && isCurrent())
+        throw new Error(
+          "The recovery was accepted, but its latest saved state could not be loaded. Refresh the saved calibration status before another action.",
+        );
+      if (recovered && isCurrent()) {
+        pendingRecoveryFocus.current = {
+          initiator,
+          recovered: true,
+          generation: readGate.current.generation,
+        };
+        setRecoverySequence((value) => value + 1);
+      }
+    });
+  };
   const beginPreparation = (initiator: HTMLButtonElement) => {
     if (!canRequestNew || !lifecycle || !calibration || busy || lookupBusy)
       return;
@@ -4811,7 +5099,7 @@ function PhysicalCalibration({
                 });
               }}
             >
-              Keep previous calibration record
+              Cancel calibration preparation
             </button>
           )}
         </form>
@@ -4819,7 +5107,13 @@ function PhysicalCalibration({
       {calibration && (
         <>
           <div className="calibration-status">
-            <strong>
+            <strong
+              className="calibration-state-heading"
+              role="heading"
+              aria-level={4}
+              tabIndex={-1}
+              ref={stateHeading}
+            >
               {lifecycle?.calibrationActive
                 ? "Current calibration attempt"
                 : "Saved inactive calibration"}
@@ -4869,115 +5163,248 @@ function PhysicalCalibration({
               </figcaption>
             </figure>
           )}
-          {!preparation && (
-            <>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void run("finalize", async (isCurrent) => {
-                    if (
-                      await finalize({
-                        inspected: true,
-                        attemptId: calibration.attemptId,
-                        reason,
-                      })
-                    ) {
-                      if (!isCurrent()) return;
-                      setInspected(false);
-                      setReason("");
-                      setResolution("completed");
-                      await refresh();
-                    }
-                  });
-                }}
-              >
+          {calibration.calibrationInspection && (
+            <Notice>
+              Calibration output rejected. Execution remains completed. The
+              machine stays paused and uncalibrated; inspect and fix the setup
+              before preparing a new supervised calibration.
+            </Notice>
+          )}
+          {calibration.executionCancellation && (
+            <Notice>
+              The node durably cancelled this attempt before acceptance. This
+              does not stop an accepted job. The machine stays paused and
+              uncalibrated.
+            </Notice>
+          )}
+          {!preparation &&
+            !calibration.calibrationInspection &&
+            !calibration.executionCancellation && (
+              <div className="calibration-inspection">
+                <p>
+                  {calibration.productionState === "produced"
+                    ? "The execution completed. Inspect whether its output is usable; completion alone is not a calibration pass."
+                    : "Inspect the device and this exact attempt before recording an outcome. Missing node status is not proof that a delayed request cannot still arrive."}
+                </p>
                 <label className="check">
                   <input
                     ref={(node) => {
-                      recoveryControl.current = node;
+                      if (node) recoveryControl.current = node;
                     }}
-                    required
                     type="checkbox"
-                    disabled={Boolean(busy) || !canInspect}
+                    disabled={Boolean(busy) || !canDescribe}
                     checked={inspected}
-                    onChange={(e) => setInspected(e.target.checked)}
+                    onChange={(event) => setInspected(event.target.checked)}
                   />
                   <span>
-                    I inspected the physical output and fresh result evidence
-                    after this attempt completed.
+                    I inspected this device and the output state for this
+                    calibration attempt.
                   </span>
                 </label>
                 <Field label="Calibration inspection reason">
                   <input
                     required
                     minLength={10}
-                    disabled={Boolean(busy) || !canInspect}
+                    maxLength={1000}
+                    disabled={Boolean(busy) || !canDescribe}
                     value={reason}
-                    onChange={(e) => setReason(e.target.value)}
+                    onChange={(event) => setReason(event.target.value)}
                     placeholder="Describe the observed output and inspection"
                   />
                 </Field>
                 <Button
                   className="secondary"
-                  type="submit"
                   busy={busy === "finalize"}
-                  disabled={
-                    Boolean(busy) || lookupBusy || !canInspect || !inspected
-                  }
-                >
-                  Confirm inspected calibration
-                </Button>
-              </form>
-              <details className="calibration-resolution">
-                <summary>Resolve an uncertain calibration attempt</summary>
-                <p>
-                  Record an observed outcome only after inspecting the device.
-                  This does not rerun the physical job.
-                </p>
-                <Field label="Observed calibration outcome">
-                  <select
-                    disabled={Boolean(busy) || !canInspect}
-                    value={resolution}
-                    onChange={(e) => setResolution(e.target.value)}
-                  >
-                    <option value="completed">
-                      Completed · output observed
-                    </option>
-                    <option value="failed">
-                      Failed · output missing or unusable
-                    </option>
-                  </select>
-                </Field>
-                <Button
-                  className="secondary"
                   disabled={
                     Boolean(busy) ||
                     lookupBusy ||
-                    !canInspect ||
+                    !canConfirm ||
                     !inspected ||
-                    reason.trim().length < 10
+                    reason.trim().length < 10 ||
+                    reason.trim().length > 1000
                   }
-                  busy={busy === "resolve"}
                   onClick={() => {
-                    void run("resolve", async (isCurrent) => {
-                      await api(`/owner/machines/${m.id}/calibration/resolve`, {
-                        attemptId: calibration.attemptId,
-                        result: resolution,
-                        inspected: true,
-                        reason,
-                      });
+                    const observedReason = reason;
+                    void run("finalize", async (isCurrent) => {
+                      let failure: Error | undefined;
+                      const accepted = await finalize(
+                        {
+                          inspected: true,
+                          attemptId: calibration.attemptId,
+                          reason: observedReason,
+                        },
+                        (error) => {
+                          failure = error;
+                        },
+                      );
+                      if (!accepted)
+                        throw (
+                          failure ||
+                          new Error(
+                            "The calibration confirmation could not be confirmed. Refresh the saved calibration status.",
+                          )
+                        );
                       if (!isCurrent()) return;
                       setInspected(false);
                       setReason("");
                       setResolution("completed");
-                      await refresh();
+                      if (!(await refresh()) && isCurrent())
+                        throw new Error(
+                          "Calibration confirmation was accepted, but the latest saved state could not be loaded. Refresh before another action.",
+                        );
                     });
                   }}
                 >
-                  Record observed outcome
+                  Confirm usable calibration
                 </Button>
-              </details>
-            </>
+                {calibration.productionState === "produced" &&
+                  lifecycle?.calibrationActive && (
+                    <div className="calibration-negative-action">
+                      <p>
+                        If the completed output is missing or unusable, reject
+                        this calibration result. The completed execution record
+                        is retained.
+                      </p>
+                      <Button
+                        className="secondary"
+                        busy={busy === "reject"}
+                        disabled={
+                          Boolean(busy) ||
+                          lookupBusy ||
+                          !canReject ||
+                          !inspected ||
+                          reason.trim().length < 10 ||
+                          reason.trim().length > 1000
+                        }
+                        onClick={() => recordNegativeOutcome("reject")}
+                      >
+                        Reject calibration output
+                      </Button>
+                    </div>
+                  )}
+                {lifecycle?.canRequestCancellation && (
+                  <div className="calibration-negative-action">
+                    <p>
+                      Request cancellation of this exact saved attempt before
+                      device acceptance. Only the node can confirm that it has
+                      not accepted the request. This does not stop an accepted
+                      job.
+                    </p>
+                    <Button
+                      className="secondary"
+                      busy={busy === "cancel"}
+                      disabled={
+                        Boolean(busy) ||
+                        lookupBusy ||
+                        !canCancel ||
+                        !inspected ||
+                        reason.trim().length < 10 ||
+                        reason.trim().length > 1000
+                      }
+                      onClick={() => recordNegativeOutcome("cancel")}
+                    >
+                      Cancel before device acceptance
+                    </Button>
+                  </div>
+                )}
+                {lifecycle?.calibrationActive &&
+                  ["needs_review", "failed"].includes(
+                    calibration.productionState || "",
+                  ) && (
+                    <details className="calibration-resolution">
+                      <summary>
+                        Resolve an uncertain calibration attempt
+                      </summary>
+                      <p>
+                        Record an observed execution outcome after the worker
+                        and any stop request have settled. This does not rerun
+                        the physical job. An unusable completed output must be
+                        rejected separately.
+                      </p>
+                      <Field label="Observed calibration outcome">
+                        <select
+                          disabled={Boolean(busy) || !canResolve}
+                          value={resolution}
+                          onChange={(event) =>
+                            setResolution(event.target.value)
+                          }
+                        >
+                          <option
+                            value="completed"
+                            disabled={calibration.productionState === "failed"}
+                          >
+                            Completed · output observed
+                          </option>
+                          <option value="failed">
+                            Failed · execution did not complete
+                          </option>
+                        </select>
+                      </Field>
+                      <Button
+                        className="secondary"
+                        disabled={
+                          Boolean(busy) ||
+                          lookupBusy ||
+                          !canResolve ||
+                          !inspected ||
+                          reason.trim().length < 10 ||
+                          reason.trim().length > 1000 ||
+                          (calibration.productionState === "failed" &&
+                            resolution !== "failed")
+                        }
+                        busy={busy === "resolve"}
+                        onClick={() => {
+                          const result = resolution;
+                          const observedReason = reason;
+                          void run("resolve", async (isCurrent) => {
+                            await api(
+                              `/owner/machines/${m.id}/calibration/resolve`,
+                              {
+                                attemptId: calibration.attemptId,
+                                result,
+                                inspected: true,
+                                reason: observedReason,
+                              },
+                            );
+                            if (!isCurrent()) return;
+                            setInspected(false);
+                            setReason("");
+                            setResolution("completed");
+                            if (!(await refresh()) && isCurrent())
+                              throw new Error(
+                                "The observed outcome was accepted, but its latest saved state could not be loaded. Refresh before another action.",
+                              );
+                          });
+                        }}
+                      >
+                        Record observed outcome
+                      </Button>
+                    </details>
+                  )}
+              </div>
+            )}
+          {actionError && (
+            <div
+              className="notice error calibration-action-recovery"
+              role="alert"
+              tabIndex={-1}
+              ref={actionErrorNotice}
+            >
+              <p>
+                The calibration result could not be confirmed here. Refresh its
+                saved status before deciding what to do next. No replacement job
+                was requested.
+              </p>
+              <p>{actionError}</p>
+              <button
+                type="button"
+                className="text-button"
+                disabled={Boolean(busy) || lookupBusy}
+                onClick={(event) => recoverLookup(event.currentTarget)}
+              >
+                Refresh saved calibration status
+              </button>
+            </div>
           )}
         </>
       )}

@@ -1,0 +1,425 @@
+{
+  "softwareProvenance": {
+    "completeSharedCheck": ".data/overnight-tenth-software-final.log",
+    "completeSharedSourceStateSha256": "c722277aaf8bf2c73d4ec34ae1aed8ece6f119bcedcb7460de91e82302e8bca9",
+    "finalSourceStateSha256": "98594282729c9c222f7c461c5ac91fdcb7b91be8246965919002096fd9c0192a",
+    "subsequentBrowserFixtureOnly": [
+      "web/tests/calibration-operator-recovery.spec.ts"
+    ],
+    "note": "The complete shared check followed all tenth application changes. One later browser-only correction explicitly focuses/presses Enter for a keyboard recovery case because native Mac WebKit mouse clicks retained the parent Notice focus. App/styles and production bundle are unchanged; final browser suites use the corrected fixture and that built origin. Earlier affected/diagnostic runs are not additional unique cases."
+  },
+  "recordedAt": "2026-10-23T13:05:19.699Z",
+  "localTimeZone": "America/Los_Angeles",
+  "sourceStateSha256": "98594282729c9c222f7c461c5ac91fdcb7b91be8246965919002096fd9c0192a",
+  "status": "OVERNIGHT_IN_PROGRESS_REQUIRED_LIVE_ACCEPTANCE_BLOCKED",
+  "morningCutoff": "2026-10-23T16:00:00Z",
+  "automationId": "overnight-fabrary-quality-checks",
+  "software": {
+    "backendApplicationProcessAndRealtime": 201,
+    "node": 107,
+    "paymentClaudeFixtures": 25,
+    "fetchBridge": 5,
+    "browserStorageAndWallet": 29,
+    "browserScenarios": 198,
+    "uniqueCases": 565,
+    "checksIncludingThreeBrowserEngines": 961,
+    "failedFinalTests": 0,
+    "skippedFinalTests": 0
+  },
+  "browser": [
+    {
+      "engine": "chromium",
+      "version": "156.0.8078.4",
+      "passed": 198,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T12:56:34.522Z",
+      "durationMs": 114928.505,
+      "report": "web/evidence/overnight-tenth-chromium-browser.json",
+      "reportSha256": "b5001547d048fb08aa5c7eb5e568b80f5d457937838ee2ef8f0e76fc8bd51397",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "157.0",
+      "passed": 198,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T12:59:01.170Z",
+      "durationMs": 143679.657,
+      "report": "web/evidence/overnight-tenth-firefox-browser.json",
+      "reportSha256": "8f7c72b14ebc48a98040dccb02ec5cf45e613bfcd86972549e22e92a4222e65e",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "27.2",
+      "passed": 198,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "startedAt": "2026-10-23T13:01:47.092Z",
+      "durationMs": 126806.968,
+      "report": "web/evidence/overnight-tenth-webkit-browser.json",
+      "reportSha256": "9c1f310a0b7f085174d0b44a728bd637c26470bc35014a625ea41303cb1d9e49",
+      "accessibilityAudits": [
+        {
+          "state": "requester-intake-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-intake-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-320",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "requester-preview-1440",
+          "rulesPassed": 21,
+          "violations": 0
+        },
+        {
+          "state": "owner-login",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-login-mobile",
+          "rulesPassed": 20,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-320",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-orders-handling-1440",
+          "rulesPassed": 29,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-320",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-machines-policy-1440",
+          "rulesPassed": 27,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-320",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "owner-payment-records-1440",
+          "rulesPassed": 23,
+          "violations": 0
+        },
+        {
+          "state": "service-unavailable",
+          "rulesPassed": 19,
+          "violations": 0
+        },
+        {
+          "state": "calibration-operator-error-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "calibration-retry-320",
+          "rulesPassed": 17,
+          "violations": 0
+        },
+        {
+          "state": "requester-drafts-320",
+          "rulesPassed": 12,
+          "violations": 0
+        }
+      ]
+    }
+  ],
+  "actualLocalChecks": {
+    "finalRuntime": {
+      "checkedAt": "2026-10-23T13:04:50.833Z",
+      "sourceStateSha256": "98594282729c9c222f7c461c5ac91fdcb7b91be8246965919002096fd9c0192a",
+      "servedBuildByteMatch": true,
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "activeJobs": 0,
+      "registeredModes": [
+        "simulation"
+      ]
+    },
+    "creationCorrelationRestartHistorical": "docs/evidence/overnight-eighth-creation-restart.json",
+    "signedSimulationCalibrationApi": {
+      "at": "2026-10-23T12:53:38.578Z",
+      "status": "PASS",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "machineId": "phomemo_01",
+      "rejectedCalibrationId": "calibration_5fa650f3-91d8-40ed-bc2e-399d9c912343",
+      "freshCalibrationId": "calibration_ba07a4e6-e600-4bfe-8624-8742ff494f4d",
+      "attemptIds": [
+        "calibration_attempt_ba895062-f472-46a8-a4b0-076627127677",
+        "calibration_attempt_5e062f7d-3558-4fd8-b995-8eacb6483380"
+      ],
+      "checks": [
+        "Completed execution remains completed with identical timestamps/credibility after separate unusable-output rejection",
+        "Exact version/device context/attempt inspection releases only matching backend calibration slot",
+        "Rejected output cannot later be used as calibration proof (explicit409)",
+        "Fresh supervised request uses new key/id/attempt and matching pixels; inspection remains paused until explicit resume"
+      ],
+      "explicitSimulationCalibrations": 2,
+      "physicalJobs": 0,
+      "paymentOperations": 0,
+      "physicalCalibration": "NOT_RUN"
+    },
+    "backendRestartSseReconnect": {
+      "at": "2026-10-23T12:53:30.444Z",
+      "mode": "simulation",
+      "paymentMode": "mock",
+      "store": "spacetimedb",
+      "physicalJobs": 0,
+      "before": {
+        "opens": 1,
+        "errors": 0,
+        "refreshes": 1,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "recoveredRevision": 3853,
+      "after": {
+        "opens": 2,
+        "errors": 1,
+        "refreshes": 4,
+        "blocked": [
+          15000,
+          3000
+        ]
+      },
+      "status": "PASS",
+      "assertions": [
+        "Actual backend/node restart with durable journals preserved",
+        "EventSource error/disconnected notice followed by native reconnect",
+        "Open owner view receives new database mutations after reconnect",
+        "Dashboard and health polling disabled throughout",
+        "No replacement job or payment submitted"
+      ]
+    },
+    "earlierAcceptance": "First-checkpoint Spacetime CAS/access/subscriptions,10 sticker+3 Instax simulation jobs, failure/review/lost-ack and local FastMCP remain historical. Seventh creation correlation and eighth exact restart replay are retained. Two explicitly authorized finite simulation calibrations exercise completed-output rejection preserving execution, old-proof refusal and fresh supervised recovery. Two new actual Python HTTP/temp-store regressions prove customer and calibration cancellation prevent a held request accepting after current404; no retained runtime fault injection or live funds."
+  },
+  "physicalJobs": 0,
+  "onchainTransactions": 0,
+  "liveClaudeCalls": 0,
+  "asiOneDiscovery": "NOT_TESTED",
+  "secretScan": {
+    "status": "PASS",
+    "candidateFiles": 287,
+    "configuredSecretsFound": 0,
+    "privateFilesIgnored": true,
+    "privatePermissions": [
+      {
+        "path": ".env",
+        "mode": "600"
+      },
+      {
+        "path": ".data/local-credentials.json",
+        "mode": "600"
+      }
+    ]
+  },
+  "logHashes": {
+    ".data/overnight-tenth-software-final.log": "fc80b87593b860ca5343ee1e481b65b371161b463671b14ce94bccb2153bfd4c",
+    ".data/overnight-tenth-sse-reconnect-final.log": "2ab204f7ec43737df3782d1a1707bb69ca8a4306525fbd216ab5e0cf154ec078",
+    ".data/overnight-tenth-calibration-acceptance-final.log": "893bc11b5bb594210d4abcee422b6911ff386d611840132ee1ba77d2878d129b",
+    ".data/overnight-tenth-chromium-browser.log": "b0f15fee16e3d39fd6f8d3c488313dd1a9210929a337d788083761d8c57a1036",
+    ".data/overnight-tenth-firefox-browser.log": "83f733b527d0048b35217af98987207ec1ea0c5863b12e172188b9271d36b105",
+    ".data/overnight-tenth-webkit-browser.log": "fe87388e25c086deedcfe01cb38c64b26a1617193e3ab7c123ffcfc899e4fa84"
+  },
+  "finalBuild": {
+    "indexSha256": "6d094ca40f52d0d9524f55efacfb6be8862c6451e2b44e17b162e2770c5186ff",
+    "script": "/assets/index-BjOsf7Tj.js",
+    "stylesheet": "/assets/index-CqLe1zu1.css"
+  },
+  "notes": "Tenth checkpoint verifies signed durable cancellation-before-acceptance fences across SQLite/HTTP/MCP, strict cancellation-proof/CAS validation before refund or calibration retirement, separate unusable calibration inspection, and local owner error recovery focus. Lifecycle permission is not physical idleness or private camera/transport proof; node acceptance and its configuration binding remain required. New tests use isolated stores/files/fake devices/intercepted APIs. Actual retained runtime remains simulation/mock/SpacetimeDB; no physical or live-service acceptance is substituted.",
+  "remainingActionable": [
+    "Media estimate accounting after calibration/failed output and terminal/journal crash gap; isolated causal proofs ready for eleventh repair.",
+    "Expired pickup rejects correctly but owner renewal path is absent; isolated Service proof ready for subsequent repair."
+  ]
+}

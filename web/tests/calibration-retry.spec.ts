@@ -9,7 +9,7 @@ const slot = `fabrary-calibration-${machineId}`;
 const readyLabel =
   "The device is supervised, the output area is clear and I am ready to start this physical calibration.";
 const inspectionLabel =
-  "I inspected the physical output and fresh result evidence after this attempt completed.";
+  "I inspected this device and the output state for this calibration attempt.";
 const pixel =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=";
 async function json(route: Route, body: unknown, status = 200) {
@@ -70,6 +70,7 @@ async function fixture(
     bound = context(),
   ) => ({
     id: `calibration_${suffix}`,
+    version: 1,
     machineId,
     checkoutKey: key,
     attemptId: `attempt_${suffix}`,
@@ -200,6 +201,7 @@ async function fixture(
           calibrationActive: Boolean(
             state.calibration && active === state.calibration.id,
           ),
+          canRequestCancellation: false,
           canRequestNew:
             !active &&
             !reserved &&
@@ -231,6 +233,7 @@ async function fixture(
         body.lifecycle = {
           ...body.lifecycle,
           activeJobId: "other_customer_job",
+          canRequestCancellation: false,
           canRequestNew: true,
         };
       if (state.holdLookup) {
@@ -799,7 +802,7 @@ test("fresh preparation is reachable and focused by keyboard at320px without ste
   });
   await page
     .getByRole("button", {
-      name: "Keep previous calibration record",
+      name: "Cancel calibration preparation",
       exact: true,
     })
     .click();

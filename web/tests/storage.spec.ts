@@ -378,6 +378,7 @@ test("denied session storage leaves owner calibration visible and blocks a new p
         lifecycle: {
           activeJobId: null,
           calibrationActive: false,
+          canRequestCancellation: false,
           canRequestNew: true,
           context: "c".repeat(64),
           contextMatch: null,

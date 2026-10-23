@@ -228,3 +228,42 @@ test("malformed saved machine mode cannot mint a fresh signed authorization", ()
       { code: "INVALID_MACHINE_MODE" },
     );
 });
+
+test("before-acceptance cancellation binds its original target scope inside the signed token", () => {
+  for (const mode of ["simulation", "hardware"] as const)
+    for (const targetScope of ["dispatch", "calibration"] as const) {
+      const signed = node.token(
+        job,
+        machine(mode),
+        "cancel_before_acceptance",
+        { targetScope },
+      );
+      const { encoded, signature, payload } = decode(signed.token);
+      assert.equal(
+        signature,
+        createHmac("sha256", secret).update(encoded).digest("hex"),
+      );
+      assert.equal(payload.scope, "cancel_before_acceptance");
+      assert.equal(payload.target_scope, targetScope);
+      assert.equal(payload.expected_mode, mode);
+      assert.deepEqual(payload.parameters, parameters(job));
+      assert.equal(payload.artifact_sha256, job.artifact.sha256);
+      assert.deepEqual(Object.keys(signed).sort(), ["expires_at", "token"]);
+    }
+  for (const extra of [
+    undefined,
+    {},
+    { targetScope: "camera" },
+    { targetScope: null },
+  ])
+    assert.throws(
+      () =>
+        node.token(
+          job,
+          machine("simulation"),
+          "cancel_before_acceptance",
+          extra as any,
+        ),
+      { code: "INVALID_CANCELLATION_SCOPE" },
+    );
+});

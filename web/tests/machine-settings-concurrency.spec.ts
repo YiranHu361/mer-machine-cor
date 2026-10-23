@@ -179,6 +179,7 @@ async function fixture(page: Page) {
         lifecycle: {
           activeJobId: machine.activeJobId || null,
           calibrationActive: false,
+          canRequestCancellation: false,
           canRequestNew:
             !machine.activeJobId &&
             machine.paired &&

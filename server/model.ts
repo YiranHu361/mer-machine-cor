@@ -166,6 +166,13 @@ export interface Job {
   creationRequestId?: string;
   creationSpecHash?: string;
   calibrationDeviceContext?: string;
+  calibrationInspection?: {
+    outcome: "rejected";
+    reason: string;
+    recordedAt: string;
+    attemptId: string;
+  };
+  executionCancellation?: ExecutionCancellation;
   machineId: string | null;
   specVersion: number;
   spec: Spec;
@@ -206,6 +213,17 @@ export interface Job {
     recordedAt: string;
   };
   requesterAddress?: string;
+}
+export interface ExecutionCancellation {
+  status: "cancelled_before_acceptance";
+  machine_id: string;
+  job_id: string;
+  attempt_id: string;
+  artifact_sha256: string;
+  parameters: Record<string, unknown>;
+  target_scope: "dispatch" | "calibration";
+  expected_mode: "simulation" | "hardware";
+  cancelled_at: string;
 }
 export interface Operation {
   id: string;

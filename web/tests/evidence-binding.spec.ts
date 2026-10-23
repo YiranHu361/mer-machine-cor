@@ -11,6 +11,7 @@ test("a terminal calibration's stale bound image fails readably and explicit met
     frameB = "b".repeat(64);
   const calibration = (suffix: string, frame: string) => ({
     id: `calibration_${suffix}`,
+    version: 1,
     machineId,
     attemptId: `attempt_${suffix}`,
     productionState: "produced",
@@ -88,6 +89,7 @@ test("a terminal calibration's stale bound image fails readably and explicit met
         lifecycle: {
           activeJobId: null,
           calibrationActive: false,
+          canRequestCancellation: false,
           canRequestNew: true,
           context: "c".repeat(64),
           contextMatch: null,
