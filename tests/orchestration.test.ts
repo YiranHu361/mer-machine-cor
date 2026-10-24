@@ -29,10 +29,7 @@ import {
   safePublicUrl,
 } from "../server/orchestration/context-dev.ts";
 import { priceAssignment } from "../server/orchestration/pricing.ts";
-import type {
-  RequestBrief,
-  RequestInput,
-} from "../integrations/src/claude.ts";
+import type { RequestBrief, RequestInput } from "../integrations/src/claude.ts";
 import {
   localIntent,
   drawableSubject,
@@ -509,22 +506,75 @@ test("a failed bundle payment releases the reservations and dispatches nothing",
   }
 });
 
-test("a colour photo is never silently sent to the monochrome printer", async () => {
+test("a colour photo becomes a named black-and-white sticker only when no colour printer is free and colour was not asked for", async () => {
   const f = fixture();
   try {
     await f.ready(["phomemo_01"]); // the photo printer is not ready
     const photo = await f.photo(requester.id);
-    const { order } = await f.orchestrator.createOrder(
-      requester,
-      { photoAssetIds: [photo] },
-      "create-key-0005",
+    const order = async (requestText: string, key: string) => {
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText, photoAssetIds: [photo] },
+        key,
+      );
+      await f.orchestrator.settle(order.id);
+      return f.orchestrator.view(requester, order.id);
+    };
+    const o = await order("", "create-key-0005");
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    const [item] = o.plan!.items;
+    assert.equal(item.process, "sticker_print");
+    assert.equal(item.name, "A black-and-white sticker of your photo");
+    assert.match(item.why, /No colour printer is free/);
+    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+    // Asking for colour or a photo print is never silently turned into a sticker.
+    for (const [text, key] of [
+      ["print this photo in full colour", "create-key-0005b"],
+      ["a photo print please", "create-key-0005c"],
+    ]) {
+      const kept = await order(text, key);
+      assert.equal(kept.draft.stage, "unavailable", text);
+      assert.match(kept.draft.reason!, /keep these colours|make/);
+      assert.equal(kept.plan, undefined);
+      assert.deepEqual(
+        kept.draft.photoAssetIds,
+        [photo],
+        "the photos are kept",
+      );
+    }
+  } finally {
+    f.close();
+  }
+});
+
+test("a colour photo prints for real as a black-and-white sticker rather than on a simulated photo printer", async () => {
+  const f = fixture({ allowed: ["hardware", "simulation"] });
+  try {
+    await f.ready(["instax_01"], "simulation"); // only a pretend photo printer
+    await f.ready(["phomemo_01"], "hardware"); // a real sticker printer
+    const photo = await f.photo(requester.id);
+    const order = async (requestText: string, key: string) => {
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText, photoAssetIds: [photo] },
+        key,
+      );
+      await f.orchestrator.settle(order.id);
+      return f.orchestrator.view(requester, order.id);
+    };
+    const o = await order("", "real-first-1");
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    assert.equal(o.plan!.items[0].process, "sticker_print");
+    assert.equal(
+      o.plan!.items[0].name,
+      "A black-and-white sticker of your photo",
     );
-    await f.orchestrator.settle(order.id);
-    const o = await f.orchestrator.view(requester, order.id);
-    assert.equal(o.draft.stage, "unavailable");
-    assert.match(o.draft.reason!, /keep these colours|make/);
-    assert.equal(o.plan, undefined);
-    assert.deepEqual(o.draft.photoAssetIds, [photo], "the photos are kept");
+    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+    assert.equal(o.plan!.assignments[0].executionMode, "hardware");
+    // Asked for a photo print: kept, even though only a simulated one is free.
+    const asked = await order("a photo print please", "real-first-2");
+    assert.equal(asked.plan!.items[0].process, "photo_print");
+    assert.equal(asked.plan!.assignments[0].executionMode, "simulation");
   } finally {
     f.close();
   }

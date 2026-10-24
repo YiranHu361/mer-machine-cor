@@ -1063,19 +1063,49 @@ export class Orchestrator {
     const assignments: Assignment[] = [];
     const allowed = (m: ExecutionMode) => this.service.modeAllowed(m);
     const unavailable: string[] = [];
-    for (const [index, item] of o.intent!.items.entries()) {
+    for (const [index, intended] of o.intent!.items.entries()) {
       const itemId = `it_${index + 1}`;
       if (o.experience === "relief") {
-        const prepared = await this.planReliefItem(o, s, item, itemId);
+        const prepared = await this.planReliefItem(o, s, intended, itemId);
         items.push(prepared.item);
         assignments.push(...prepared.assignments);
         continue;
       }
-      const { candidates, rejected } = eligibleRegistryMachines(
-        s,
-        item,
-        allowed,
-      );
+      let item = intended;
+      let { candidates, rejected } = eligibleRegistryMachines(s, item, allowed);
+      const real = (list: typeof candidates) =>
+        list.filter((c) => c.mode === "hardware");
+      // No real colour printer for a single photo, but a real sticker printer
+      // is free: make a black-and-white sticker, named as such in the
+      // proposal, rather than a simulated print that makes nothing physical.
+      // A request that asks for colour or a photo print is never changed.
+      if (
+        !real(candidates).length &&
+        o.experience === "best_single" &&
+        item.process === "photo_print" &&
+        item.photoAssetIds.length &&
+        !asksForColour(o.draft.requestText) &&
+        requestedProcess(o.draft.requestText) !== "photo_print"
+      ) {
+        const sticker: IntentItem = {
+          ...item,
+          process: "sticker_print",
+          colorImportant: false,
+          name: "A black-and-white sticker of your photo",
+          why: "No colour printer is free right now, so your photo is made as a black-and-white sticker. Check the preview.",
+        };
+        const fallback = eligibleRegistryMachines(s, sticker, allowed);
+        if (
+          real(fallback.candidates).length ||
+          (!candidates.length && fallback.candidates.length)
+        )
+          (({ candidates, rejected } = fallback), (item = sticker));
+      }
+      // Real machines first: a simulated one is used only when no real one can make it.
+      candidates = [
+        ...real(candidates),
+        ...candidates.filter((c) => c.mode !== "hardware"),
+      ];
       const chosen = candidates[0];
       if (!chosen) {
         unavailable.push(

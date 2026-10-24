@@ -317,7 +317,10 @@ export function MakeApp() {
   return (
     <section className="make" aria-labelledby="make-title">
       <h1 id="make-title">
-        {o.intent?.outcome ?? (o.draft.requestText || "Your order")}
+        {/* Once planned, one item is named by what will actually be made. */}
+        {plan?.items.length === 1
+          ? plan.items[0].name
+          : (o.intent?.outcome ?? (o.draft.requestText || "Your order"))}
       </h1>
       {o.draft.requestText && <p className="lead">“{o.draft.requestText}”</p>}
       <p className="make-status" role="status" aria-live="polite">

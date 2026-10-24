@@ -25,7 +25,8 @@
     "test:soak": "tsx scripts/soak-orders.ts",
     "print:one": "tsx scripts/print-one.ts",
     "mvp": "node scripts/mvp.mjs",
-    "convex:push": "node scripts/convex-push.mjs"
+    "convex:push": "node scripts/convex-push.mjs",
+    "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev"
   },
   "dependencies": {
     "context.dev": "3.15.0",

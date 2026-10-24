@@ -41,6 +41,15 @@ test(
       FABRARY_ASSET_ORIGIN: origin + "/assets",
       FABRARY_MACHINES_FILE: machineConfig,
       FABRARY_CATALOG_FILE: "",
+      // Set here so a developer's .env (loaded by the backend) never leaks in:
+      // dotenv keeps values that are already set, even empty ones.
+      FABRARY_ALLOWED_MODES: "simulation",
+      FABRARY_PRODUCER_HUB_URL: "",
+      FABRARY_AUTO_ACCEPT_PRINTS: "",
+      CONVEX_URL: "",
+      CONVEX_DEPLOY_KEY: "",
+      FABRARY_PUBLISH_SECRET: "",
+      ANTHROPIC_API_KEY: "",
     };
     let backend: ChildProcess | undefined, node: ChildProcess | undefined;
     async function alive(url: string, headers: any = {}) {

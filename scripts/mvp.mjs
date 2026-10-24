@@ -32,8 +32,8 @@ const convexUrl =
   (deployment ? `https://${deployment}.convex.cloud` : "");
 const env = {
   ...process.env,
-  FABRARY_ALLOWED_MODES:
-    process.env.FABRARY_ALLOWED_MODES ?? "hardware,simulation",
+  // Real machines only: an order never lands on a simulated machine.
+  FABRARY_ALLOWED_MODES: process.env.FABRARY_ALLOWED_MODES ?? "hardware",
   FABRARY_PRODUCER_HUB_URL: hub,
   // No camera check yet: a finished print completes the order and frees the printer.
   FABRARY_AUTO_ACCEPT_PRINTS: process.env.FABRARY_AUTO_ACCEPT_PRINTS ?? "1",
