@@ -57,6 +57,8 @@ export interface Config {
   dataDir: string;
   nodeUrl: string;
   catalog?: any[];
+  /** Execution modes this deployment may authorize; defaults to [mode]. */
+  allowedModes?: ("simulation" | "hardware")[];
 }
 export class Service {
   private busy = new Set<string>();
@@ -69,6 +71,19 @@ export class Service {
   ) {}
   async read() {
     return (await this.store.read()).data;
+  }
+  /** A job's fixed execution mode; jobs from before per-assignment modes use the configured one. */
+  jobMode(job: Pick<Job, "executionMode">) {
+    return job.executionMode ?? this.config.mode;
+  }
+  modeAllowed(mode: Machine["mode"]) {
+    return (this.config.allowedModes ?? [this.config.mode]).includes(mode);
+  }
+  /** The mode a machine may be operated in here, or the configured mode when its own is not allowed. */
+  machineMode(machine: Machine | undefined) {
+    return machine && this.modeAllowed(machine.mode)
+      ? machine.mode
+      : this.config.mode;
   }
   async job(jobId: string, actor?: { id: string; role: string }) {
     const s = await this.read();
@@ -121,7 +136,7 @@ export class Service {
         s,
         machineId,
         ownerId,
-        this.config.mode,
+        this.machineMode(ownValue(s.machines, machineId)),
         key,
         expected,
       );
@@ -153,7 +168,7 @@ export class Service {
         m.outputType === spec.outputType &&
           m.material === spec.material &&
           spec.quantity === 1 &&
-          m.mode === this.config.mode,
+          m.mode === this.machineMode(m),
         "CALIBRATION_SPEC",
         "Calibration must match this device, loaded media and a single output.",
       );
@@ -282,7 +297,7 @@ export class Service {
       lifecycle: calibrationLifecycle(
         state,
         machineId,
-        this.config.mode,
+        this.machineMode(ownValue(state.machines, machineId)),
         calibration?.id,
       ),
       ...(requestedKey === undefined
@@ -628,8 +643,12 @@ export class Service {
       body,
     );
     requireThat(
-      calibrationLifecycle(state, machineId, this.config.mode, calibration.id)
-        .canRequestCancellation,
+      calibrationLifecycle(
+        state,
+        machineId,
+        this.machineMode(ownValue(state.machines, machineId)),
+        calibration.id,
+      ).canRequestCancellation,
       "CALIBRATION_CANCELLATION_UNAVAILABLE",
       "This saved attempt is already known to the node or is no longer eligible. Refresh and resolve its existing execution; never start it again.",
     );
@@ -966,10 +985,11 @@ export class Service {
       const recommended = ownValue(s.machines, j.spec.recommendedMachineId);
       requireThat(
         recommended &&
+          this.modeAllowed(this.jobMode(j)) &&
           machineSupportsSpec(
             recommended,
             j.spec,
-            this.config.mode,
+            this.jobMode(j),
             Date.now(),
             j.id,
           ),
@@ -1001,7 +1021,8 @@ export class Service {
         (m) =>
           (!j.spec.recommendedMachineId ||
             m.id === j.spec.recommendedMachineId) &&
-          machineSupportsSpec(m, j.spec, this.config.mode),
+          this.modeAllowed(this.jobMode(j)) &&
+          machineSupportsSpec(m, j.spec, this.jobMode(j)),
       )
       .sort((a, b) => this.price(a, j) - this.price(b, j))[0];
     requireThat(
@@ -1109,7 +1130,8 @@ export class Service {
       machine.outputType === job.spec.outputType &&
         (!job.spec.recommendedMachineId ||
           machine.id === job.spec.recommendedMachineId) &&
-        machine.mode === this.config.mode &&
+        machine.mode === this.jobMode(job) &&
+        this.modeAllowed(machine.mode) &&
         machine.paired &&
         machine.configured &&
         machine.calibrated &&
@@ -1370,6 +1392,8 @@ export class Service {
       await this.transfer(j.id, "refund");
   }
   async transfer(jobId: string, kind: "release" | "refund") {
+    // Estimate-only simulated children never collected funds to move.
+    if ((await this.job(jobId)).chargeable === false) return this.job(jobId);
     const op = await mutate(this.store, (s) => {
       const j = s.jobs[jobId];
       const existing = Object.values(s.operations).find(
@@ -1568,7 +1592,11 @@ export class Service {
       const j = s.jobs[jobId];
       if (j.attemptId) return { job: j, start: false };
       requireThat(
-        j.paymentState === "held" && j.productionState === "payment_confirmed",
+        (j.paymentState === "held" &&
+          j.productionState === "payment_confirmed") ||
+          (j.chargeable === false &&
+            j.paymentState === "not_charged" &&
+            j.productionState === "authorized"),
         "UNPAID",
         "A confirmed collected payment is required before dispatch.",
       );
@@ -1580,6 +1608,11 @@ export class Service {
         "Specification approval no longer matches the artifact.",
       );
       const m = s.machines[j.machineId!];
+      requireThat(
+        m.mode === this.jobMode(j) && this.modeAllowed(m.mode),
+        "MODE_MISMATCH",
+        "This job's execution mode no longer matches its machine. Nothing was sent; review the order.",
+      );
       requireThat(
         m.ready &&
           !m.paused &&
@@ -1832,8 +1865,15 @@ export class Service {
       if (!fresh || !credible)
         reason = "Evidence is stale, missing, or completion is not credible.";
       else if (
+        (frame.source === "simulation") !==
+        (this.jobMode(j) === "simulation")
+      )
+        reason =
+          "The evidence source does not match this job's execution mode; owner review required.";
+      else if (
         frame.source === "simulation" &&
-        this.config.mode === "simulation"
+        this.jobMode(j) === "simulation" &&
+        m.mode === "simulation"
       ) {
         result =
           frame.observation === "visible"
@@ -2161,7 +2201,11 @@ export class Service {
         "HANDLING_REQUIRED",
         "Confirm removal, labeling, safe storage and a cleared machine.",
       );
-      if (["ready_for_pickup", "collected"].includes(j.fulfillmentState))
+      if (
+        ["ready_for_pickup", "collected", "simulation_complete"].includes(
+          j.fulfillmentState,
+        )
+      )
         return j;
       const m = s.machines[j.machineId!];
       requireThat(
@@ -2169,11 +2213,16 @@ export class Service {
         "MEDIA_ESTIMATE_NOT_CURRENT",
         "The remaining-media estimate changed during this attempt. Use Recovery & order history → Reconcile saved outcome, then confirm handling again. The machine remains assigned to this order.",
       );
-      j.fulfillmentState = "ready_for_pickup";
-      j.pickup = {
-        code: randomBytes(6).toString("hex").toUpperCase(),
-        expiresAt: new Date(Date.now() + this.config.pickupMs).toISOString(),
-      };
+      const simulatedChild =
+        j.chargeable === false && this.jobMode(j) === "simulation";
+      if (simulatedChild) j.fulfillmentState = "simulation_complete";
+      else {
+        j.fulfillmentState = "ready_for_pickup";
+        j.pickup = {
+          code: randomBytes(6).toString("hex").toUpperCase(),
+          expiresAt: new Date(Date.now() + this.config.pickupMs).toISOString(),
+        };
+      }
       m.activeJobId = null;
       accountPreparedEstimate(m, j);
       m.paused = true;
@@ -2182,8 +2231,10 @@ export class Service {
         "Output stored and machine cleared. Owner may resume for the next job now.";
       record(
         j,
-        "ready_for_pickup",
-        "Owner prepared and stored the item. Pickup is independent of machine availability.",
+        simulatedChild ? "simulation_complete" : "ready_for_pickup",
+        simulatedChild
+          ? "Owner cleared the simulated machine. A simulated job has no physical item or pickup code."
+          : "Owner prepared and stored the item. Pickup is independent of machine availability.",
       );
       return j;
     });

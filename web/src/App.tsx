@@ -25,6 +25,8 @@ import {
   useOwnerDraft,
 } from "./owner-drafts";
 import { api, ApiError } from "./api";
+import { MakeApp } from "./MakeApp";
+import { ReliefApp } from "./ReliefApp";
 import { prepareLabelPhoto } from "./label-photo";
 import {
   readStoredValue,
@@ -647,6 +649,8 @@ function App() {
     getStorageStatus,
   );
   const isOwner = location.pathname.startsWith("/owner");
+  const isRelief = location.pathname.startsWith("/relief");
+  const isMake = location.pathname.startsWith("/make");
   const [health, setHealth] = useState<Health | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [boot, setBoot] = useState(true);
@@ -673,7 +677,7 @@ function App() {
           "The saved session could not be checked. Try again to keep access to your existing orders.",
         );
       setHealth(h);
-      if (s.role === null && !isOwner)
+      if (s.role === null && !isOwner && !isRelief)
         setSession(await api<Session>("/session", { role: "requester" }));
       else setSession(s.role ? s : null);
     } catch (e) {
@@ -681,7 +685,7 @@ function App() {
     } finally {
       setBoot(false);
     }
-  }, [isOwner]);
+  }, [isOwner, isRelief]);
   useEffect(() => {
     void bootApp();
   }, [bootApp]);
@@ -706,10 +710,20 @@ function App() {
           fabrary
         </a>
         <nav aria-label="Main navigation">
-          {isOwner ? (
-            <a href="/">Make something</a>
+          {isOwner || isRelief ? (
+            <>
+              <a href="/">Make something</a>
+              <a href={isRelief ? "/owner" : "/relief"}>
+                {isRelief ? "Owner workshop" : "Relief"}
+              </a>
+            </>
           ) : (
-            <a href="/owner">Owner workshop</a>
+            <>
+              <a href={isMake ? "/" : "/make"}>
+                {isMake ? "Choose a machine myself" : "Just ask"}
+              </a>
+              <a href="/owner">Owner workshop</a>
+            </>
           )}
         </nav>
       </header>
@@ -746,6 +760,10 @@ function App() {
               Try again
             </Button>
           </div>
+        ) : isRelief ? (
+          <ReliefApp session={session} />
+        ) : isMake && session ? (
+          <MakeApp key={`${session.role}:${session.id}`} />
         ) : isOwner ? (
           <OwnerApp
             key={

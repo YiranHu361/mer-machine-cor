@@ -42,6 +42,9 @@ import {
   registerIdentificationRoutes,
   type IdentificationDependencies,
 } from "./machine-identification.ts";
+import { Orchestrator } from "./orchestration/orchestrator.ts";
+import { registerProducerHubRoutes } from "./producer-hub.ts";
+import { registerOrchestrationRoutes } from "./orchestration/routes.ts";
 import {
   calibrationDeviceContext,
   calibrationOperationContext,
@@ -144,6 +147,7 @@ export function createApp(
   options: {
     recommendations?: RecommendationDependencies;
     identification?: IdentificationDependencies;
+    orchestrator?: Orchestrator;
     relay?: ConnectorRelay;
   } = {},
 ) {
@@ -153,6 +157,7 @@ export function createApp(
     (service.node instanceof RoutingNode
       ? service.node.relay
       : new ConnectorRelay());
+  const orchestrator = options.orchestrator ?? new Orchestrator(service);
   const serializeMachinePatch = machinePatchQueue();
   const serializeJobCreation = jobCreationQueue();
   app.disable("x-powered-by");
@@ -343,6 +348,8 @@ export function createApp(
         claude: process.env.ANTHROPIC_API_KEY
           ? "configured; not verified"
           : "not configured",
+        // Where design drafts come from: a live model, fixtures or nowhere.
+        design: orchestrator.designProvider,
       },
     });
   });
@@ -1019,6 +1026,16 @@ export function createApp(
     res.status(201).json({ machine });
   });
   registerConnectorRoutes(app, { service, relay, owner, registerMachine });
+  registerProducerHubRoutes(app, {
+    service,
+    hub: service.node instanceof RoutingNode ? service.node.hub : undefined,
+    owner,
+  });
+  registerOrchestrationRoutes(app, {
+    orchestrator,
+    actor,
+    owner,
+  });
   registerIdentificationRoutes(app, {
     owner,
     dependencies: options.identification,
@@ -1257,7 +1274,7 @@ export function createApp(
       s,
       machineId,
       a.id,
-      service.config.mode,
+      service.machineMode(ownValue(s.machines, machineId)),
       req.body.idempotencyKey,
       expectedContext,
     );
@@ -1562,7 +1579,8 @@ export function createApp(
   app.post("/api/owner/simulation/:id", async (req, res) => {
     await owner(req);
     requireThat(
-      service.config.mode === "simulation",
+      ownValue((await service.read()).machines, String(req.params.id))?.mode ===
+        "simulation",
       "NOT_SIMULATION",
       "Simulation controls are disabled for hardware.",
       403,
@@ -1582,9 +1600,10 @@ export function createApp(
     }),
   );
   app.use(express.static(webDirectory, { index: "index.html" }));
-  app.get("/owner", (req, res) =>
-    res.sendFile("index.html", { root: webDirectory }),
-  );
+  for (const page of ["/owner", "/make", "/relief"])
+    app.get(page, (req, res) =>
+      res.sendFile("index.html", { root: webDirectory }),
+    );
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) return next(err);
     if (err.challenge) {

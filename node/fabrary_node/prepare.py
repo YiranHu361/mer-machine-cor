@@ -40,7 +40,7 @@ def prepare(source: str | Path, destination: str | Path, *, output_type: str = "
     if not 1 <= len(sources) <= 4:
         raise ValueError("Supply one to four images")
     if output_type == "sticker":
-        if width_mm not in {15, 25, 53} or not 5 <= height_mm <= 150:
+        if width_mm not in {15, 25, 48, 53} or not 5 <= height_mm <= 150:
             raise ValueError("Sticker width must be 15, 25 or 53 mm; height must be 5–150 mm")
         dimensions = (round(width_mm / 25.4 * 300), round(height_mm / 25.4 * 300))
     elif output_type == "instax":

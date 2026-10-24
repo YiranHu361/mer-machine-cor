@@ -4,4 +4,5 @@ import "@fontsource-variable/dm-sans";
 import "./styles.css";
 import "./requester-minimal.css";
 import "./provider-minimal.css";
+import "./make.css";
 createRoot(document.getElementById("root")!).render(<App />);

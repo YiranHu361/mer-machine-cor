@@ -1,0 +1,298 @@
+/*
+ * Just ask (/make) and Relief (/relief): the request, the drafts, the exact
+ * preview and one confirm. Same minimal system; simulation is always named.
+ */
+.site-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+.make {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.make h1 {
+  font-size: clamp(26px, 5vw, 34px);
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+.make .lead {
+  color: var(--ink-2);
+  margin-bottom: 20px;
+}
+.make-request {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+}
+.make-request label,
+.make-edit label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.make-request label:not(:first-child) {
+  margin-top: 8px;
+}
+.make-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin-top: 12px;
+}
+.make-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--ink-2);
+}
+.make-status:empty {
+  display: none;
+}
+.make-limit {
+  padding: 12px 14px;
+  border-radius: var(--radius-s);
+  background: var(--warning-soft);
+  color: var(--ink);
+}
+.make-edit {
+  margin: 8px 0 20px;
+}
+.make-edit summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.make-edit form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 10px;
+  max-width: 560px;
+}
+.make-edit form label,
+.make-edit form .fine-print {
+  grid-column: 1 / -1;
+}
+.make-drafts ul {
+  list-style: none;
+  margin: 16px 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+.make-drafts li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.make-drafts li.is-selected {
+  border-color: var(--ink);
+}
+.make-drafts img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+}
+.make-draft-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.make-draft-title em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--muted);
+}
+.make-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 16px;
+}
+.make-item {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) 1fr;
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.make-item h2 {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.make-preview {
+  width: 100%;
+  height: auto;
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+}
+.make-item details {
+  margin-top: 6px;
+}
+.make-item summary {
+  cursor: pointer;
+  min-height: 32px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.make-progress {
+  margin: 4px 0;
+  font-weight: 500;
+}
+.make-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.make-total {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.make-total div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.make-total dt {
+  color: var(--muted);
+}
+.make-total dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+.make-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+}
+.make-confirm label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.make-again a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.make-error {
+  color: var(--danger);
+  margin-top: 12px;
+}
+.relief-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.relief-table caption {
+  text-align: left;
+  padding-bottom: 6px;
+}
+.relief-table th,
+.relief-table td {
+  overflow-wrap: anywhere;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.relief-table td {
+  font-variant-numeric: tabular-nums;
+}
+.relief-counters {
+  font-variant-numeric: tabular-nums;
+}
+.relief-network {
+  margin-top: 28px;
+}
+.relief-network h2 {
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.relief-map {
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  border-radius: var(--radius-s);
+}
+.relief-map circle.is-idle {
+  fill: var(--line-strong);
+}
+.relief-map circle.is-busy {
+  fill: var(--ink);
+}
+.relief-map circle.is-offline {
+  fill: var(--danger);
+  opacity: 0.55;
+}
+.relief-legend {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.relief-legend li::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.relief-legend .is-busy::before {
+  background: var(--ink);
+}
+.relief-legend .is-offline::before {
+  background: var(--danger);
+  opacity: 0.55;
+}
+.relief-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 12px;
+}
+.relief-controls [aria-pressed="true"] {
+  font-weight: 700;
+  text-decoration-color: currentColor;
+}
+.relief-events {
+  margin-top: 20px;
+}
+.relief-events ol {
+  font-size: 13px;
+  padding-left: 18px;
+}
+@media (max-width: 560px) {
+  .make-item {
+    grid-template-columns: 1fr;
+  }
+  .make-edit form {
+    grid-template-columns: 1fr;
+  }
+  .relief-table th,
+  .relief-table td {
+    padding: 6px 4px;
+  }
+}

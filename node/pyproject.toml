@@ -25,6 +25,7 @@ dev = ["pytest==9.1.1", "pytest-asyncio==1.3.0"]
 fabrary-node = "fabrary_node.server:main"
 fabrary-prepare = "fabrary_node.prepare:main"
 fabrary-connect = "fabrary_node.connector:main"
+fabrary-producer = "fabrary_node.producer:main"
 
 [build-system]
 requires = ["hatchling==1.29.0"]
