@@ -100,7 +100,7 @@ class NodeService:
                     "calibrated": simulation, "listed": simulation, "ready": simulation,
                     "paused": not simulation, "mediaRemaining": 100 if simulation else 0,
                     "material": config["material"], "maxJobSeconds": config.get("maxJobSeconds", 900),
-                    "maxQuantity": 10, "widthsMm": [15, 25, 53], "hours": {"start": 0, "end": 24},
+                    "maxQuantity": 10, "widthsMm": [15, 25, 48, 53], "hours": {"start": 0, "end": 24},
                     "reason": "Simulation fixture calibrated; no physical device" if simulation else "Hardware not yet calibrated",
                     "simulationOutcome": "pass",
                 })
@@ -540,7 +540,7 @@ class NodeService:
                 raise NodeError("policy", key + " is out of bounds", 422)
         if "material" in changes and changes["material"] != self.machines[machine_id]["material"]:
             raise NodeError("policy", "This adapter does not support that material", 422)
-        if "widthsMm" in changes and (not isinstance(changes["widthsMm"], list) or not changes["widthsMm"] or any(type(x) is not int or x not in {15,25,53} for x in changes["widthsMm"])):
+        if "widthsMm" in changes and (not isinstance(changes["widthsMm"], list) or not changes["widthsMm"] or any(type(x) is not int or x not in {15,25,48,53} for x in changes["widthsMm"])):
             raise NodeError("policy", "Sticker widths must be a nonempty subset of 15,25,53", 422)
         if "hours" in changes:
             hours = changes["hours"]

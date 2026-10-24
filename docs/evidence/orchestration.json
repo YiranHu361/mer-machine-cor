@@ -1,0 +1,80 @@
+{
+  "checkpoint": "Photo-to-print orchestration (simulation, mock payments, fixture drafts; one live context.dev call)",
+  "recordedAt": "2026-10-24T19:46:08.000Z",
+  "baseCommit": "3a03a9086142247d345e15734de573573ce33e00",
+  "design": "docs/orchestration-design.md (implementation status section)",
+  "checks": {
+    "sharedCheck": {
+      "command": "npm run check",
+      "result": "PASS",
+      "application": 317,
+      "node": 257,
+      "paymentsClaude": 33,
+      "fetch": 5,
+      "webBuild": "pass",
+      "webUnits": 29
+    },
+    "newTests": {
+      "backend": "tests/orchestration.test.ts: 21 passed (16 with a fake producer, 4 with the real fabrary-producer CLI, 1 context.dev error handling); tests/relief.test.ts: 23 passed",
+      "node": "node/tests/test_producer.py: 101 passed",
+      "browser": "web/tests/just-ask.spec.ts: 2 passed per engine (Just ask from sentence to finished simulated order; relief plan, confirm, outage replan, restore)"
+    },
+    "browser": {
+      "chromium": {
+        "passed": 265,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "report": "web/evidence/orchestration-chromium-browser.json",
+        "note": "final run; an earlier full run failed 2 (no free sticker printer left by an earlier relief rehearsal; one mocked calibration timeout while the shared check ran concurrently)"
+      },
+      "firefox": {
+        "passed": 265,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "report": "web/evidence/orchestration-firefox-browser.json"
+      },
+      "webkit": {
+        "passed": 265,
+        "failed": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "report": "web/evidence/orchestration-webkit-browser.json"
+      },
+      "accessibilityScans": {
+        "attached": 66,
+        "newSpecs": 27,
+        "violations": 0
+      }
+    },
+    "httpEndToEnd": {
+      "result": "PASS",
+      "stack": "isolated backend 4410, node 8798, SpacetimeDB 3012, real producer CLI; FABRARY_DESIGN_PROVIDER=fixture; Claude key blank",
+      "justAsk": "3 fixture drafts; previews 200 for the requester and 401 anonymous; proposal payable 0, simulated estimate 66 cents; confirm replay returned the same make intent; node ran artifact 26b2dc20401a as planned; owner handling; plan done with no pickup code",
+      "relief": "head count 100: 10 items, 1 team-machine and 31 network assignments; confirmed with a mandate cap of 125% of the simulated estimate; outage took 37 machines offline; plan v2 replanned; quantities conserved"
+    },
+    "contextDev": {
+      "liveCalls": 1,
+      "endpoint": "POST /web/scrape (json + markdown)",
+      "page": "https://phomemo.com/products/m02-pro-portable-printer",
+      "requestId": "f32a5be3-2ef1-49f3-a5b3-79eec0fab425",
+      "result": "300 DPI confirmed by a quote present on the page; no conflict. The extractor also read the 85x85x46 mm body as a build volume; fields are now limited per process (tested, not re-called)."
+    }
+  },
+  "defectsFixed": [
+    "Producer outputs were content-addressed across people, so a second requester got 403 on their own identical drafts; ids are now owner-scoped",
+    "/make and /relief returned 404 on direct load",
+    "3D tag estimates above the owner's per-job limit failed only at dispatch; now explained before any offer",
+    "3D parameters dropped the quantity for simulated network work",
+    "Start another link below the 24 px target size; relief table overflowed 320 px",
+    "context.dev wrapper read Markdown as a string, so quotes were never checked against the page"
+  ],
+  "notEstablished": [
+    "No hardware operated",
+    "Payable bundles on Base Sepolia are refused (BUNDLE_PAYMENT_UNSUPPORTED)",
+    "3D models are handed over unsliced (the receiving end slices); no vetted tarp-clip model for Relief",
+    "No live Claude draft or intent call",
+    "Profile builder search path not run live"
+  ]
+}

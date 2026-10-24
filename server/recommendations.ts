@@ -118,7 +118,7 @@ export function publicRecommendationMachine(
   };
 }
 
-async function localAnalysis(assets: Asset[]): Promise<ImageAnalysis> {
+export async function localAnalysis(assets: Asset[]): Promise<ImageAnalysis> {
   const { stdout } = await exec(
     "uv",
     [

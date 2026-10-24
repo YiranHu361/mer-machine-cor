@@ -1,0 +1,44 @@
+{
+  "checkpoint": "100 orders with local drawings and generated photos (no API calls)",
+  "command": "npm run test:soak",
+  "summary": {
+    "orders": 100,
+    "passed": 100,
+    "failed": 0,
+    "minutes": 1.61,
+    "medianOrderMs": 916,
+    "scenarios": {
+      "drawn sticker": "35/35",
+      "drawn photo card": "10/10",
+      "photo only": "25/25",
+      "photo with an extra": "10/10",
+      "gift": "10/10",
+      "keychain": "10/10"
+    },
+    "filesHandedOver": 125,
+    "fileChecks": {
+      "checked": 125,
+      "passed": 125,
+      "failed": 0,
+      "byProcess": {
+        "sticker_print": 57,
+        "photo_print": 48,
+        "fdm_print": 20
+      },
+      "failures": []
+    },
+    "deterministic": "10/10 re-prepared files byte-identical",
+    "networkCalls": "refused (no Claude, no context.dev)",
+    "failures": []
+  },
+  "qualityFindings": [
+    "Fixed: a very tall picture (500x2000) was a small design on a mostly blank 53 mm sticker (0.9% ink). Stickers now trim empty space and take the design's shape; the lightest sticker in the run has 11.8% ink.",
+    "Fixed: wide photos lost their sides on the portrait Instax print. Wide pictures now turn a quarter to use the film's long side (19 of 48 prints), and a picture that would lose more than a fifth is printed whole with white borders (12 of 48)."
+  ],
+  "previousRun": {
+    "filesHandedOver": 125,
+    "passed": "100/100",
+    "lightestStickerInk": 0.009,
+    "photoPrintsRotated": 0
+  }
+}

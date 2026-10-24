@@ -69,7 +69,7 @@ export const specSchema = z
     const fail = (message: string) => ctx.addIssue({ code: "custom", message });
     if (
       v.outputType === "sticker" &&
-      (![15, 25, 53].includes(v.widthMm) ||
+      (![15, 25, 48, 53].includes(v.widthMm) ||
         v.heightMm < 5 ||
         v.heightMm > 150 ||
         v.material !== "thermal-paper")
@@ -146,6 +146,8 @@ export interface Machine {
   nodeUrl?: string;
   /** Set when the machine is reached through an outbound connector. */
   connectorId?: string;
+  /** Set when the machine prints through the producer side's hub; the hub's id for it. */
+  producerHub?: { machineId: string; since: string };
   policy: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
   policyReconciliationRequired?: boolean;
@@ -234,6 +236,13 @@ export interface Job {
     recordedAt: string;
   };
   requesterAddress?: string;
+  /** Fixed when the job is authorized; legacy jobs use the configured mode. */
+  executionMode?: "simulation" | "hardware";
+  /** false for estimate-only simulated children, which never collect or release funds. */
+  chargeable?: boolean;
+  orderId?: string;
+  assignmentId?: string;
+  preparationId?: string;
 }
 export interface ExecutionCancellation {
   status: "cancelled_before_acceptance";
@@ -312,6 +321,12 @@ export interface State {
   calibrations?: Record<string, Job>;
   setupCodes?: Record<string, SetupCode>;
   connectors?: Record<string, Connector>;
+  orders?: Record<string, import("./orchestration/types.ts").Order>;
+  preparations?: Record<
+    string,
+    import("./orchestration/types.ts").PreparationReceipt
+  >;
+  relief?: import("./orchestration/types.ts").ReliefState;
   schemaVersion: 1;
 }
 export function initialState(): State {

@@ -372,9 +372,11 @@ test("built application serves owner deep links without turning unknown API path
       "<!doctype html><title>Fabrary owner routing fixture</title>",
     );
     const app = createApp(f.service, webRoot);
-    const page = await request(app).get("/owner").expect(200);
-    assert.match(page.headers["content-type"], /html/);
-    assert.match(page.text, /Fabrary owner routing fixture/);
+    for (const path of ["/owner", "/make", "/relief"]) {
+      const page = await request(app).get(path).expect(200);
+      assert.match(page.headers["content-type"], /html/);
+      assert.match(page.text, /Fabrary owner routing fixture/);
+    }
     const bundle = await request(app).get("/assets/app-bundle.js").expect(200);
     assert.match(bundle.text, /public build fixture/);
     await request(app).get("/api/route-that-does-not-exist").expect(404);

@@ -6,8 +6,10 @@ import { initialState } from "./model.ts";
 import { SqliteStore, type Store } from "./store.ts";
 import { HttpNode } from "./node-client.ts";
 import { ConnectorRelay, RoutingNode } from "./connectors.ts";
+import { ProducerHubNode } from "./producer-hub.ts";
 import { Service, type Config } from "./service.ts";
 import { createApp } from "./app.ts";
+import { Orchestrator } from "./orchestration/orchestrator.ts";
 import { IntegratedPayment } from "./external.ts";
 import { loadCatalog } from "./catalog.ts";
 import { mutate } from "./store.ts";
@@ -64,6 +66,16 @@ const config: Config = {
   dataDir,
   nodeUrl: process.env.FABRARY_NODE_URL ?? "http://127.0.0.1:8788",
 };
+// Mixed plans (for example real machines beside simulated ones) list both modes.
+const allowedModes = (process.env.FABRARY_ALLOWED_MODES ?? mode)
+  .split(",")
+  .map((value) => value.trim());
+if (
+  !allowedModes.length ||
+  allowedModes.some((value) => !["simulation", "hardware"].includes(value))
+)
+  throw new Error("FABRARY_ALLOWED_MODES lists simulation and/or hardware.");
+config.allowedModes = allowedModes as Config["mode"][];
 const catalog = await loadCatalog(process.env.FABRARY_CATALOG_FILE, dataDir);
 config.catalog = catalog.models;
 if (catalog.assets.length)
@@ -77,11 +89,16 @@ const service = new Service(
     new HttpNode(config.nodeUrl, process.env.FABRARY_NODE_KEY, config.secret),
     new ConnectorRelay(),
     config.secret,
+    // Machines the owner switches to the producer side's hub print through it.
+    process.env.FABRARY_PRODUCER_HUB_URL
+      ? new ProducerHubNode(process.env.FABRARY_PRODUCER_HUB_URL)
+      : undefined,
   ),
   new IntegratedPayment(store),
   config,
 );
-const app = createApp(service);
+const orchestrator = new Orchestrator(service);
+const app = createApp(service, undefined, { orchestrator });
 // Loopback by default. Set FABRARY_HOST to accept connectors from other computers.
 const host = process.env.FABRARY_HOST ?? "127.0.0.1";
 const server = app.listen(port, host, () =>
@@ -91,13 +108,11 @@ const server = app.listen(port, host, () =>
 );
 const tick = setInterval(
   () =>
-    void service
-      .tick()
-      .catch((e) =>
-        console.error(
-          "Background reconciliation failed; existing attempts remain recorded.",
-        ),
+    void Promise.all([service.tick(), orchestrator.tick()]).catch((e) =>
+      console.error(
+        "Background reconciliation failed; existing attempts remain recorded.",
       ),
+    ),
   1500,
 );
 for (const signal of ["SIGTERM", "SIGINT"] as const)

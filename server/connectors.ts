@@ -24,6 +24,7 @@ import {
   type State,
 } from "./model.ts";
 import type { Service } from "./service.ts";
+import type { ProducerHubNode } from "./producer-hub.ts";
 
 /** Frame links from connector nodes use this origin; bytes travel over the relay. */
 export const CONNECTOR_NODE_ORIGIN = "http://connector.invalid";
@@ -199,6 +200,8 @@ export class RoutingNode implements NodeBoundary {
     public direct: HttpNode,
     public relay: ConnectorRelay,
     private platformSecret: string,
+    /** Machines switched to the producer side's hub print through it. */
+    public hub?: ProducerHubNode,
   ) {}
   token(
     job: Job,
@@ -217,6 +220,15 @@ export class RoutingNode implements NodeBoundary {
     );
   }
   async call(tool: string, input: any, machine?: Machine) {
+    if (machine?.producerHub) {
+      if (!this.hub)
+        throw new Problem(
+          "PRODUCER_HUB_UNCONFIGURED",
+          "This machine prints through the producer side's hub, but FABRARY_PRODUCER_HUB_URL is not set.",
+          503,
+        );
+      return this.hub.call(tool, input, machine);
+    }
     if (!machine?.connectorId) return this.direct.call(tool, input, machine);
     const path = tool.startsWith("/") ? tool : `/tools/${tool}`;
     const reply = await this.relay.request(machine.connectorId, {
@@ -236,6 +248,8 @@ export class RoutingNode implements NodeBoundary {
     return reply.json;
   }
   async fetchFrame(url: string, machine: Machine) {
+    if (machine.producerHub)
+      throw new Error("The producer side's hub provides no camera frames yet.");
     if (!machine.connectorId) return this.direct.fetchFrame(url, machine);
     const frame = new URL(url, CONNECTOR_NODE_ORIGIN);
     if (
