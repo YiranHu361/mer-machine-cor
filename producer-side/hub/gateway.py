@@ -211,13 +211,13 @@ class Gateway:
         else:
             log.debug("%s sent unknown type %s", mid, type_)
 
-    async def approve_manually(self, machine_id: str, job_id: str) -> dict[str, Any]:
-        """Owner dashboard's labeled "Approve manually" button."""
+    async def approve_manually(self, machine_id: str, job_id: str, reason: str | None = None) -> dict[str, Any]:
+        """Owner dashboard's labeled "Approve manually" button (or the consumer's no-camera acceptance)."""
         conn = self.nodes.get(machine_id)
         if not conn or job_id not in conn.jobs:
             raise LookupError(job_id)
         job = self._job_update(conn, job_id, state="done",
-                               verification={"pass": True, "reason": "approved manually by owner", "manual": True})
+                               verification={"pass": True, "reason": reason or "approved manually by owner", "manual": True})
         await self._emit("job.done", job)
         return job
 

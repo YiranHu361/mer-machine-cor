@@ -35,6 +35,8 @@ const env = {
   FABRARY_ALLOWED_MODES:
     process.env.FABRARY_ALLOWED_MODES ?? "hardware,simulation",
   FABRARY_PRODUCER_HUB_URL: hub,
+  // No camera check yet: a finished print completes the order and frees the printer.
+  FABRARY_AUTO_ACCEPT_PRINTS: process.env.FABRARY_AUTO_ACCEPT_PRINTS ?? "1",
   ...(convexUrl ? { CONVEX_URL: convexUrl } : {}),
 };
 const python = "producer-side/.venv/bin/python";
@@ -154,7 +156,9 @@ if (waiting.length)
 console.log(
   `\nReady. Open ${app}/make, type "i want a sticker", add a picture and press Start.\n` +
     `Tick the permission box, then "Pay & make" (mock payment).\n` +
-    `After each print, approve it in ${app}/owner so the printer takes the next order.` +
+    (env.FABRARY_AUTO_ACCEPT_PRINTS === "1"
+      ? `Camera check is off: a finished print completes the order and frees the printer.`
+      : `After each print, approve it in ${app}/owner so the printer takes the next order.`) +
     (convexUrl
       ? `\nLive view from Convex: ${app}/live`
       : `\nLive view is off: set CONVEX_URL or the full CONVEX_DEPLOY_KEY in .env, then npm run convex:push.`),

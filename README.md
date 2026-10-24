@@ -41,7 +41,7 @@ npm run convex:push        # once per change to convex/: needs CONVEX_DEPLOY_KEY
 npm run mvp                # add -- --dry-run to write the printer bytes under producer-side/.work/ instead of printing
 ```
 
-Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. After each print the owner checks it in **Owner workshop** before the machine takes the next order.
+Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. There is no camera check yet, so `npm run mvp` sets `FABRARY_AUTO_ACCEPT_PRINTS=1`: as soon as the printer reports a print finished, the order gets its pickup code and the printer takes the next order. The print is recorded as accepted without inspection, never as a camera pass; a failed or declined print still pauses the printer for the owner. Set `FABRARY_AUTO_ACCEPT_PRINTS=0` to check each print yourself in **Owner workshop** ("Printed fine · approve and free the printer").
 
 ## Convex live state
 

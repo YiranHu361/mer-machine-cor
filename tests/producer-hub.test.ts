@@ -117,7 +117,7 @@ test("hub states map to our node vocabulary", () => {
 });
 
 test(
-  "a sticker order prints through the producer side's hub and waits for the owner's check",
+  "a sticker order prints through the producer side's hub; the owner's check, or accepting unchecked prints, frees the printer",
   { skip: ready, timeout: 120_000 },
   async () => {
     const hub = fakeHub();
@@ -301,18 +301,43 @@ test(
       assert.equal(approved.evidence.source, "owner_inspection");
       assert.equal(approved.evidence.manual, true);
       assert.ok(["release_pending", "released"].includes(approved.paymentState));
-      assert.deepEqual(hub.approvals, [
-        { machine_id: "m_sticker_live", job_id: offer.job_id },
-      ]);
+      assert.deepEqual(
+        hub.approvals.map(({ machine_id, job_id }) => ({ machine_id, job_id })),
+        [{ machine_id: "m_sticker_live", job_id: offer.job_id }],
+      );
       const freed = (await service.read()).machines.phomemo_01;
       assert.deepEqual(
         [freed.ready, freed.paused, freed.activeJobId],
         [true, false, null],
       );
 
-      // A declined job is refunded and never retried by itself.
+      // With the camera check off, a finished print completes the order and
+      // frees the printer by itself, labeled as accepted without inspection.
+      config.autoAcceptHubPrints = true;
+      const auto = await order("hub-order-auto");
+      const autoJob = auto.plan!.assignments[0].child!.id;
+      hub.report(hub.offers.at(-1), {
+        state: "verifying",
+        progress: 1,
+        verification: { pass: null, reason: "no camera frame" },
+      });
+      await service.reconcile(autoJob);
+      const accepted = (await service.read()).jobs[autoJob];
+      assert.equal(accepted.productionState, "produced");
+      assert.equal(accepted.fulfillmentState, "ready_for_pickup");
+      assert.equal(accepted.evidence.source, "accepted_unchecked");
+      assert.equal(accepted.evidence.manual, false);
+      assert.match(hub.approvals.at(-1).reason, /without inspection/);
+      const free = (await service.read()).machines.phomemo_01;
+      assert.deepEqual(
+        [free.ready, free.paused, free.activeJobId],
+        [true, false, null],
+      );
+
+      // A declined job is refunded and never retried by itself; failures
+      // still wait for the owner even with the camera check off.
       const second = await order("hub-order-2");
-      const declined = hub.offers[1];
+      const declined = hub.offers.at(-1);
       hub.report(declined, {
         state: "rejected",
         reason: "out_of_media: 0 left, 1 needed",
@@ -329,9 +354,10 @@ test(
       assert.ok(["refund_pending", "refunded"].includes(refused.paymentState));
       assert.equal(
         hub.offers.length,
-        2,
+        3,
         "a refused job is never offered again by itself",
       );
+      assert.equal((await service.read()).machines.phomemo_01.paused, true);
 
       // Switching back needs an idle machine and leaves it unlisted.
       await mutate(store, (s) => {

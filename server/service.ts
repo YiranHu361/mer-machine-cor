@@ -59,6 +59,12 @@ export interface Config {
   catalog?: any[];
   /** Execution modes this deployment may authorize; defaults to [mode]. */
   allowedModes?: ("simulation" | "hardware")[];
+  /**
+   * The producer side's hub has no camera check yet. When true, a print it
+   * reports finished is accepted without inspection (labeled as such) and the
+   * printer is freed for the next order. Failures still wait for the owner.
+   */
+  autoAcceptHubPrints?: boolean;
 }
 export class Service {
   private busy = new Set<string>();
@@ -1770,6 +1776,67 @@ export class Service {
     if (j.productionState === "verifying") await this.verify(jobId);
     if (j.productionState === "failed" && j.paymentState === "held")
       await this.transfer(jobId, "refund");
+    if (
+      execution === "completed" &&
+      j.productionState === "needs_review" &&
+      this.config.autoAcceptHubPrints &&
+      (await this.read()).machines[j.machineId!]?.producerHub
+    )
+      try {
+        await this.approveHubPrint(
+          jobId,
+          "Printer reported the print finished; accepted without inspection because the camera check is off.",
+          "accepted_unchecked",
+        );
+      } catch (error) {
+        // The print stays in owner review, where the owner can approve it.
+        console.warn(
+          `Could not accept the finished print ${jobId} automatically: ${(error as Error).message}`,
+        );
+      }
+  }
+  /**
+   * Finishes a print from the producer side's hub that has no camera check:
+   * records the passing review, the handling and the resume in one step, so
+   * the printer takes the next order. Each step keeps its own checks.
+   */
+  async approveHubPrint(
+    jobId: string,
+    reason: string,
+    inspection: "owner_inspection" | "accepted_unchecked" = "owner_inspection",
+  ) {
+    const job = await this.job(jobId);
+    const machineId = job.machineId!;
+    requireThat(
+      (await this.read()).machines[machineId]?.producerHub,
+      "NOT_ON_HUB",
+      "Only prints from the producer side's hub are approved this way.",
+      409,
+    );
+    if (job.productionState === "needs_review")
+      await this.operatorReview(jobId, "pass", reason, inspection);
+    if ((await this.job(jobId)).productionState === "produced")
+      await this.prepare(jobId, {
+        removed: true,
+        labeled: true,
+        stored: true,
+        cleared: true,
+      });
+    return mutate(this.store, (s) => {
+      const m = s.machines[machineId];
+      requireThat(
+        m.producerHub &&
+          m.calibrated &&
+          !m.activeJobId &&
+          !m.policyReconciliationRequired,
+        "OWNER_RECOVERY_REQUIRED",
+        "The printer still has an order on it. Refresh and check that order first.",
+      );
+      m.paused = false;
+      m.ready = true;
+      m.reason = `Prints through the producer side's hub as ${m.producerHub.machineId}.`;
+      return m;
+    });
   }
   async reconcile(jobId: string) {
     let j = await this.job(jobId);
@@ -1992,7 +2059,12 @@ export class Service {
     if (evidence.result === "pass") await this.transfer(jobId, "release");
     if (evidence.result === "fail") await this.transfer(jobId, "refund");
   }
-  async operatorReview(jobId: string, result: "pass" | "fail", reason: string) {
+  async operatorReview(
+    jobId: string,
+    result: "pass" | "fail",
+    reason: string,
+    inspection: "owner_inspection" | "accepted_unchecked" = "owner_inspection",
+  ) {
     requireThat(
       ["pass", "fail"].includes(result),
       "INVALID_REVIEW",
@@ -2165,11 +2237,11 @@ export class Service {
           machineId: m.id,
           jobId: j.id,
           result,
-          source: manual ? "owner_inspection" : m.mode,
+          source: manual ? inspection : m.mode,
           completionCredible: false,
           reason,
           operatorOverride: true,
-          ...(manual ? { manual: true } : {}),
+          ...(manual ? { manual: inspection === "owner_inspection" } : {}),
         };
       }
       await this.resolveEvidence(jobId, evidence, reason, {

@@ -61,6 +61,10 @@ class JobRef(BaseModel):
     job_id: str
 
 
+class ApproveIn(JobRef):
+    reason: str | None = None
+
+
 def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
     gw = Gateway(frames_dir=frames_dir)
     events: deque[dict[str, Any]] = deque(maxlen=500)
@@ -135,9 +139,9 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
         return {"ok": "sent"}
 
     @app.post("/dev/approve")
-    async def approve(body: JobRef) -> dict[str, Any]:
+    async def approve(body: ApproveIn) -> dict[str, Any]:
         try:
-            return await gw.approve_manually(body.machine_id, body.job_id)
+            return await gw.approve_manually(body.machine_id, body.job_id, body.reason)
         except LookupError:
             raise HTTPException(404, "unknown job")
 
