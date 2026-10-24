@@ -1,406 +1,638 @@
-.provider-minimal,
-.provider-login-minimal {
-  --paper: #fff;
-  --line: #dce3ed;
-  --muted: #5b6a82;
-  color: #22314d;
-  font-size: 15px;
-}
-
+/*
+ * Provider: a quiet work list. One summary line, text tabs, and per order a
+ * status, one sentence and the one action that needs a person.
+ */
 .provider-minimal {
-  padding-inline: 0;
-  max-width: 960px;
-  margin-inline: auto;
-  padding-bottom: 48px;
+  margin: 0 auto;
 }
 
+/* ---------- Sign in ---------- */
 .provider-login-minimal {
-  display: block;
-  max-width: 460px;
-  padding: 48px 20px 80px;
+  max-width: 360px;
+  margin: 8vh auto 48px;
 }
-
 .provider-login-minimal form {
-  padding: 28px;
-  border-radius: 8px;
-  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.provider-login-minimal form > * {
+  margin: 0;
+}
+.provider-login-minimal h1 {
+  font-size: 26px;
 }
 
-.provider-login-minimal h1,
-.provider-minimal .owner-intro h1 {
-  font-size: 28px;
-  line-height: 1.2;
-  letter-spacing: -0.035em;
-  margin-bottom: 10px;
-}
-
-.provider-login-minimal form > p,
-.provider-login-minimal form > small {
-  font-size: 14px;
-}
-
-.provider-login-minimal form > .quiet {
-  margin-bottom: 12px;
-}
-
-.provider-login-minimal form > a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  margin-top: 12px;
-  font-size: 14px;
-}
-
-.provider-minimal .owner-intro {
-  padding: 30px 0 24px;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.provider-minimal .owner-intro .quiet {
-  margin-bottom: 8px;
-  font-size: 12px;
-}
-
-.provider-minimal .owner-intro p:last-child {
-  font-size: 14px;
-}
-
-.provider-minimal .provider-summary {
-  flex-shrink: 0;
-  margin-top: 30px;
-  padding: 0;
-  max-width: 240px;
-}
-
-.provider-summary strong {
-  color: var(--ink);
-  font-weight: 750;
-}
-
-.provider-minimal .owner-tabs {
-  gap: 28px;
+/* ---------- Header ---------- */
+.owner-intro {
   margin-bottom: 24px;
-  border-color: var(--line);
 }
-
-.provider-minimal .owner-tabs button {
-  min-height: 48px;
-  font-size: 15px;
-  padding: 12px 2px;
-}
-
-.provider-minimal
-  :is(.queue-summary h2, .section-heading h2, .payment-records h2) {
-  font-size: 21px;
-  line-height: 1.3;
+.owner-intro h1 {
   margin-bottom: 6px;
 }
-
-.provider-minimal
-  :is(.queue-summary > p, .section-heading p, .payment-records > p) {
+.provider-summary {
+  margin: 0;
   font-size: 14px;
   color: var(--muted);
-  margin-bottom: 20px;
+}
+.provider-summary strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+.provider-summary strong.is-attention {
+  color: var(--warning);
+}
+.owner-workshop > .notice {
+  margin-bottom: 16px;
 }
 
-.provider-minimal .queue-tools {
-  padding: 16px 0;
+/* ---------- Views ---------- */
+.owner-tabs {
+  display: flex;
+  gap: 24px;
+  margin: 0 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+.owner-tabs button {
+  min-height: 44px;
+  margin-bottom: -1px;
+  padding: 0;
   border: 0;
-  border-block: 1px solid var(--line);
-  background: transparent;
+  border-bottom: 2px solid transparent;
   border-radius: 0;
-  margin-bottom: 18px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
 }
-
-.provider-minimal .owner-job-list,
-.provider-minimal .owner-machine-list {
-  gap: 16px;
+.owner-tabs button:hover {
+  background: transparent;
+  color: var(--ink);
 }
-
-.provider-minimal :is(.owner-job, .owner-machine) {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: none;
+.owner-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
 }
-
-.provider-minimal .owner-job.attention {
-  border-left: 3px solid #d0a060;
-}
-
-.provider-minimal :is(.owner-job-head, .machine-card-head) {
-  padding: 20px;
-  gap: 16px;
-}
-
-.provider-minimal .job-thumb {
-  width: 52px;
-  height: 52px;
-  background: #f7f9fc;
-}
-
-.provider-minimal .owner-job-head h3,
-.provider-minimal .machine-card-head h3 {
+.queue-summary h2,
+.section-heading h2,
+.payment-records h2 {
   font-size: 17px;
-  line-height: 1.3;
+  margin-bottom: 12px;
 }
-
-.provider-minimal :is(.owner-job-head p, .machine-card-head p) {
+.queue-summary > p,
+.payment-records > p {
+  margin-bottom: 16px;
   font-size: 14px;
-  line-height: 1.5;
-  margin-block: 5px 0;
+  color: var(--muted);
+}
+.queue-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(200px, 1fr);
+  align-items: end;
+  gap: 10px 16px;
+  margin-bottom: 8px;
+  border-radius: 2px;
+}
+.queue-tools:focus-visible {
+  outline-offset: 6px;
+}
+.queue-count {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.owner-job-list,
+.owner-machine-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.queue-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+}
+.queue-pagination span {
+  font-size: 14px;
+  color: var(--muted);
 }
 
-.provider-minimal .owner-job-head p {
+/* ---------- Work items ---------- */
+.owner-job,
+.owner-machine {
+  min-width: 0;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.owner-job-head,
+.machine-card-head {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+}
+.job-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--sunken);
+}
+.job-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.job-thumb svg {
+  width: 40px;
+  color: var(--ink-2);
+}
+.owner-job-head h3,
+.machine-card-head h3 {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.owner-job-head h3 span {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.job-main p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
-
-.provider-minimal .machine-card-head > svg {
-  width: 52px;
-  height: 52px;
+.job-states {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
-
-.provider-minimal .machine-card-head .badge-row {
-  margin-top: 10px;
+.sim-label {
+  font-size: 12px;
+  color: var(--muted);
 }
-
-.provider-minimal .provider-next-step {
-  padding: 0 20px 18px;
-  margin: 0;
+.owner-next-step {
+  max-width: none;
+  margin: 8px 0 0 72px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.owner-job > :is(form, .owner-pickup, .owner-evidence, .payment-recovery),
+.owner-job > .notice,
+.owner-machine > .notice {
+  margin: 16px 0 0 72px;
+}
+.owner-job > form h4,
+.owner-pickup h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.owner-job > form > p,
+.owner-pickup > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.provider-handling-confirmation {
+  font-weight: 500;
+}
+.provider-handling-steps > summary {
+  font-size: 13px;
+  color: var(--muted);
+}
+.preparation-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+  margin-bottom: 6px;
+}
+.preparation .button-row,
+.review-form .button-row {
+  margin-top: 8px;
+}
+.review-form .form-grid {
+  margin: 12px 0;
+}
+.owner-pickup .pickup-renewal {
+  margin: 10px 0;
+}
+.owner-pickup .pickup-renewal p {
+  font-size: 14px;
+  color: var(--warning);
+}
+.owner-pickup .notice {
+  margin: 10px 0;
+}
+.redeem-form {
+  margin-top: 4px;
+}
+.redeem-form .field {
+  max-width: 300px;
+}
+.redeem-form .button-row {
+  margin-top: 12px;
+}
+.owner-evidence > summary,
+.payment-recovery > summary {
   font-size: 14px;
 }
+.evidence-review {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 16px;
+  padding-bottom: 12px;
+}
+.evidence-review .result-image {
+  margin: 0;
+}
+.evidence-review p,
+.evidence-review small {
+  overflow-wrap: anywhere;
+}
+.evidence-review small {
+  display: block;
+  margin-bottom: 8px;
+}
+.payment-recovery > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.payment-recovery fieldset,
+.trial-economics fieldset {
+  display: grid;
+  gap: 12px;
+}
+.payment-recovery fieldset > button,
+.trial-economics fieldset > button {
+  justify-self: start;
+}
+.payment-recovery .notice,
+.trial-economics .notice {
+  margin: 0;
+}
+.owner-job-more {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 20px;
+  margin: 8px 0 0 72px;
+}
+.owner-job-more > details > summary {
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.owner-job-more > details[open] {
+  flex-basis: 100%;
+  padding-bottom: 10px;
+}
+.provider-order-facts > p {
+  font-size: 14px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.provider-order-facts dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: 10px 18px;
+}
+.provider-order-facts dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.provider-order-facts dd {
+  font-size: 14px;
+}
+.trial-economics > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.trial-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 10px 16px;
+  margin: 8px 0 12px;
+}
+.trial-summary dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.recovery .button-row {
+  margin: 4px 0 10px;
+}
+.recovery .notice {
+  margin: 0 0 10px;
+}
+.owner-history {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.owner-history li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+}
+.owner-history time {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.owner-history span {
+  grid-column: 2;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.simulation-controls > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.simulation-controls .button-row select {
+  width: auto;
+  flex: 1 1 220px;
+}
 
-.provider-minimal
-  :is(
-    .provider-order-facts,
-    .provider-connection-details,
-    .provider-machine-checks,
-    .machine-settings,
-    .provider-registration
-  ) {
-  padding: 0 20px;
+/* ---------- Machines ---------- */
+.machine-card-head > svg {
+  width: 56px;
+  height: 44px;
+  color: var(--ink-2);
+}
+.machine-card-head p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.setup-steps {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 10px 0 0 72px;
+}
+.setup-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.setup-steps li.done {
+  color: var(--ink-2);
+}
+.setup-steps li.current {
+  color: var(--ink);
+  font-weight: 600;
+}
+.setup-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+}
+.setup-steps li.done .setup-dot {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.provider-next-step {
+  max-width: none;
+  margin: 10px 0 0 72px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.owner-machine > details {
+  margin-left: 72px;
+}
+.owner-machine > details > summary {
+  min-height: 44px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.owner-machine > details[open] {
+  padding-bottom: 12px;
+}
+.calibration-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.calibration-row .check {
+  flex: 1 1 280px;
+}
+.machine-settings h4 {
+  margin: 16px 0 0;
+  font-size: 14px;
+}
+.machine-settings fieldset > .notice {
+  margin-top: 8px;
+}
+.machine-settings fieldset > button {
+  margin: 10px 10px 0 0;
+}
+.readiness-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 2px 0 8px;
+  font-size: 14px;
+}
+.readiness-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.readiness-facts i {
+  font-style: normal;
+  font-weight: 600;
+}
+.readiness-facts i.yes {
+  color: var(--success);
+}
+.readiness-facts i.no {
+  color: var(--muted);
+}
+.machine-reason {
+  font-size: 14px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.provider-registration {
+  margin-top: 8px;
+}
+.provider-registration > summary {
+  font-size: 14px;
+}
+.register-form {
+  padding-bottom: 16px;
+}
+.register-form > div:first-child p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.payment-records > .ledger-list {
   border-top: 1px solid var(--line);
 }
 
-.provider-minimal
-  :is(
-    .provider-order-facts,
-    .provider-connection-details,
-    .provider-machine-checks,
-    .machine-settings,
-    .provider-registration
-  )
-  > summary {
-  padding-block: 14px;
-  min-height: 48px;
+/* ---------- Supervised physical calibration ---------- */
+.physical-calibration > summary {
   font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
 }
-
-.provider-minimal
-  :is(.provider-order-facts, .provider-connection-details)[open] {
-  padding-bottom: 16px;
+.physical-calibration > .notice {
+  margin-top: 4px;
 }
-
-.provider-minimal .provider-order-facts p {
+.physical-calibration form {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+.physical-calibration form .form-grid {
+  margin: 0;
+}
+.physical-calibration form > .primary,
+.physical-calibration form > .text-button {
+  justify-self: start;
+}
+.calibration-original {
+  width: 120px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: var(--radius-s);
+  background: var(--sunken);
+}
+.calibration-new-intent {
+  margin: 12px 0;
+}
+.calibration-new-intent p {
   font-size: 14px;
+}
+.calibration-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 16px 0;
+  padding: 12px 0;
+  border-block: 1px solid var(--line);
+}
+.calibration-status p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
-
-.provider-order-facts dl {
-  display: flex;
-  gap: 16px 32px;
-  flex-wrap: wrap;
-  margin: 12px 0 0;
+.calibration-evidence {
+  max-width: 420px;
+  margin: 16px 0;
 }
-
-.provider-order-facts dt,
-.provider-order-facts dd {
+.calibration-evidence figcaption {
+  margin-top: 6px;
   font-size: 13px;
-  margin: 0;
-}
-
-.provider-order-facts dt {
   color: var(--muted);
-  margin-bottom: 3px;
+  overflow-wrap: anywhere;
 }
-
-.provider-minimal
-  .provider-connection-details
-  :is(.readiness-facts, .machine-reason) {
-  padding: 0;
-  margin: 0 0 12px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.provider-minimal .readiness-facts {
-  gap: 12px 20px;
-}
-
-.provider-minimal .calibration-row {
-  padding: 10px 0 20px;
-  border-top: 0;
-  align-items: flex-start;
-}
-
-.provider-minimal :is(.preparation, .review-form, .redeem-form) {
-  background: #f7f9fc;
-  padding: 20px;
-}
-
-.provider-minimal
-  :is(.preparation > p, .review-form > p, .redeem-form p, .check) {
-  font-size: 14px;
-}
-
-.provider-minimal .provider-handling-confirmation {
-  margin-block: 20px 10px;
-  max-width: 620px;
-}
-
-.provider-handling-steps {
-  margin-bottom: 16px;
-}
-
-.provider-handling-steps > summary {
-  min-height: 44px;
-  padding-block: 12px;
-  font-size: 14px;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.provider-minimal .preparation-checks {
+.calibration-inspection {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 4px 0 16px;
-  gap: 12px;
+  gap: 10px;
+  margin-top: 12px;
 }
-
-.provider-minimal .machine-settings form {
-  margin-top: 8px;
-  padding-bottom: 20px;
-}
-
-.provider-minimal .provider-registration {
-  margin-block: 24px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.provider-minimal .register-form {
-  padding: 8px 0 20px;
+.calibration-inspection > p,
+.calibration-negative-action p {
   margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.provider-minimal .register-form > div:first-child > p {
   font-size: 14px;
-  margin-bottom: 20px;
+  color: var(--ink-2);
 }
-
-.provider-minimal
-  :is(
-    .register-form .primary,
-    .machine-card-head button,
-    .calibration-row > .secondary
-  ) {
+.calibration-inspection > .secondary,
+.calibration-negative-action > .secondary,
+.calibration-resolution > .secondary {
+  justify-self: start;
+}
+.calibration-negative-action {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.calibration-resolution > p {
   font-size: 14px;
+  color: var(--muted);
+}
+.calibration-resolution > .field {
+  max-width: 360px;
+  margin: 10px 0 12px;
+}
+.calibration-action-recovery .text-button {
+  display: inline-flex;
+  margin-top: 6px;
 }
 
-@media (max-width: 760px) {
-  .provider-minimal .owner-intro {
-    gap: 10px;
-    padding-top: 20px;
+@media (max-width: 640px) {
+  .queue-tools {
+    grid-template-columns: minmax(0, 1fr);
   }
-
-  .provider-minimal .provider-summary {
-    margin-top: 0;
-    max-width: none;
-  }
-
-  .provider-minimal .owner-tabs {
-    gap: 20px;
-  }
-
-  .provider-minimal .owner-tabs button {
-    flex: 0 1 auto;
-    text-align: center;
-    justify-content: center;
-  }
-
-  .provider-minimal :is(.owner-job-head, .machine-card-head) {
-    padding: 16px;
+  .owner-job-head,
+  .machine-card-head {
+    grid-template-columns: 44px minmax(0, 1fr);
     gap: 12px;
   }
-
-  .provider-minimal
-    :is(.owner-job-head > div:nth-child(2), .machine-card-head > div) {
-    flex-basis: calc(100% - 64px);
+  .job-thumb {
+    width: 44px;
+    height: 44px;
   }
-
-  .provider-minimal .owner-job-head h3 span {
-    display: inline;
+  .machine-card-head > svg {
+    width: 44px;
+    height: 36px;
   }
-
-  .provider-minimal .job-states {
-    padding-left: 64px;
+  .job-states,
+  .machine-card-head > button {
+    grid-column: 2;
+    align-items: flex-start;
+    justify-self: start;
+  }
+  .job-states {
+    flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 4px 12px;
   }
-
-  .provider-minimal .machine-card-head > button {
-    margin-left: 64px;
+  .owner-next-step,
+  .owner-job > :is(form, .owner-pickup, .owner-evidence, .payment-recovery),
+  .owner-job > .notice,
+  .owner-machine > .notice,
+  .owner-job-more,
+  .setup-steps,
+  .provider-next-step,
+  .owner-machine > details {
+    margin-left: 0;
   }
-
-  .provider-minimal
-    :is(
-      .provider-order-facts,
-      .provider-connection-details,
-      .provider-machine-checks,
-      .machine-settings,
-      .provider-registration
-    ) {
-    padding-inline: 16px;
-  }
-
-  .provider-minimal .provider-next-step {
-    padding-inline: 16px;
-  }
-
-  .provider-minimal :is(.preparation, .review-form, .redeem-form) {
-    padding: 16px;
-  }
-
-  .provider-minimal :is(input, select, textarea),
-  .provider-login-minimal :is(input, select, textarea) {
-    font-size: 16px;
-  }
-
-  .provider-login-minimal {
-    padding: 24px 16px 48px;
-  }
-
-  .provider-login-minimal form {
-    padding: 22px;
+  .evidence-review {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
-
-@media (max-width: 380px) {
-  .provider-minimal .preparation-checks {
-    grid-template-columns: 1fr;
+@media (max-width: 400px) {
+  .preparation-checks {
+    grid-template-columns: minmax(0, 1fr);
   }
-
-  .provider-login-minimal h1,
-  .provider-minimal .owner-intro h1 {
-    font-size: 26px;
+  .owner-tabs {
+    gap: 18px;
   }
 }

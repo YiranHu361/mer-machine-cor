@@ -230,7 +230,7 @@ test("an old requester refresh cannot roll a newer order back when its row is se
       "Preview approved",
     );
     expect(await page.locator(".order-row .badge").textContent()).toBe(
-      "approved",
+      "Preview approved",
     );
   } finally {
     delayed.resolve();
@@ -364,7 +364,7 @@ test("authoritative revisions win when an earlier request reads the newer snapsh
     await expect(page.locator(".ticket-title")).toHaveText(
       "Production is complete",
     );
-    await expect(page.locator(".order-row .badge")).toHaveText("produced");
+    await expect(page.locator(".order-row .badge")).toHaveText("Made");
   } finally {
     delayed.resolve();
   }

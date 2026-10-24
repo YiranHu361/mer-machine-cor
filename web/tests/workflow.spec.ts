@@ -1,6 +1,7 @@
 import {
   useManualSettings,
   authorizePictures,
+  openOrderDetails,
   openPurposeNote,
 } from "./requester-manual";
 import {
@@ -290,7 +291,7 @@ test("requester and owner complete an honest simulated order, independent handli
     })
     .click();
   await expect(requestPage.locator(".receipt")).toContainText("Mock receipt");
-  await expect(requestPage.locator(".receipt")).toContainText("confirmed");
+  await expect(requestPage.locator(".receipt")).toContainText("Confirmed");
   await ownerPage.screenshot({
     path: "evidence/owner-desktop.png",
     fullPage: true,
@@ -429,6 +430,7 @@ test("intake validates specifications, review returns to approval, and expired/o
       exact: true,
     }),
   ).toHaveCount(0);
+  await openOrderDetails(page);
   await expect(
     page.getByText("specification v2", { exact: false }),
   ).toBeVisible();
@@ -464,6 +466,7 @@ test("intake validates specifications, review returns to approval, and expired/o
       exact: true,
     }),
   ).toBeVisible();
+  await openOrderDetails(page);
   await expect(
     page.getByText("specification v3", { exact: false }),
   ).toBeVisible();

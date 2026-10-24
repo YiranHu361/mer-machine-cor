@@ -28,6 +28,15 @@ export async function openPurposeNote(page: Page) {
     await summary.click();
 }
 
+/** Order facts and the production-file fingerprint are folded under Order details. */
+export async function openOrderDetails(page: Page) {
+  const details = page.locator(".request-state-details");
+  await expect(details).toHaveCount(1);
+  if ((await details.getAttribute("open")) === null)
+    await details.locator(":scope > summary").click();
+  await expect(details).toHaveAttribute("open", "");
+}
+
 export async function authorizePictures(page: Page) {
   await page
     .getByLabel("I own these pictures or have permission to print them", {

@@ -212,6 +212,101 @@ const money = (n: number) =>
     n / 100,
   );
 const human = (v: string) => v.replaceAll("_", " ").replaceAll("-", " ");
+const sentence = (v: string) => {
+  const text = human(v).trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+};
+// Saved records keep their machine vocabulary; people read these phrases.
+const productionLabels: Record<string, string> = {
+  requested: "Request received",
+  specified: "Preview ready",
+  approved: "Preview approved",
+  quoted: "Price ready",
+  payment_confirmed: "Paid · ready to start",
+  dispatched: "Sent to the machine",
+  running: "Being made",
+  verifying: "Checking the result",
+  produced: "Made",
+  failed: "Didn’t pass the check",
+  needs_review: "Needs a review",
+  cancelled: "Cancelled",
+};
+const paymentLabels: Record<string, string> = {
+  unpaid: "Not paid",
+  collection_pending: "Payment confirming",
+  held: "Paid · held",
+  release_pending: "Payout confirming",
+  released: "Paid out",
+  refund_pending: "Refund confirming",
+  refunded: "Refunded",
+};
+const fulfillmentLabels: Record<string, string> = {
+  unprepared: "Not made yet",
+  awaiting_owner: "Being prepared",
+  ready_for_pickup: "Ready for pickup",
+  collected: "Collected",
+  cancelled: "Cancelled",
+};
+const eventLabels: Record<string, string> = {
+  specified: "Preview prepared",
+  specification_approved: "Preview approved",
+  approval_invalidated: "Approval reset after a change",
+  quoted: "Price quoted",
+  mandate_accepted: "Price accepted within budget",
+  collection_pending: "Payment started",
+  payment_pending: "Payment confirming",
+  payment_failed: "Payment failed",
+  late_payment: "Payment arrived after the price expired",
+  dispatch_authorized: "Production started",
+  execution_progress: "Machine progress",
+  execution_uncertain: "Machine result uncertain",
+  execution_cancellation_requested: "Cancellation requested",
+  device_completed: "Machine finished",
+  device_failed: "Machine reported a failure",
+  completion_review: "Result sent for review",
+  content_review: "Artwork sent for review",
+  operator_override: "Owner decision recorded",
+  owner_recovery: "Owner cleared the machine",
+  ready_for_pickup: "Ready for pickup",
+  pickup_code_renewed: "Pickup code renewed",
+  collected: "Collected",
+  cancelled: "Cancelled",
+  abort: "Stop requested",
+  trial_economics: "Trial costs recorded",
+};
+const describe = (labels: Record<string, string>, value: string) =>
+  labels[value] || sentence(value);
+const materialLabel = (value: string) =>
+  value === "thermal-paper"
+    ? "Thermal sticker paper"
+    : value === "photo-film"
+      ? "Instax mini film"
+      : value.length <= 4
+        ? value.toUpperCase()
+        : sentence(value);
+function requesterStatus(job: Job) {
+  if (job.productionState === "cancelled") return "Cancelled";
+  if (job.fulfillmentState === "collected") return "Collected";
+  if (job.fulfillmentState === "ready_for_pickup") return "Ready for pickup";
+  if (
+    job.productionState === "produced" &&
+    job.fulfillmentState === "awaiting_owner"
+  )
+    return "Being prepared";
+  return describe(productionLabels, job.productionState);
+}
+const statusTone = (job: Job) =>
+  job.productionState === "cancelled"
+    ? "neutral"
+    : ["failed", "needs_review"].includes(job.productionState)
+      ? "amber"
+      : job.productionState === "produced"
+        ? "green"
+        : ["specified", "approved", "quoted", "payment_confirmed"].includes(
+              job.productionState,
+            )
+          ? "blue"
+          : "neutral";
 const shortId = (v: string) => v.slice(0, 8);
 const date = (v: string) =>
   new Date(v).toLocaleString(undefined, {
@@ -568,57 +663,21 @@ function App() {
       </a>
       <header className="site-header">
         <a className="brand" href="/" aria-label="Fabrary home">
-          <span className="brand-mark" aria-hidden="true">
-            <svg width="16" height="25" viewBox="0 0 16 25" focusable="false">
-              <path
-                fill="currentColor"
-                d="M4 25V14H1V9h3V6c0-4 2-6 6-6h5v5h-3c-2 0-2 1-2 2v2h5l-1 5h-4v11z"
-              />
-            </svg>
-          </span>
           fabrary
         </a>
         <nav aria-label="Main navigation">
-          <a href="/" aria-current={!isOwner ? "page" : undefined}>
-            Make something
-          </a>
-          <a href="/owner" aria-current={isOwner ? "page" : undefined}>
-            Owner workshop
-          </a>
+          {isOwner ? (
+            <a href="/">Make something</a>
+          ) : (
+            <a href="/owner">Owner workshop</a>
+          )}
         </nav>
       </header>
-      <div className="modebar">
-        <span className="mode-dot" />
-        <strong>
-          {!health
-            ? "Connecting to workshop"
-            : health.mode === "hardware"
-              ? "Hardware mode"
-              : "Simulation mode"}
-        </strong>
-        <span>
-          {!health
-            ? "Checking payment mode"
-            : health.paymentMode === "testnet"
-              ? "Base Sepolia test payments"
-              : "Mock payments · no money moves"}
-        </span>
-        <details className="mode-detail">
-          <summary>Connection</summary>
-          <span>
-            {!health
-              ? "Checking storage"
-              : health.store === "spacetimedb"
-                ? "SpacetimeDB connected"
-                : "Local development storage"}
-          </span>
-        </details>
-        {!live && (
-          <strong className="connection-alert">
-            Connection lost · retrying
-          </strong>
-        )}
-      </div>
+      {!live && (
+        <p className="connection-alert" role="status">
+          Connection lost · retrying
+        </p>
+      )}
       <main id="main" tabIndex={-1}>
         {(storage.local === "unavailable" ||
           storage.session === "unavailable") && (
@@ -632,14 +691,20 @@ function App() {
           </div>
         )}
         {boot ? (
-          <div className="loading-shell">
+          <div className="loading-shell" role="status">
             <span className="spinner" /> Opening the workshop…
           </div>
         ) : bootError ? (
           <div className="error-shell">
             <h1>The workshop is offline.</h1>
             <p role="alert">{bootError}</p>
-            <Button onClick={bootApp}>Try again</Button>
+            <p className="fine-print">
+              Saved orders stay saved. Trying again only reconnects; it never
+              repeats a payment or a machine run.
+            </p>
+            <Button className="primary" onClick={bootApp}>
+              Try again
+            </Button>
           </div>
         ) : isOwner ? (
           <OwnerApp
@@ -667,10 +732,6 @@ function App() {
           />
         )}
       </main>
-      <footer className="site-footer">
-        <span>Made locally. Handled by a person.</span>
-        <a href="/owner">Open owner workshop</a>
-      </footer>
     </>
   );
 }
@@ -694,6 +755,7 @@ function RequesterApp({
     null,
   );
   const [analyzing, setAnalyzing] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
   const [manualSettings, setManualSettings] = useState(false);
   const [requiresRecommendation, setRequiresRecommendation] = useState(false);
@@ -1699,6 +1761,7 @@ function RequesterApp({
             : "Your requester session ended. Open a requester session to prepare artwork and place an order."}
         </p>
         <Button
+          className="primary"
           onClick={() =>
             act("session", async () => {
               const next = await api<Session>("/session", {
@@ -1714,9 +1777,35 @@ function RequesterApp({
         {error && <Notice kind="error">{error}</Notice>}
       </div>
     );
+  const splitIntake = !current && assets.length > 0;
+  const needsMatch =
+    requiresFreshRecommendation ||
+    (!manualSettings && recommendation?.status !== "recommended") ||
+    ((!editing || requiresRecommendation) && !spec.recommendedMachineId);
+  const needsPermission =
+    spec.assetIds.length > 0 &&
+    spec.permission !== "authorized" &&
+    !(manualSettings && permissionReviewRequested);
+  // One sentence explains a disabled preview action instead of a silent button.
+  const previewBlocker =
+    busy === "upload"
+      ? "Uploading your pictures…"
+      : analyzing
+        ? "Matching a machine to your pictures…"
+        : !editing && unresolvedCreation
+          ? "Resolve the earlier request above first."
+          : editConflict
+            ? "Load the saved specification above first."
+            : needsMatch
+              ? recommendation?.status === "unavailable"
+                ? "No suitable machine is available for these pictures yet."
+                : "Find a suitable machine for these pictures first."
+              : needsPermission
+                ? "Confirm you can print these pictures to continue."
+                : "";
   return (
     <div
-      className={`requester ${!current ? "picture-first" : ""}`}
+      className={`requester ${!current ? "picture-first" : ""} ${splitIntake ? "picture-split" : ""}`}
       onFocusCapture={() => {
         recoveryInteraction.current++;
       }}
@@ -1737,61 +1826,63 @@ function RequesterApp({
         }
       }}
     >
-      {!connected && (
-        <Notice kind="error">
-          Live updates are disconnected. The last saved status is shown.{" "}
-          <button className="text-button" onClick={refresh}>
-            Refresh now
-          </button>
-        </Notice>
-      )}
-      {error && (
-        <Notice kind="error" focusOnShow>
-          {error}
-        </Notice>
-      )}
-      {editConflict && (
-        <Notice>
-          A newer version of this order is saved. Your draft is kept here. Load
-          the saved specification, then reapply the changes you want.
-          <button
-            type="button"
-            className="text-button"
-            disabled={Boolean(busy)}
-            onClick={useSavedSpecification}
-          >
-            Use saved specification
-          </button>
-        </Notice>
-      )}
-      {unresolvedCreation && (
-        <Notice>
-          The earlier new-order request may still finish. Check your saved
-          orders and open the one marked “Matches interrupted request” to
-          resolve it. Browsing other orders keeps this draft protected. It will
-          not be submitted again automatically.
-          <div className="button-row">
-            <button
-              type="button"
-              className="secondary"
-              disabled={Boolean(busy) || recoveryReadyFor !== error}
-              onClick={() => {
-                void checkSavedOrders();
-              }}
-            >
-              Check saved orders
+      <div className="requester-notices">
+        {!connected && (
+          <Notice kind="error">
+            Live updates are disconnected. The last saved status is shown.{" "}
+            <button className="text-button" onClick={refresh}>
+              Refresh now
             </button>
+          </Notice>
+        )}
+        {error && (
+          <Notice kind="error" focusOnShow>
+            {error}
+          </Notice>
+        )}
+        {editConflict && (
+          <Notice>
+            A newer version of this order is saved. Your draft is kept here.
+            Load the saved specification, then reapply the changes you want.
             <button
               type="button"
               className="text-button"
               disabled={Boolean(busy)}
-              onClick={() => discardDraft("new")}
+              onClick={useSavedSpecification}
             >
-              Discard interrupted draft
+              Use saved specification
             </button>
-          </div>
-        </Notice>
-      )}
+          </Notice>
+        )}
+        {unresolvedCreation && (
+          <Notice>
+            The earlier new-order request may still finish. Check your saved
+            orders and open the one marked “Matches interrupted request” to
+            resolve it. Browsing other orders keeps this draft protected. It
+            will not be submitted again automatically.
+            <div className="button-row">
+              <button
+                type="button"
+                className="secondary"
+                disabled={Boolean(busy) || recoveryReadyFor !== error}
+                onClick={() => {
+                  void checkSavedOrders();
+                }}
+              >
+                Check saved orders
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                disabled={Boolean(busy)}
+                onClick={() => discardDraft("new")}
+              >
+                Discard interrupted draft
+              </button>
+            </div>
+          </Notice>
+        )}
+      </div>
       {hiddenDrafts.length > 0 && (
         <section
           className="requester-drafts"
@@ -1867,7 +1958,7 @@ function RequesterApp({
             </h1>
             {current && (
               <button
-                className="text-button"
+                className="text-button new-order"
                 onClick={newOrder}
                 disabled={Boolean(busy)}
               >
@@ -1901,36 +1992,33 @@ function RequesterApp({
               {current.spec.outputType === "3d" && (
                 <PreparedModelFacts details={current.spec} />
               )}
-              <div className="spec-strip">
-                <span>{outputLabels[current.spec.outputType]}</span>
-                <span>
-                  {current.spec.widthMm} × {current.spec.heightMm}
-                  {current.spec.outputType === "3d"
-                    ? ` × ${current.spec.depthMm}`
-                    : ""}{" "}
-                  mm
-                </span>
-                <span>Qty {current.spec.quantity}</span>
-                <span>{human(current.spec.material)}</span>
+              <div className="preview-summary">
+                <ul className="spec-strip" aria-label="Item details">
+                  <li>{outputLabels[current.spec.outputType]}</li>
+                  <li>
+                    {current.spec.widthMm} × {current.spec.heightMm}
+                    {current.spec.outputType === "3d"
+                      ? ` × ${current.spec.depthMm}`
+                      : ""}{" "}
+                    mm
+                  </li>
+                  <li>Qty {current.spec.quantity}</li>
+                  <li>{materialLabel(current.spec.material)}</li>
+                </ul>
+                <p className="order-intent">{current.spec.intent}</p>
+                {["specified", "approved", "quoted"].includes(
+                  current.productionState,
+                ) &&
+                  current.paymentState === "unpaid" && (
+                    <button
+                      className="text-button"
+                      onClick={edit}
+                      disabled={Boolean(busy)}
+                    >
+                      Edit item
+                    </button>
+                  )}
               </div>
-              <p className="order-intent">{current.spec.intent}</p>
-              {["specified", "approved", "quoted"].includes(
-                current.productionState,
-              ) &&
-                current.paymentState === "unpaid" && (
-                  <button
-                    className="secondary"
-                    onClick={edit}
-                    disabled={Boolean(busy)}
-                  >
-                    Edit item
-                  </button>
-                )}
-              <small className="hash-note">
-                Production file fingerprint{" "}
-                {current.artifact?.sha256?.slice(0, 16) || "unavailable"} ·
-                specification v{current.specVersion}
-              </small>
             </>
           ) : (
             <form
@@ -1970,607 +2058,692 @@ function RequesterApp({
                 }
               }}
             >
-              <fieldset disabled={Boolean(busy)} className="intake-fields">
-                {!assets.length && !editing && (
-                  <p className="picture-intro">
-                    We’ll find the machine and prepare your item.
-                  </p>
-                )}
-                <label
-                  className={`upload-zone picture-upload ${assets.length ? "has-pictures" : ""} ${busy === "upload" ? "uploading" : ""}`}
+              <fieldset
+                disabled={Boolean(busy)}
+                className={`intake-fields ${assets.length || editing ? "has-pictures" : ""}`}
+              >
+                <div
+                  className={`intake-stage ${dragging ? "dragging" : ""}`}
+                  onDragOver={(event) => {
+                    if (!Array.from(event.dataTransfer.types).includes("Files"))
+                      return;
+                    event.preventDefault();
+                    if (!dragging) setDragging(true);
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !(event.relatedTarget instanceof Node) ||
+                      !event.currentTarget.contains(event.relatedTarget)
+                    )
+                      setDragging(false);
+                  }}
+                  onDrop={(event) => {
+                    if (!Array.from(event.dataTransfer.types).includes("Files"))
+                      return;
+                    // Handle the drop once here, including drops onto the
+                    // native file input, so a replacement uploads only once.
+                    event.preventDefault();
+                    setDragging(false);
+                    if (!busy) void upload(event.dataTransfer.files);
+                  }}
                 >
-                  <input
-                    aria-label="Upload artwork"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    multiple
-                    onChange={(event) => {
-                      void upload(event.target.files);
-                      event.target.value = "";
-                    }}
-                    disabled={Boolean(busy)}
-                  />
-                  <span className="upload-symbol" aria-hidden="true">
-                    ＋
-                  </span>
-                  <strong>
-                    {busy === "upload"
-                      ? "Uploading pictures…"
-                      : assets.length
-                        ? "Replace pictures"
-                        : "Add your pictures"}
-                  </strong>
-                  <span>PNG, JPEG or WebP · up to 4 pictures</span>
-                </label>
-                {(assets.length > 0 || editing) && (
-                  <div className="originals">
-                    {assets.map((asset) => (
-                      <figure key={asset.id}>
-                        <img src={asset.url} alt="Uploaded original artwork" />
-                        <figcaption>Your picture</figcaption>
-                      </figure>
-                    ))}
-                    {editing && !assets.length && (
-                      <p>
-                        The existing artwork stays selected. Upload pictures to
-                        replace it.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {(assets.length > 0 ||
-                  editing ||
-                  analyzing ||
-                  recommendation) && (
-                  <section
-                    className="picture-recommendation"
-                    ref={recommendationSection}
-                    tabIndex={-1}
-                    aria-label="Machine recommendation"
-                    aria-live="polite"
-                    aria-busy={analyzing}
+                  <label
+                    className={`upload-zone picture-upload ${assets.length ? "has-pictures" : ""} ${busy === "upload" ? "uploading" : ""}`}
                   >
-                    {analyzing ? (
-                      <div className="analysis-progress" role="status">
-                        <span className="spinner" aria-hidden="true" />
-                        <div>
-                          <strong>Finding the right machine…</strong>
-                          <p>
-                            Checking your pictures against this workshop’s
-                            supported devices. You can replace the pictures
-                            while this runs.
-                          </p>
+                    <input
+                      aria-label="Upload artwork"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      multiple
+                      onChange={(event) => {
+                        void upload(event.target.files);
+                        event.target.value = "";
+                      }}
+                      disabled={Boolean(busy)}
+                    />
+                    <span className="upload-symbol" aria-hidden="true">
+                      {busy === "upload" ? (
+                        <span className="spinner" />
+                      ) : (
+                        <svg viewBox="0 0 24 24" focusable="false">
+                          <path
+                            d="M12 5v14M5 12h14"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="upload-copy">
+                      <strong>
+                        {busy === "upload"
+                          ? "Uploading…"
+                          : assets.length
+                            ? "Replace pictures"
+                            : "Add pictures"}
+                      </strong>
+                      {!assets.length && busy !== "upload" && (
+                        <span>Drop or choose up to 4</span>
+                      )}
+                    </span>
+                  </label>
+                  {(assets.length > 0 || editing) && (
+                    <div
+                      className={`originals count-${Math.min(assets.length, 4)}`}
+                    >
+                      {assets.map((asset) => (
+                        <figure key={asset.id}>
+                          <img
+                            src={asset.url}
+                            alt="Uploaded original artwork"
+                          />
+                        </figure>
+                      ))}
+                      {editing && !assets.length && (
+                        <p>
+                          The existing artwork stays selected. Upload pictures
+                          to replace it.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="intake-side">
+                  {(assets.length > 0 ||
+                    editing ||
+                    analyzing ||
+                    recommendation) && (
+                    <section
+                      className={`picture-recommendation ${analyzing ? "is-analyzing" : recommendation ? `is-${recommendation.status}` : ""}`}
+                      ref={recommendationSection}
+                      tabIndex={-1}
+                      aria-label="Machine recommendation"
+                      aria-live="polite"
+                      aria-busy={analyzing}
+                    >
+                      {analyzing ? (
+                        <div className="analysis-progress" role="status">
+                          <span className="spinner" aria-hidden="true" />
+                          <div>
+                            <strong>Finding the right machine…</strong>
+                            <p>
+                              Checking your pictures against this workshop’s
+                              supported machines. You can replace the pictures
+                              while this runs.
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ) : recommendation ? (
-                      <>
-                        <div className="recommendation-top">
-                          <span className="eyebrow">
-                            {recommendation.provider === "claude"
-                              ? "Agent recommendation"
-                              : "Local picture analysis"}
+                      ) : null}
+                      {analyzing ? (
+                        // Holds the recommendation's shape so controls below
+                        // do not jump when the result arrives.
+                        <div className="analysis-skeleton" aria-hidden="true">
+                          <span className="skeleton-device" />
+                          <span className="skeleton-chips">
+                            <i />
+                            <i />
+                            <i />
                           </span>
-                          <Badge
-                            tone={
-                              recommendation.status === "recommended"
-                                ? "green"
-                                : "amber"
-                            }
-                          >
+                          <span className="skeleton-line" />
+                        </div>
+                      ) : recommendation ? (
+                        <>
+                          <p className="recommendation-meta">
+                            <span
+                              className={`status-dot ${recommendation.status === "recommended" ? "ok" : "warn"}`}
+                              aria-hidden="true"
+                            />
                             {recommendation.status === "recommended"
                               ? "Suitable machine found"
                               : "Needs your attention"}
-                          </Badge>
-                        </div>
-                        <h3>
-                          {recommendation.status === "recommended" &&
-                          recommendation.spec
-                            ? outputLabels[recommendation.spec.outputType]
-                            : recommendation.status === "needs_clarification"
-                              ? "A little more context would help"
-                              : "No suitable machine right now"}
-                        </h3>
-                        {recommendation.machine &&
-                          recommendation.status === "recommended" && (
-                            <div className="recommended-device">
-                              <DeviceArt
-                                type={recommendation.machine.outputType}
-                              />
-                              <div>
-                                <strong>{recommendation.machine.name}</strong>
-                                <span>
-                                  {recommendation.machine.model} ·{" "}
-                                  {recommendation.machine.mode === "simulation"
-                                    ? "Simulated device"
-                                    : "Hardware · owner readiness required"}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        <details
-                          className="recommendation-details"
-                          open={
-                            recommendation.status !== "recommended" || undefined
-                          }
-                        >
-                          <summary>Why this fits</summary>
-                          <p>{recommendation.reason}</p>
+                            <span aria-hidden="true"> · </span>
+                            {recommendation.provider === "claude"
+                              ? "Agent recommendation"
+                              : "Local picture analysis"}
+                          </p>
+                          <h3>
+                            {recommendation.status === "recommended" &&
+                            recommendation.spec
+                              ? outputLabels[recommendation.spec.outputType]
+                              : recommendation.status === "needs_clarification"
+                                ? "A little more context would help"
+                                : "No suitable machine right now"}
+                          </h3>
+                          {recommendation.machine &&
+                            recommendation.status === "recommended" && (
+                              <p className="recommended-device">
+                                <strong>{recommendation.machine.name}</strong> ·{" "}
+                                {recommendation.machine.model} ·{" "}
+                                {recommendation.machine.mode === "simulation"
+                                  ? "Simulated device"
+                                  : "Hardware · owner readiness required"}
+                              </p>
+                            )}
                           {recommendation.spec &&
                             recommendation.status === "recommended" && (
-                              <div className="recommendation-facts">
-                                <span>
+                              <ul
+                                className="recommendation-facts"
+                                aria-label="Prepared settings"
+                              >
+                                <li>
                                   {spec.widthMm || "—"} × {spec.heightMm || "—"}{" "}
                                   mm
-                                </span>
-                                <span>
+                                </li>
+                                <li>
                                   {spec.quantity || "—"}{" "}
                                   {Number(spec.quantity) === 1
                                     ? "item"
                                     : "items"}
-                                </span>
-                                <span>
+                                </li>
+                                <li>
                                   {recommendation.spec.outputType === "sticker"
                                     ? "Black and white"
                                     : "Fixed photo film"}
-                                </span>
-                              </div>
+                                </li>
+                              </ul>
                             )}
-                          {recommendation.notice && (
-                            <p className="recommendation-limits">
-                              {recommendation.notice}
+                          {recommendation.status !== "recommended" && (
+                            <p className="recommendation-reason">
+                              {recommendation.reason}
                             </p>
                           )}
-                        </details>
-                        {recommendation.questions.length > 0 && (
-                          <ul>
-                            {recommendation.questions.map((question, index) => (
-                              <li key={index}>{question}</li>
-                            ))}
-                          </ul>
-                        )}
+                          {recommendation.questions.length > 0 && (
+                            <ul className="recommendation-questions">
+                              {recommendation.questions.map(
+                                (question, index) => (
+                                  <li key={index}>{question}</li>
+                                ),
+                              )}
+                            </ul>
+                          )}
+                          {recommendation.status !== "recommended" && (
+                            <p className="recommendation-next">
+                              {recommendation.status === "needs_clarification"
+                                ? "Answer in a short note below, then check again."
+                                : "Add a note below or check again later. Your pictures are kept."}
+                            </p>
+                          )}
+                          <details className="recommendation-details">
+                            <summary>
+                              {recommendation.status === "recommended"
+                                ? "Why this fits"
+                                : "About this analysis"}
+                            </summary>
+                            {recommendation.status === "recommended" && (
+                              <p>{recommendation.reason}</p>
+                            )}
+                            {recommendation.notice && (
+                              <p className="recommendation-limits">
+                                {recommendation.notice}
+                              </p>
+                            )}
+                            <p className="analysis-source">
+                              {recommendation.provider === "local_analysis"
+                                ? "Local analysis is being used. No AI service reviewed these pictures."
+                                : "Suggested by the agent. You review the actual preview before approving."}
+                            </p>
+                          </details>
+                        </>
+                      ) : manualSettings ? (
+                        <>
+                          <h3>Print settings are kept</h3>
+                          <p>
+                            The saved print settings will be checked before
+                            quoting. Refinements keep the agent’s selected
+                            machine; they never switch devices silently.
+                          </p>
+                        </>
+                      ) : assets.length > 0 ? (
+                        <>
+                          <h3>Find a suitable machine</h3>
+                          <p>
+                            Your pictures are kept. Open Add a note to check the
+                            workshop again before preparing the preview.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h3>One picture, a useful starting point.</h3>
+                          <p>
+                            We’ll suggest a supported output and a real machine
+                            from the workshop. No order, payment or machine run
+                            happens during analysis.
+                          </p>
+                        </>
+                      )}
+                    </section>
+                  )}
+                  {analysisError && (
+                    <div
+                      className="notice error picture-analysis-error"
+                      ref={analysisNotice}
+                      tabIndex={-1}
+                      role="alert"
+                    >
+                      <strong>Analysis could not be completed.</strong>
+                      <p>{analysisError}</p>
+                      <p>
+                        Your pictures are kept. Try the analysis again; no order
+                        or machine run was started.
+                      </p>
+                    </div>
+                  )}
+                  <details
+                    className="picture-context"
+                    ref={pictureContext}
+                    open={editing || undefined}
+                  >
+                    <summary>Add a note</summary>
+                    <Field
+                      label="What is it for?"
+                      hint="Optional. Add a short note if the picture needs context, then refine the recommendation."
+                    >
+                      <textarea
+                        rows={2}
+                        maxLength={600}
+                        value={spec.intent}
+                        onChange={(event) => {
+                          analysisSequence.current++;
+                          setAnalyzing(false);
+                          setRecommendation(null);
+                          setAnalysisError("");
+                          const intent = event.currentTarget.value;
+                          setIntakeDraft((previous) =>
+                            previous?.contentReview === "review"
+                              ? previous
+                              : null,
+                          );
+                          if (
+                            !editing ||
+                            requiresRecommendation ||
+                            spec.recommendedMachineId
+                          ) {
+                            setRequiresFreshRecommendation(true);
+                            setManualSettings(false);
+                          }
+                          setSpec((value) => ({ ...value, intent }));
+                        }}
+                        placeholder="Optional — for example, a club sticker or a keepsake photo"
+                      />
+                    </Field>
+                    {spec.assetIds.length > 0 && (
+                      <div className="recommendation-action">
+                        <Button
+                          className="secondary"
+                          type="button"
+                          busy={analyzing}
+                          disabled={Boolean(busy) || analyzing}
+                          onClick={() =>
+                            void analyzePictures(
+                              assets.length
+                                ? assets
+                                : spec.assetIds.map((id) => ({
+                                    id,
+                                    url: "",
+                                    sha256: "",
+                                  })),
+                              spec.intent,
+                            )
+                          }
+                        >
+                          {recommendation?.status === "unavailable"
+                            ? "Check workshop again"
+                            : recommendation?.status === "needs_clarification"
+                              ? "Check again with this note"
+                              : recommendation
+                                ? "Refine recommendation"
+                                : analysisError
+                                  ? "Retry picture analysis"
+                                  : "Find suitable machine"}
+                        </Button>
                         <small>
-                          {recommendation.provider === "local_analysis"
-                            ? "Local analysis is being used. No AI service reviewed these pictures."
-                            : "Review your item before confirming."}
+                          Recommendations never place an order or start a
+                          machine.
                         </small>
-                      </>
-                    ) : manualSettings ? (
-                      <>
-                        <h3>Print settings are kept</h3>
-                        <p>
-                          The saved print settings will be checked before
-                          quoting. Refinements keep the agent’s selected
-                          machine; they never switch devices silently.
-                        </p>
-                      </>
-                    ) : assets.length > 0 ? (
-                      <>
-                        <h3>Find a suitable machine</h3>
-                        <p>
-                          Your pictures are kept. Check the workshop again to
-                          get a recommendation before preparing the production
-                          file.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <h3>One picture, a useful starting point.</h3>
-                        <p>
-                          We’ll suggest a supported output and a real machine
-                          from the workshop. No order, payment or machine run
-                          happens during analysis.
-                        </p>
-                      </>
+                      </div>
                     )}
-                  </section>
-                )}
-                {analysisError && (
-                  <div
-                    className="notice error picture-analysis-error"
-                    ref={analysisNotice}
-                    tabIndex={-1}
-                    role="alert"
-                  >
-                    <strong>Analysis could not be completed.</strong>
-                    <p>{analysisError}</p>
-                    <p>
-                      Your pictures are kept. Try the analysis again; no order
-                      or machine run was started.
-                    </p>
-                  </div>
-                )}
-                <details
-                  className="picture-context"
-                  ref={pictureContext}
-                  open={editing || undefined}
-                >
-                  <summary>Add a note</summary>
-                  <Field
-                    label="What is it for?"
-                    hint="Optional. Add a short note if the picture needs context, then refine the recommendation."
-                  >
-                    <textarea
-                      rows={2}
-                      maxLength={600}
-                      value={spec.intent}
-                      onChange={(event) => {
-                        analysisSequence.current++;
-                        setAnalyzing(false);
-                        setRecommendation(null);
-                        setAnalysisError("");
-                        const intent = event.currentTarget.value;
-                        setIntakeDraft((previous) =>
-                          previous?.contentReview === "review"
-                            ? previous
-                            : null,
-                        );
-                        if (
-                          !editing ||
-                          requiresRecommendation ||
-                          spec.recommendedMachineId
-                        ) {
-                          setRequiresFreshRecommendation(true);
-                          setManualSettings(false);
-                        }
-                        setSpec((value) => ({ ...value, intent }));
-                      }}
-                      placeholder="Optional — for example, a club sticker or a keepsake photo"
-                    />
-                  </Field>
+                  </details>
                   {spec.assetIds.length > 0 && (
-                    <div className="recommendation-action">
+                    <div
+                      className={`picture-permission ${spec.permission === "authorized" ? "is-confirmed" : ""}`}
+                    >
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={spec.permission === "authorized"}
+                          disabled={intakeDraft?.contentReview === "review"}
+                          onChange={(event) => {
+                            setPermissionReviewRequested(false);
+                            const permission = event.target.checked
+                              ? "authorized"
+                              : "unclear";
+                            setSpec((value) => ({ ...value, permission }));
+                          }}
+                        />
+                        <span>
+                          I own these pictures or have permission to print them
+                        </span>
+                      </label>
+                      {(intakeDraft?.contentReview === "review" ||
+                        (spec.permission !== "authorized" &&
+                          permissionReviewRequested)) && (
+                        <small>
+                          {intakeDraft?.contentReview === "review"
+                            ? "The artwork was flagged for owner review. Confirming ownership does not resolve that review; use the explicit review request below."
+                            : "You explicitly requested owner permission review. This draft cannot proceed to approval or payment until the owner confirms permission."}
+                        </small>
+                      )}
+                    </div>
+                  )}
+                  {(spec.assetIds.length > 0 || editing) && (
+                    <div className="intake-submit">
                       <Button
-                        className="secondary"
-                        type="button"
-                        busy={analyzing}
-                        disabled={Boolean(busy) || analyzing}
-                        onClick={() =>
-                          void analyzePictures(
-                            assets.length
-                              ? assets
-                              : spec.assetIds.map((id) => ({
-                                  id,
-                                  url: "",
-                                  sha256: "",
-                                })),
-                            spec.intent,
-                          )
+                        className="primary full"
+                        type="submit"
+                        aria-describedby="preview-action-note"
+                        busy={busy === "create"}
+                        disabled={
+                          Boolean(busy) ||
+                          analyzing ||
+                          requiresFreshRecommendation ||
+                          (!manualSettings &&
+                            recommendation?.status !== "recommended") ||
+                          (spec.assetIds.length > 0 &&
+                            spec.permission !== "authorized" &&
+                            !(manualSettings && permissionReviewRequested)) ||
+                          (!editing && unresolvedCreation) ||
+                          editConflict ||
+                          ((!editing || requiresRecommendation) &&
+                            !spec.recommendedMachineId)
                         }
                       >
-                        {recommendation?.status === "unavailable"
-                          ? "Check workshop again"
-                          : recommendation
-                            ? "Refine recommendation"
-                            : analysisError
-                              ? "Retry picture analysis"
-                              : "Find suitable machine"}
+                        {editing ? "Update preview" : "Preview your item"}
                       </Button>
-                      <small>
-                        Recommendations never place an order or start a machine.
+                      <small
+                        id="preview-action-note"
+                        className={previewBlocker ? "is-blocked" : ""}
+                      >
+                        {previewBlocker ||
+                          (editing
+                            ? "The updated preview replaces this one. Nothing is charged."
+                            : "Nothing is charged or made yet.")}
                       </small>
                     </div>
                   )}
-                </details>
-                {spec.assetIds.length > 0 && (
-                  <div className="picture-permission">
-                    <label className="check">
-                      <input
-                        type="checkbox"
-                        checked={spec.permission === "authorized"}
-                        disabled={intakeDraft?.contentReview === "review"}
-                        onChange={(event) => {
-                          setPermissionReviewRequested(false);
-                          const permission = event.target.checked
-                            ? "authorized"
-                            : "unclear";
-                          setSpec((value) => ({ ...value, permission }));
-                        }}
-                      />
-                      <span>
-                        I own these pictures or have permission to print them
-                      </span>
-                    </label>
-                    <small>
-                      {intakeDraft?.contentReview === "review"
-                        ? "The artwork was flagged for owner review. Confirming ownership does not resolve that review; use the explicit review request below."
-                        : spec.permission === "authorized"
-                          ? "You will still review the production file and approve payment separately."
-                          : permissionReviewRequested
-                            ? "You explicitly requested owner permission review. This draft cannot proceed to approval or payment until the owner confirms permission."
-                            : "Confirm permission before continuing. If you are unsure, request an owner review in optional print settings."}
-                    </small>
-                  </div>
-                )}
-                {(spec.assetIds.length > 0 || editing) && (
-                  <details
-                    className="advanced-specification"
-                    open={editing || undefined}
-                  >
-                    <summary>Optional print settings</summary>
-                    <p>
-                      Refine size, quantity or placement if needed. The agent’s
-                      selected machine stays attached to the order and must
-                      still support the final settings.
-                    </p>
-                    {!manualSettings && (
-                      <button
-                        className="secondary"
-                        type="button"
-                        onClick={useManualSettings}
-                      >
-                        Adjust print settings
-                      </button>
-                    )}
-                    <div
-                      className="manual-specification-fields"
-                      onChangeCapture={useManualSettings}
+                  {(spec.assetIds.length > 0 || editing) && (
+                    <details
+                      className="advanced-specification"
+                      open={editing || undefined}
                     >
-                      {editing && current?.spec.outputType === "3d" && (
-                        <div className="saved-model-context">
-                          <h3>Saved prepared model</h3>
-                          <PreparedModelFacts details={current.spec} />
-                          <p>
-                            This is the existing owner-prepared file. Pictures
-                            are never converted into a 3D model. Replacing it
-                            with pictures asks the agent for a supported image
-                            output.
-                          </p>
-                        </div>
-                      )}
-                      {spec.outputType !== "3d" && (
-                        <section
-                          className="intake-suggestion"
-                          aria-label="Specification suggestions"
+                      <summary>Optional print settings</summary>
+                      <p>
+                        Refine size, quantity or placement if needed. The
+                        agent’s selected machine stays attached to the order and
+                        must still support the final settings.
+                      </p>
+                      {!manualSettings && (
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={useManualSettings}
                         >
-                          <div className="suggestion-action">
-                            <Button
-                              className="secondary"
-                              type="button"
-                              busy={busy === "intake"}
-                              disabled={
-                                Boolean(busy) ||
-                                !spec.assetIds.length ||
-                                spec.intent.trim().length < 3
-                              }
-                              onClick={() => {
-                                void suggestSpecification();
-                              }}
-                            >
-                              Suggest specification
-                            </Button>
-                            <small>
-                              Optional help with size and placement. The
-                              selected machine stays attached to this order.
-                            </small>
+                          Adjust print settings
+                        </button>
+                      )}
+                      <div
+                        className="manual-specification-fields"
+                        onChangeCapture={useManualSettings}
+                      >
+                        {editing && current?.spec.outputType === "3d" && (
+                          <div className="saved-model-context">
+                            <h3>Saved prepared model</h3>
+                            <PreparedModelFacts details={current.spec} />
+                            <p>
+                              This is the existing owner-prepared file. Pictures
+                              are never converted into a 3D model. Replacing it
+                              with pictures asks the agent for a supported image
+                              output.
+                            </p>
                           </div>
-                          {intakeError && <Notice>{intakeError}</Notice>}
-                          {intakeDraft && (
-                            <div className="suggested-draft">
-                              <h3>Suggested specification</h3>
-                              <p>{intakeDraft.reason}</p>
-                              {intakeDraft.questions.length > 0 && (
-                                <>
-                                  <h4>Clarify these together</h4>
-                                  <ul>
-                                    {intakeDraft.questions.map(
-                                      (question, index) => (
-                                        <li key={index}>{question}</li>
-                                      ),
-                                    )}
-                                  </ul>
-                                </>
-                              )}
+                        )}
+                        {spec.outputType !== "3d" && (
+                          <section
+                            className="intake-suggestion"
+                            aria-label="Specification suggestions"
+                          >
+                            <div className="suggestion-action">
+                              <Button
+                                className="secondary"
+                                type="button"
+                                busy={busy === "intake"}
+                                disabled={
+                                  Boolean(busy) ||
+                                  !spec.assetIds.length ||
+                                  spec.intent.trim().length < 3
+                                }
+                                onClick={() => {
+                                  void suggestSpecification();
+                                }}
+                              >
+                                Suggest specification
+                              </Button>
                               <small>
-                                Review the suggested values below. Suggestions
-                                do not authorize artwork or approve a production
-                                file; machine validation still applies.
+                                Optional help with size and placement. The
+                                selected machine stays attached to this order.
                               </small>
                             </div>
-                          )}
-                        </section>
-                      )}
-                      <div className="form-grid">
-                        <Field label="Width (mm)">
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            max="300"
-                            disabled={spec.outputType !== "sticker"}
-                            value={spec.widthMm}
-                            onChange={(e) => {
-                              const widthMm = e.currentTarget.value;
-                              setSpec((s) => ({
-                                ...s,
-                                widthMm,
-                              }));
-                            }}
-                          />
-                        </Field>
-                        <Field label="Height (mm)">
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            max="300"
-                            disabled={spec.outputType !== "sticker"}
-                            value={spec.heightMm}
-                            onChange={(e) => {
-                              const heightMm = e.currentTarget.value;
-                              setSpec((s) => ({
-                                ...s,
-                                heightMm,
-                              }));
-                            }}
-                          />
-                        </Field>
-                        <Field label="Quantity">
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            max={
-                              spec.outputType === "instax"
-                                ? 3
-                                : spec.outputType === "3d"
-                                  ? 1
-                                  : 10
-                            }
-                            step="1"
-                            value={spec.quantity}
-                            onChange={(e) => {
-                              const quantity = e.currentTarget.value;
-                              setSpec((s) => ({
-                                ...s,
-                                quantity,
-                              }));
-                            }}
-                          />
-                        </Field>
-                        <Field label="Image placement">
-                          <select
-                            value={spec.crop}
-                            onChange={(e) => {
-                              const crop = e.currentTarget
-                                .value as Spec["crop"];
-                              setSpec((s) => ({
-                                ...s,
-                                crop,
-                              }));
-                            }}
-                            disabled={spec.outputType === "3d"}
-                          >
-                            <option value="contain">Fit whole image</option>
-                            <option value="cover">Fill and crop edges</option>
-                          </select>
-                        </Field>
-                      </div>
-                      <div className="print-material-fact">
-                        <strong>Material</strong>
-                        <span>
-                          {spec.outputType === "sticker"
-                            ? "Thermal adhesive paper"
-                            : spec.outputType === "instax"
-                              ? "Instax mini photo film"
-                              : "Saved prepared model material"}
-                        </span>
-                      </div>
-                      <Field label="Artwork permission">
-                        <select
-                          value={spec.permission}
-                          onChange={(e) => {
-                            const permission =
-                              intakeDraft?.contentReview === "review"
-                                ? "unclear"
-                                : (e.currentTarget.value as Spec["permission"]);
-                            setPermissionReviewRequested(
-                              permission === "unclear",
-                            );
-                            setSpec((s) => ({ ...s, permission }));
-                          }}
-                        >
-                          <option
-                            value="authorized"
-                            disabled={intakeDraft?.contentReview === "review"}
-                          >
-                            I own this artwork or have permission to print it
-                          </option>
-                          <option value="unclear">
-                            I need the owner to review permission
-                          </option>
-                        </select>
-                      </Field>
-                      <div className="budget-option">
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={budgetEnabled}
-                            onChange={(e) => setBudgetEnabled(e.target.checked)}
-                          />
-                          <span>
-                            Automatically accept a quote within my budget
-                          </span>
-                        </label>
-                        {budgetEnabled && (
-                          <Field
-                            label="Budget cap (USD)"
-                            hint="Applies only after you approve this specification. Payment still requires checkout."
-                          >
+                            {intakeError && <Notice>{intakeError}</Notice>}
+                            {intakeDraft && (
+                              <div className="suggested-draft">
+                                <h3>Suggested specification</h3>
+                                <p>{intakeDraft.reason}</p>
+                                {intakeDraft.questions.length > 0 && (
+                                  <>
+                                    <h4>Clarify these together</h4>
+                                    <ul>
+                                      {intakeDraft.questions.map(
+                                        (question, index) => (
+                                          <li key={index}>{question}</li>
+                                        ),
+                                      )}
+                                    </ul>
+                                  </>
+                                )}
+                                <small>
+                                  Review the suggested values below. Suggestions
+                                  do not authorize artwork or approve a
+                                  production file; machine validation still
+                                  applies.
+                                </small>
+                              </div>
+                            )}
+                          </section>
+                        )}
+                        <div className="form-grid">
+                          <Field label="Width (mm)">
                             <input
                               type="number"
-                              min="0.01"
-                              step="0.01"
                               required
-                              value={budget}
-                              onChange={(e) => setBudget(e.target.value)}
+                              min="1"
+                              max="300"
+                              disabled={spec.outputType !== "sticker"}
+                              value={spec.widthMm}
+                              onChange={(e) => {
+                                const widthMm = e.currentTarget.value;
+                                setSpec((s) => ({
+                                  ...s,
+                                  widthMm,
+                                }));
+                              }}
                             />
                           </Field>
-                        )}
+                          <Field label="Height (mm)">
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              max="300"
+                              disabled={spec.outputType !== "sticker"}
+                              value={spec.heightMm}
+                              onChange={(e) => {
+                                const heightMm = e.currentTarget.value;
+                                setSpec((s) => ({
+                                  ...s,
+                                  heightMm,
+                                }));
+                              }}
+                            />
+                          </Field>
+                          <Field label="Quantity">
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              max={
+                                spec.outputType === "instax"
+                                  ? 3
+                                  : spec.outputType === "3d"
+                                    ? 1
+                                    : 10
+                              }
+                              step="1"
+                              value={spec.quantity}
+                              onChange={(e) => {
+                                const quantity = e.currentTarget.value;
+                                setSpec((s) => ({
+                                  ...s,
+                                  quantity,
+                                }));
+                              }}
+                            />
+                          </Field>
+                          <Field label="Image placement">
+                            <select
+                              value={spec.crop}
+                              onChange={(e) => {
+                                const crop = e.currentTarget
+                                  .value as Spec["crop"];
+                                setSpec((s) => ({
+                                  ...s,
+                                  crop,
+                                }));
+                              }}
+                              disabled={spec.outputType === "3d"}
+                            >
+                              <option value="contain">Fit whole image</option>
+                              <option value="cover">Fill and crop edges</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <div className="print-material-fact">
+                          <strong>Material</strong>
+                          <span>
+                            {spec.outputType === "sticker"
+                              ? "Thermal adhesive paper"
+                              : spec.outputType === "instax"
+                                ? "Instax mini photo film"
+                                : "Saved prepared model material"}
+                          </span>
+                        </div>
+                        <Field label="Artwork permission">
+                          <select
+                            value={spec.permission}
+                            onChange={(e) => {
+                              const permission =
+                                intakeDraft?.contentReview === "review"
+                                  ? "unclear"
+                                  : (e.currentTarget
+                                      .value as Spec["permission"]);
+                              setPermissionReviewRequested(
+                                permission === "unclear",
+                              );
+                              setSpec((s) => ({ ...s, permission }));
+                            }}
+                          >
+                            <option
+                              value="authorized"
+                              disabled={intakeDraft?.contentReview === "review"}
+                            >
+                              I own this artwork or have permission to print it
+                            </option>
+                            <option value="unclear">
+                              I need the owner to review permission
+                            </option>
+                          </select>
+                        </Field>
+                        <div className="budget-option">
+                          <label className="check">
+                            <input
+                              type="checkbox"
+                              checked={budgetEnabled}
+                              onChange={(e) =>
+                                setBudgetEnabled(e.target.checked)
+                              }
+                            />
+                            <span>
+                              Automatically accept a quote within my budget
+                            </span>
+                          </label>
+                          {budgetEnabled && (
+                            <Field
+                              label="Budget cap (USD)"
+                              hint="Applies only after you approve this specification. Payment still requires checkout."
+                            >
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                required
+                                value={budget}
+                                onChange={(e) => setBudget(e.target.value)}
+                              />
+                            </Field>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => {
+                          useManualSettings();
+                          setPermissionReviewRequested(true);
+                          setSpec((value) => ({
+                            ...value,
+                            permission: "unclear",
+                          }));
+                        }}
+                      >
+                        Request artwork permission review
+                      </button>
+                    </details>
+                  )}
+                  {editing && (
                     <button
-                      className="text-button"
+                      className="text-button cancel-edit"
                       type="button"
-                      onClick={() => {
-                        useManualSettings();
-                        setPermissionReviewRequested(true);
-                        setSpec((value) => ({
-                          ...value,
-                          permission: "unclear",
-                        }));
-                      }}
+                      onClick={cancelEdit}
                     >
-                      Request artwork permission review
+                      Keep current item
                     </button>
-                  </details>
-                )}
-                {(spec.assetIds.length > 0 || editing) && (
-                  <Button
-                    className="primary full"
-                    type="submit"
-                    busy={busy === "create"}
-                    disabled={
-                      Boolean(busy) ||
-                      analyzing ||
-                      requiresFreshRecommendation ||
-                      (!manualSettings &&
-                        recommendation?.status !== "recommended") ||
-                      (spec.assetIds.length > 0 &&
-                        spec.permission !== "authorized" &&
-                        !(manualSettings && permissionReviewRequested)) ||
-                      (!editing && unresolvedCreation) ||
-                      editConflict ||
-                      ((!editing || requiresRecommendation) &&
-                        !spec.recommendedMachineId)
-                    }
-                  >
-                    {editing ? "Update preview" : "Preview your item"}
-                  </Button>
-                )}
-                {editing && (
-                  <button
-                    className="text-button cancel-edit"
-                    type="button"
-                    onClick={cancelEdit}
-                  >
-                    Keep current item
-                  </button>
-                )}
-                {!editing && unsavedDraft && !unresolvedCreation && (
-                  <button
-                    className="text-button cancel-edit"
-                    type="button"
-                    onClick={() => discardDraft("new")}
-                  >
-                    Discard new draft
-                  </button>
-                )}
+                  )}
+                  {!editing && unsavedDraft && !unresolvedCreation && (
+                    <button
+                      className="text-button cancel-edit"
+                      type="button"
+                      onClick={() => discardDraft("new")}
+                    >
+                      Discard new draft
+                    </button>
+                  )}
+                </div>
               </fieldset>
             </form>
           )}
         </section>
         {current && (
-          <aside className="order-panel" aria-label="Order details">
+          <aside className="order-panel" aria-label="Order status">
             <OrderDetail
               key={current.id}
               job={current}
@@ -2590,67 +2763,59 @@ function RequesterApp({
               {jobs.length} {jobs.length === 1 ? "order" : "orders"}
             </span>
           </div>
-          {jobs.length ? (
-            <div className="order-list">
-              {[...jobs]
-                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                .map((job) => (
-                  <button
-                    className={`order-row ${current?.id === job.id ? "active" : ""}`}
-                    key={job.id}
-                    aria-pressed={current?.id === job.id}
-                    disabled={Boolean(busy)}
-                    onClick={() => {
-                      select(job);
-                      focusProduction();
-                    }}
-                  >
-                    <span>
-                      {job.artifact?.url ? (
-                        <img
-                          src={job.artifact.previewUrl || job.artifact.url}
-                          alt=""
-                        />
-                      ) : (
-                        <DeviceArt type={job.spec.outputType} />
-                      )}
-                    </span>
-                    <span>
-                      <strong>{outputLabels[job.spec.outputType]}</strong>
-                      <small>
-                        {shortId(job.id)} · {date(job.createdAt)}
-                        {pendingCreation &&
-                        pendingCreation.id === job.creationRequestId
-                          ? " · Matches interrupted request"
-                          : ""}
-                      </small>
-                    </span>
-                    <span>
-                      <Badge
-                        tone={
-                          job.productionState === "produced"
-                            ? "green"
-                            : job.productionState === "failed"
-                              ? "red"
-                              : "neutral"
-                        }
-                      >
-                        {human(job.productionState)}
+          <div className="order-list">
+            {[...jobs]
+              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+              .map((job) => (
+                <button
+                  className={`order-row ${current?.id === job.id ? "active" : ""}`}
+                  key={job.id}
+                  aria-pressed={current?.id === job.id}
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    select(job);
+                    focusProduction();
+                  }}
+                >
+                  <span className="order-thumb">
+                    {job.artifact?.url ? (
+                      <img
+                        src={job.artifact.previewUrl || job.artifact.url}
+                        alt=""
+                      />
+                    ) : (
+                      <DeviceArt type={job.spec.outputType} />
+                    )}
+                  </span>
+                  <span className="order-main">
+                    <strong>{job.spec.intent}</strong>
+                    <small>
+                      {outputLabels[job.spec.outputType]} · {shortId(job.id)} ·{" "}
+                      {date(job.createdAt)}
+                      {pendingCreation &&
+                      pendingCreation.id === job.creationRequestId
+                        ? " · Matches interrupted request"
+                        : ""}
+                    </small>
+                  </span>
+                  <span className="order-status">
+                    {job.productionState === "quoted" &&
+                    job.paymentState === "unpaid" &&
+                    job.quote &&
+                    Date.parse(job.quote.expiresAt) <= Date.now() ? (
+                      <Badge tone="amber">Price expired</Badge>
+                    ) : (
+                      <Badge tone={statusTone(job)}>
+                        {requesterStatus(job)}
                       </Badge>
-                      <small>{human(job.fulfillmentState)}</small>
-                    </span>
-                    <span className="order-cost">
-                      {job.quote ? money(job.quote.totalCents) : "No quote"}
-                    </span>
-                  </button>
-                ))}
-            </div>
-          ) : (
-            <div className="empty">
-              <h3>Your first order starts here.</h3>
-              <p>Upload an image above and make a production preview.</p>
-            </div>
-          )}
+                    )}
+                  </span>
+                  <span className="order-cost">
+                    {job.quote ? money(job.quote.totalCents) : "No price yet"}
+                  </span>
+                </button>
+              ))}
+          </div>
         </section>
       )}
     </div>
@@ -2792,20 +2957,13 @@ function ProductionPreview({
           preview…
         </p>
       )}
-      <div className="preview-caption">
-        <strong>
-          {job.spec.outputType === "sticker"
-            ? "Prepared monochrome output"
-            : job.spec.outputType === "3d"
-              ? "Owner-prepared model preview"
-              : "Prepared photo output"}
-        </strong>
-        <span>
-          {job.spec.outputType === "3d"
-            ? "Review this fixed prepared model and its overall dimensions, single color and time estimate."
-            : "Review the whole image before approval."}
-        </span>
-      </div>
+      <p className="preview-caption">
+        {job.spec.outputType === "sticker"
+          ? "Prepared monochrome output"
+          : job.spec.outputType === "3d"
+            ? "Owner-prepared model preview"
+            : "Prepared photo output"}
+      </p>
     </div>
   );
 }
@@ -2852,13 +3010,15 @@ function OrderDetail({
     !terminal(job.productionState) &&
     ["unpaid", "held", "collection_pending"].includes(job.paymentState);
   const phase =
-    job.productionState === "produced"
-      ? 3
-      : active || job.productionState === "payment_confirmed"
-        ? 2
-        : job.productionState === "quoted"
-          ? 1
-          : 0;
+    job.fulfillmentState === "collected"
+      ? 4
+      : job.productionState === "produced"
+        ? 3
+        : active || job.productionState === "payment_confirmed"
+          ? 2
+          : job.productionState === "quoted"
+            ? 1
+            : 0;
   const statusText: Record<string, string> = {
     specified: "Review your preview",
     approved: "Preview approved",
@@ -2872,62 +3032,64 @@ function OrderDetail({
     needs_review: "An owner review is needed",
     cancelled: "This order was cancelled",
   };
+  // What is happening now, in one sentence, for states without a notice.
+  const lede =
+    job.productionState === "specified"
+      ? job.spec.outputType === "3d"
+        ? "Confirm the prepared model, overall dimensions, material, single color and estimated machine time. Approval binds this fixed production file to these specifications."
+        : "Check the size, crop and artwork. Approving shows the price; nothing is charged yet."
+      : job.productionState === "approved"
+        ? "Get the price. The matched machine is reserved briefly."
+        : job.productionState === "quoted" &&
+            job.paymentState === "unpaid" &&
+            !expired
+          ? "Your machine is held while you decide. Paying does not start production."
+          : job.productionState === "payment_confirmed"
+            ? "Payment is held. Start when you are ready."
+            : job.productionState === "produced" &&
+                job.fulfillmentState === "ready_for_pickup" &&
+                !pickupExpired
+              ? "Your item is waiting at the collection point."
+              : "";
+  const approveBody = (autoAccept: boolean) => ({
+    artifactSha256: job.artifact?.sha256,
+    specVersion: job.specVersion,
+    recommendedMachineId: job.spec.recommendedMachineId ?? null,
+    autoAccept,
+  });
   return (
-    <>
-      <div className="ticket-heading">
-        <span>Order {shortId(job.id)}</span>
-        <Badge
-          tone={
-            job.productionState === "produced"
-              ? "green"
-              : ["failed", "needs_review"].includes(job.productionState)
-                ? "amber"
-                : "neutral"
-          }
-        >
-          {human(job.productionState)}
-        </Badge>
-      </div>
+    <div className={`ticket state-${job.productionState}`}>
       <h2 className="ticket-title">
-        {statusText[job.productionState] || human(job.productionState)}
+        {statusText[job.productionState] || sentence(job.productionState)}
       </h2>
-      <div
-        className="phase-line"
-        aria-label={`Production step ${Math.min(phase + 1, 4)} of 4`}
-      >
-        {["Preview", "Payment", "Making", "Pickup"].map((s, i) => (
-          <span className={i <= phase ? "reached" : ""} key={s}>
-            {s}
-          </span>
-        ))}
-      </div>
-      <details className="request-state-details">
-        <summary>Order status details</summary>
-        <dl className="state-facts">
-          <div>
-            <dt>Production</dt>
-            <dd>{human(job.productionState)}</dd>
-          </div>
-          <div>
-            <dt>Payment</dt>
-            <dd>{human(job.paymentState)}</dd>
-          </div>
-          <div>
-            <dt>Collection</dt>
-            <dd>{human(job.fulfillmentState)}</dd>
-          </div>
-        </dl>
-      </details>
+      {lede && <p className="ticket-lede">{lede}</p>}
+      {job.productionState !== "cancelled" && (
+        <ol
+          className="phase-line"
+          aria-label={`Production step ${Math.min(phase + 1, 4)} of 4`}
+        >
+          {["Preview", "Payment", "Making", "Pickup"].map((s, i) => (
+            <li
+              className={
+                i < phase
+                  ? "reached done"
+                  : i === phase
+                    ? "reached current"
+                    : ""
+              }
+              aria-current={i === phase ? "step" : undefined}
+              key={s}
+            >
+              {s}
+            </li>
+          ))}
+        </ol>
+      )}
       {job.productionState === "specified" && (
         <div className="ticket-action">
           {job.spec.outputType === "3d" && (
             <PreparedModelFacts details={job.spec} />
           )}
-          <p>
-            {job.spec.outputType === "3d"
-              ? "Confirm the prepared model, overall dimensions, material, single color and estimated machine time below. Approval binds this fixed production file to these specifications."
-              : "Does the preview show the size, crop and artwork you want? Approval binds this production file to your specification."}
-          </p>
           <Button
             className="primary full"
             busy={busy === "approve-and-quote"}
@@ -2938,49 +3100,92 @@ function OrderDetail({
               job.spec.permission !== "authorized"
             }
             onClick={() =>
-              action("approve-and-quote", {
-                artifactSha256: job.artifact?.sha256,
-                specVersion: job.specVersion,
-                recommendedMachineId: job.spec.recommendedMachineId ?? null,
-                autoAccept: Boolean(job.spec.budgetMandate?.enabled),
-              })
+              action(
+                "approve-and-quote",
+                approveBody(Boolean(job.spec.budgetMandate?.enabled)),
+              )
             }
           >
             Approve preview & see price
           </Button>
+          {!busy && !previewReady && job.artifact?.sha256 && (
+            <small className="action-note">
+              Approval waits until the preview image has loaded.
+            </small>
+          )}
         </div>
       )}
       {job.productionState === "approved" && (
         <div className="ticket-action">
-          <p>
-            The next step reserves a ready machine and gives you an itemized
-            quote.
-          </p>
           <Button
             className="primary full"
             busy={busy === "approve-and-quote"}
             disabled={Boolean(busy)}
             onClick={() =>
-              action("approve-and-quote", {
-                artifactSha256: job.artifact?.sha256,
-                specVersion: job.specVersion,
-                recommendedMachineId: job.spec.recommendedMachineId ?? null,
-                autoAccept: Boolean(job.spec.budgetMandate?.enabled),
-              })
+              action(
+                "approve-and-quote",
+                approveBody(Boolean(job.spec.budgetMandate?.enabled)),
+              )
             }
           >
             See current price
           </Button>
         </div>
       )}
+      {job.fulfillmentState === "ready_for_pickup" && (
+        <div
+          className={`pickup${pickupExpired ? " expired" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
+          <h3>
+            {pickupExpired
+              ? "Pickup code expired"
+              : pickupExpiryKnown
+                ? "Ready for pickup"
+                : "Pickup status needs checking"}
+          </h3>
+          <p>
+            {q?.collectionPoint || "See the owner at the collection point."}
+          </p>
+          {pickupExpired ? (
+            <p>
+              Ask the owner to renew your pickup code. A new code will appear
+              here when renewal is confirmed. Your item is still stored; it does
+              not need to be made again.
+            </p>
+          ) : !pickupExpiryKnown ? (
+            <p>
+              The pickup expiry could not be confirmed. Wait for the saved order
+              to refresh before using a code.
+            </p>
+          ) : job.pickup?.code ? (
+            <>
+              <span className="pickup-code">{job.pickup.code}</span>
+              <p>
+                Show this single-use code to the owner when they hand over your
+                item.
+              </p>
+              <small>Expires {date(job.pickup.expiresAt!)}</small>
+            </>
+          ) : (
+            <p>
+              Your pickup code will appear when the owner confirms preparation.
+            </p>
+          )}
+        </div>
+      )}
       {q && (
         <div className="quote">
-          <div className="quote-head">
-            <h3>Order quote</h3>
-            <Badge>
-              {q.paymentMode === "testnet" ? "Testnet" : "Mock payment"}
-            </Badge>
+          <div className="price-line total">
+            <strong>Total</strong>
+            <strong>{money(q.totalCents)}</strong>
           </div>
+          <p className="payment-mode">
+            {q.paymentMode === "testnet"
+              ? "Base Sepolia test payment"
+              : "Mock payment · no money moves"}
+          </p>
           <details className="price-breakdown">
             <summary>Price breakdown</summary>
             {q.items.map((item, index) => (
@@ -2994,10 +3199,6 @@ function OrderDetail({
               <span>Platform {money(q.platformCents)}</span>
             </div>
           </details>
-          <div className="price-line total">
-            <strong>Total</strong>
-            <strong>{money(q.totalCents)}</strong>
-          </div>
           {q.accepted && job.spec.budgetMandate?.enabled && (
             <p className="mandate-confirmation">
               Accepted within your explicit budget of{" "}
@@ -3005,12 +3206,14 @@ function OrderDetail({
               your confirmation.
             </p>
           )}
-          <p className="collection-line">
-            Collect at <strong>{q.collectionPoint}</strong>
-          </p>
+          {job.fulfillmentState !== "ready_for_pickup" && (
+            <p className="collection-line">
+              <span>Collect at</span> <strong>{q.collectionPoint}</strong>
+            </p>
+          )}
           {job.productionState === "quoted" &&
             job.paymentState === "unpaid" && (
-              <>
+              <div className="quote-action">
                 {expired ? (
                   <Notice kind="error">
                     This quote expired. Request a new quote to check
@@ -3018,6 +3221,7 @@ function OrderDetail({
                   </Notice>
                 ) : (
                   <p className="expiry">
+                    <span className="expiry-dot" aria-hidden="true" />
                     Reserved for {Math.floor(remaining / 60000)}:
                     {String(Math.floor(remaining / 1000) % 60).padStart(2, "0")}
                   </p>
@@ -3028,13 +3232,7 @@ function OrderDetail({
                   busy={busy === (expired ? "approve-and-quote" : "checkout")}
                   onClick={() =>
                     expired
-                      ? action("approve-and-quote", {
-                          artifactSha256: job.artifact?.sha256,
-                          specVersion: job.specVersion,
-                          recommendedMachineId:
-                            job.spec.recommendedMachineId ?? null,
-                          autoAccept: false,
-                        })
+                      ? action("approve-and-quote", approveBody(false))
                       : action("checkout")
                   }
                 >
@@ -3044,18 +3242,19 @@ function OrderDetail({
                       ? `Pay ${money(q.totalCents)} on testnet`
                       : `Confirm mock payment · ${money(q.totalCents)}`}
                 </Button>
-                <p className="fine-print">
-                  {q.paymentMode === "testnet"
-                    ? "Connect your browser wallet on Base Sepolia and sign a test USDC authorization. The platform-managed test hold starts only after settlement is confirmed."
-                    : "Simulation checkout records a mock hold. No money moves."}
-                </p>
-              </>
+                {(expired || q.paymentMode === "testnet") && (
+                  <p className="fine-print">
+                    {expired
+                      ? "Refreshing checks the same approved file and machine again. Nothing is charged."
+                      : "Connect your browser wallet on Base Sepolia and sign a test USDC authorization. The platform-managed test hold starts only after settlement is confirmed."}
+                  </p>
+                )}
+              </div>
             )}
         </div>
       )}
       {job.productionState === "payment_confirmed" && (
         <div className="ticket-action">
-          <p>Your payment is held. Start production when you are ready.</p>
           <Button
             className="primary full"
             busy={busy === "dispatch"}
@@ -3064,6 +3263,9 @@ function OrderDetail({
           >
             Start production
           </Button>
+          <small className="action-note">
+            Sends this approved file to the reserved machine.
+          </small>
         </div>
       )}
       {active && (
@@ -3111,10 +3313,22 @@ function OrderDetail({
           recorded reason and handle recovery.
         </Notice>
       )}
+      {job.productionState === "produced" &&
+        job.fulfillmentState === "awaiting_owner" && (
+          <Notice>
+            Your item passed the output check. The owner still needs to remove,
+            label and store it before pickup.
+          </Notice>
+        )}
+      {job.fulfillmentState === "collected" && (
+        <Notice kind="success">
+          Collected. The owner redeemed your pickup code and recorded handoff.
+        </Notice>
+      )}
       {job.evidence && (
         <div className="evidence">
           <div className="quote-head">
-            <h3>Result evidence</h3>
+            <h3>Result photo</h3>
             <Badge
               tone={
                 job.evidence.result === "pass"
@@ -3124,7 +3338,11 @@ function OrderDetail({
                     : "amber"
               }
             >
-              {human(job.evidence.result)}
+              {job.evidence.result === "pass"
+                ? "Passed"
+                : job.evidence.result === "fail"
+                  ? "Did not pass"
+                  : sentence(job.evidence.result)}
             </Badge>
           </div>
           {job.evidence.url ? (
@@ -3162,61 +3380,6 @@ function OrderDetail({
           </p>
         </div>
       )}
-      {job.productionState === "produced" &&
-        job.fulfillmentState === "awaiting_owner" && (
-          <Notice>
-            Your item passed the output check. The owner still needs to remove,
-            label and store it before pickup.
-          </Notice>
-        )}
-      {job.fulfillmentState === "ready_for_pickup" && (
-        <div
-          className={`pickup${pickupExpired ? " expired" : ""}`}
-          role="status"
-          aria-live="polite"
-        >
-          <h3>
-            {pickupExpired
-              ? "Pickup code expired"
-              : pickupExpiryKnown
-                ? "Ready for pickup"
-                : "Pickup status needs checking"}
-          </h3>
-          <p>
-            {q?.collectionPoint || "See the owner at the collection point."}
-          </p>
-          {pickupExpired ? (
-            <p>
-              Ask the owner to renew your pickup code. A new code will appear
-              here when renewal is confirmed. Your item is still stored; it does
-              not need to be made again.
-            </p>
-          ) : !pickupExpiryKnown ? (
-            <p>
-              The pickup expiry could not be confirmed. Wait for the saved order
-              to refresh before using a code.
-            </p>
-          ) : job.pickup?.code ? (
-            <>
-              <span className="pickup-code">{job.pickup.code}</span>
-              <p>
-                Show this single-use code to the owner when they hand over your
-                item.
-              </p>
-              <small>Expires {date(job.pickup.expiresAt!)}</small>
-            </>
-          ) : (
-            <p>
-              Your pickup code will appear when the owner confirms preparation.
-            </p>
-          )}
-        </div>
-      )}
-      {job.fulfillmentState === "collected" && (
-        <Notice kind="success">
-          Collected. The owner redeemed your pickup code and recorded handoff.
-        </Notice>
-      )}
       {canCancel && (
         <div className="cancel-area">
           {cancelConfirm ? (
@@ -3252,52 +3415,86 @@ function OrderDetail({
           )}
         </div>
       )}
-      <details className="history">
-        <summary>Order history</summary>
-        <ol>
-          {job.history?.length ? (
-            job.history.map((event, index) => (
-              <li key={index}>
-                <strong>{human(event.event)}</strong>
-                <time dateTime={event.at}>{date(event.at)}</time>
-                {event.reason && <p>{event.reason}</p>}
-              </li>
-            ))
-          ) : (
-            <li>No history recorded.</li>
-          )}
-        </ol>
-      </details>
-      {q && (
-        <div className="receipt-area">
-          <button
-            className="text-button"
-            onClick={() => {
-              setReceiptError("");
-              api<{ ledger: Ledger[]; mode: string }>(`/jobs/${job.id}/receipt`)
-                .then(setReceipt)
-                .catch((e) => setReceiptError(e.message));
-            }}
-          >
-            View receipt & payment records
-          </button>
-          {receiptError && <Notice kind="error">{receiptError}</Notice>}
-          {receipt && (
-            <div className="receipt">
-              <strong>
-                {receipt.mode === "testnet"
-                  ? "Testnet receipt"
-                  : "Mock receipt"}
-              </strong>
-              <p>
-                Order {shortId(job.id)} · {money(q.totalCents)}
-              </p>
-              <LedgerList ledger={receipt.ledger} />
+      <div className="ticket-more">
+        <details className="request-state-details">
+          <summary>Order details</summary>
+          <dl className="state-facts">
+            <div>
+              <dt>Order</dt>
+              <dd>{shortId(job.id)}</dd>
             </div>
-          )}
-        </div>
-      )}
-    </>
+            <div>
+              <dt>Ordered</dt>
+              <dd>{date(job.createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Production</dt>
+              <dd>{describe(productionLabels, job.productionState)}</dd>
+            </div>
+            <div>
+              <dt>Payment</dt>
+              <dd>{describe(paymentLabels, job.paymentState)}</dd>
+            </div>
+            <div>
+              <dt>Pickup</dt>
+              <dd>{describe(fulfillmentLabels, job.fulfillmentState)}</dd>
+            </div>
+          </dl>
+          <small className="hash-note">
+            Production file fingerprint{" "}
+            {job.artifact?.sha256?.slice(0, 16) || "unavailable"} ·
+            specification v{job.specVersion}
+          </small>
+        </details>
+        <details className="history">
+          <summary>Order history</summary>
+          <ol>
+            {job.history?.length ? (
+              job.history.map((event, index) => (
+                <li key={index}>
+                  <strong>{describe(eventLabels, event.event)}</strong>
+                  <time dateTime={event.at}>{date(event.at)}</time>
+                  {event.reason && <p>{event.reason}</p>}
+                </li>
+              ))
+            ) : (
+              <li>No history recorded.</li>
+            )}
+          </ol>
+        </details>
+        {q && (
+          <div className="receipt-area">
+            <button
+              className="text-button"
+              onClick={() => {
+                setReceiptError("");
+                api<{ ledger: Ledger[]; mode: string }>(
+                  `/jobs/${job.id}/receipt`,
+                )
+                  .then(setReceipt)
+                  .catch((e) => setReceiptError(e.message));
+              }}
+            >
+              View receipt & payment records
+            </button>
+            {receiptError && <Notice kind="error">{receiptError}</Notice>}
+            {receipt && (
+              <div className="receipt">
+                <strong>
+                  {receipt.mode === "testnet"
+                    ? "Testnet receipt"
+                    : "Mock receipt"}
+                </strong>
+                <p>
+                  Order {shortId(job.id)} · {money(q.totalCents)}
+                </p>
+                <LedgerList ledger={receipt.ledger} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 function checkoutKey(job: Job) {
@@ -3541,9 +3738,7 @@ function OwnerApp({
     return (
       <div className="owner-login provider-login-minimal">
         <form onSubmit={login}>
-          <p className="quiet">Fabrary for providers</p>
           <h1>Open your workshop</h1>
-          <p>Enter your owner access code to manage orders and machines.</p>
           <Field label="Owner access code">
             <input
               required
@@ -3565,8 +3760,6 @@ function OwnerApp({
               {error}
             </Notice>
           )}
-          <small>The access code stays out of the requester interface.</small>
-          <a href="/">Back to making</a>
         </form>
       </div>
     );
@@ -3612,18 +3805,29 @@ function OwnerApp({
         }}
       >
         <section className="owner-intro">
-          <div>
-            <p className="quiet">Provider workspace</p>
-            <h1>Your workshop</h1>
-            <p>We track production. You take care of the physical handoff.</p>
-          </div>
+          <h1>Your workshop</h1>
           <p className="provider-summary">
             {dashboard ? (
               <>
-                <strong>{jobs.filter(needsOwnerAction).length}</strong>{" "}
-                {jobs.filter(needsOwnerAction).length === 1
-                  ? "order needs your attention"
-                  : "orders need your attention"}
+                <strong
+                  className={
+                    jobs.some(needsOwnerAction) ? "is-attention" : undefined
+                  }
+                >
+                  {jobs.filter(needsOwnerAction).length} need you
+                </strong>
+                <span aria-hidden="true"> · </span>
+                {active.length} in production
+                <span aria-hidden="true"> · </span>
+                {
+                  jobs.filter(
+                    (job) => job.fulfillmentState === "ready_for_pickup",
+                  ).length
+                }{" "}
+                awaiting pickup
+                <span aria-hidden="true"> · </span>
+                {machines.filter(available).length} of {machines.length}{" "}
+                machines available
               </>
             ) : (
               "Loading orders…"
@@ -3719,13 +3923,11 @@ function OwnerApp({
                                 ? "Production is in progress"
                                 : "You’re all caught up"}
                     </h2>
-                    <p>
-                      {jobs.length
-                        ? orderFilter === "action"
-                          ? "Only orders that need you are shown. Production updates automatically."
-                          : "Production updates automatically. Open Order details for the full status."
-                        : "New orders will appear here when your workshop is ready."}
-                    </p>
+                    {!jobs.length && (
+                      <p>
+                        New orders will appear here when your workshop is ready.
+                      </p>
+                    )}
                   </div>
                   {jobs.length ? (
                     <>
@@ -3805,6 +4007,11 @@ function OwnerApp({
                             <div key={job.id} data-owner-order={job.id}>
                               <OwnerJob
                                 job={job}
+                                machineName={
+                                  machines.find(
+                                    (machine) => machine.id === job.machineId,
+                                  )?.name
+                                }
                                 ledger={dashboard.ledger}
                                 busy={busy}
                                 health={health}
@@ -3919,13 +4126,7 @@ function OwnerApp({
               {visitedTabs.includes("machines") && (
                 <>
                   <div className="section-heading">
-                    <div>
-                      <h2>Your machines</h2>
-                      <p>
-                        Follow the next step for each machine. Fabrary checks
-                        the saved connection and availability.
-                      </p>
-                    </div>
+                    <h2>Your machines</h2>
                   </div>
                   <div className="owner-machine-list">
                     {machines.map((machine) => (
@@ -4173,6 +4374,13 @@ function OwnerMachine({
               : !m.ready
                 ? "Check the saved status below before accepting more work."
                 : "Setup is complete. Fabrary checks availability for each request.";
+  const setup = [
+    ["Connected", m.paired && m.configured],
+    ["Calibrated", m.calibrated],
+    ["Listed", m.listed],
+    ["Available", m.ready && !m.paused],
+  ] as const;
+  const setupStep = setup.findIndex(([, done]) => !done);
   return (
     <article className="owner-machine">
       <div className="machine-card-head">
@@ -4211,29 +4419,24 @@ function OwnerMachine({
           {m.paused ? "Resume machine" : "Pause machine"}
         </button>
       </div>
-      <p className="provider-next-step">{nextStep}</p>
-      <details className="provider-connection-details">
-        <summary>Connection details</summary>
-        <div className="readiness-facts" aria-label="Saved machine checks">
-          {[
-            ["Paired", m.paired],
-            ["Configured", m.configured],
-            ["Calibrated", m.calibrated],
-            ["Listed", m.listed],
-            ["Ready", m.ready],
-          ].map(([name, value]) => (
-            <span key={String(name)}>
-              <i className={value ? "yes" : "no"}>{value ? "✓" : "–"}</i>
-              {name}
+      <ol className="setup-steps" aria-label="Machine setup">
+        {setup.map(([label, done], index) => (
+          <li
+            key={label}
+            className={done ? "done" : index === setupStep ? "current" : ""}
+            aria-current={index === setupStep ? "step" : undefined}
+          >
+            <span className="setup-dot" aria-hidden="true">
+              {done ? "✓" : index + 1}
             </span>
-          ))}
-        </div>
-        <p className="fine-print">
-          Adapter {m.adapterVersion || "unknown"}. These are saved checks, not a
-          live physical inspection.
-        </p>
-        {m.reason && <p className="machine-reason">{m.reason}</p>}
-      </details>
+            {label}
+            <span className="sr-only">
+              {done ? " (done)" : index === setupStep ? " (next)" : " (to do)"}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="provider-next-step">{nextStep}</p>
       {m.activeJobId && (
         <Notice>
           Active execution: {shortId(m.activeJobId)}. An outstanding pickup does
@@ -4524,6 +4727,28 @@ function OwnerMachine({
             )}
           </fieldset>
         </form>
+      </details>
+      <details className="provider-connection-details">
+        <summary>Connection details</summary>
+        <div className="readiness-facts" aria-label="Saved machine checks">
+          {[
+            ["Paired", m.paired],
+            ["Configured", m.configured],
+            ["Calibrated", m.calibrated],
+            ["Listed", m.listed],
+            ["Ready", m.ready],
+          ].map(([name, value]) => (
+            <span key={String(name)}>
+              <i className={value ? "yes" : "no"}>{value ? "✓" : "–"}</i>
+              {name}
+            </span>
+          ))}
+        </div>
+        <p className="fine-print">
+          Adapter {m.adapterVersion || "unknown"}. These are saved checks, not a
+          live physical inspection.
+        </p>
+        {m.reason && <p className="machine-reason">{m.reason}</p>}
       </details>
     </article>
   );
@@ -6407,9 +6632,11 @@ function OwnerJob({
   simulation,
   ledger,
   refresh,
+  machineName,
 }: {
   job: Job;
   ledger: Ledger[];
+  machineName?: string;
   busy: string;
   health: Health | null;
   action: OwnerJobAction;
@@ -6456,6 +6683,43 @@ function OwnerJob({
   const needsHandling =
     j.productionState === "produced" && j.fulfillmentState === "awaiting_owner";
   const needsReview = ["needs_review", "failed"].includes(j.productionState);
+  const recovered = j.history?.some(
+    (event) => event.event === "owner_recovery",
+  );
+  // One plain sentence: what is happening with this order and whether it needs you.
+  const nextStep = needsHandling
+    ? "Passed its result check. Prepare it for pickup below."
+    : j.productionState === "needs_review"
+      ? j.spec.permission === "unclear" && !j.attemptId
+        ? "Confirm whether the requester may print this artwork."
+        : "The result is uncertain. Inspect the evidence and the machine, then record a decision."
+      : j.productionState === "failed" && !recovered
+        ? "The output did not pass its check. Inspect and clear the machine below."
+        : j.fulfillmentState === "ready_for_pickup"
+          ? "Stored and waiting for the requester. Enter their code at handoff."
+          : j.paymentState === "collection_pending"
+            ? "Payment is confirming. No action is needed unless it stays pending."
+            : j.paymentState === "refund_pending"
+              ? "A refund is confirming. No action is needed unless it stays pending."
+              : j.paymentState === "release_pending"
+                ? "Your payout is confirming. No action is needed unless it stays pending."
+                : ["dispatched", "running", "verifying"].includes(
+                      j.productionState,
+                    )
+                  ? "On the machine now. Fabrary tracks progress and checks the result."
+                  : j.productionState === "payment_confirmed"
+                    ? "Paid. Waiting for the requester to start production."
+                    : ["specified", "approved", "quoted"].includes(
+                          j.productionState,
+                        )
+                      ? "Waiting for the requester to approve the preview and pay."
+                      : j.fulfillmentState === "collected"
+                        ? "Collected. Nothing left to do."
+                        : j.productionState === "cancelled"
+                          ? "Cancelled. Nothing left to do."
+                          : j.productionState === "failed"
+                            ? "The machine was cleared. Resume it from Machines when it is safe."
+                            : "";
   return (
     <article
       className={`owner-job ${needsHandling || needsReview ? "attention" : ""}`}
@@ -6471,7 +6735,7 @@ function OwnerJob({
             <DeviceArt type={j.spec.outputType} />
           )}
         </div>
-        <div>
+        <div className="job-main">
           <h3>
             {outputLabels[j.spec.outputType]} <span>#{shortId(j.id)}</span>
           </h3>
@@ -6480,11 +6744,13 @@ function OwnerJob({
         <div className="job-states">
           <Badge
             tone={
-              needsReview
+              needsHandling || needsReview
                 ? "amber"
-                : j.productionState === "produced"
-                  ? "green"
-                  : "neutral"
+                : j.fulfillmentState === "ready_for_pickup"
+                  ? "blue"
+                  : j.productionState === "produced"
+                    ? "green"
+                    : "neutral"
             }
           >
             {needsHandling
@@ -6492,39 +6758,20 @@ function OwnerJob({
               : j.productionState === "needs_review"
                 ? "Review needed"
                 : j.productionState === "failed"
-                  ? "Check failed execution"
+                  ? recovered
+                    ? "Failed · cleared"
+                    : "Check failed execution"
                   : j.fulfillmentState === "ready_for_pickup"
                     ? "Awaiting pickup"
-                    : human(j.productionState)}
+                    : requesterStatus(j)}
           </Badge>
           {(health?.mode === "simulation" ||
-            j.evidence?.source === "simulation") && <span>Simulation</span>}
+            j.evidence?.source === "simulation") && (
+            <span className="sim-label">Simulation</span>
+          )}
         </div>
       </div>
-      <details className="provider-order-facts">
-        <summary>Order details</summary>
-        <p>
-          {j.machineId || "Machine not reserved"} · {j.spec.quantity} ×{" "}
-          {j.spec.widthMm} × {j.spec.heightMm}
-          {j.spec.outputType === "3d"
-            ? ` × ${j.spec.depthMm} mm · ${j.spec.color} · estimated ${j.spec.estimatedSeconds} seconds`
-            : " mm"}
-        </p>
-        <dl>
-          <div>
-            <dt>Production</dt>
-            <dd>{human(j.productionState)}</dd>
-          </div>
-          <div>
-            <dt>Payment</dt>
-            <dd>{human(j.paymentState)}</dd>
-          </div>
-          <div>
-            <dt>Collection</dt>
-            <dd>{human(j.fulfillmentState)}</dd>
-          </div>
-        </dl>
-      </details>
+      {nextStep && <p className="owner-next-step">{nextStep}</p>}
       {needsHandling && (
         <form
           className="preparation"
@@ -6805,15 +7052,6 @@ function OwnerJob({
         busy={Boolean(busy)}
         onSubmit={(values) => action("payment-reference", values)}
       />
-      {j.quote && ["produced", "failed"].includes(j.productionState) && (
-        <TrialEconomicsForm
-          jobId={j.id}
-          economics={j.economics}
-          simulation={health?.mode !== "hardware"}
-          busy={Boolean(busy)}
-          onSubmit={(values) => action("economics", values)}
-        />
-      )}
       {j.abortStatus && (
         <Notice>
           Machine stop status: <strong>{human(j.abortStatus)}</strong>.{" "}
@@ -6822,131 +7060,204 @@ function OwnerJob({
             : "A stop is not confirmed. Inspect and reconcile the machine before any new execution."}
         </Notice>
       )}
-      <details className="recovery">
-        <summary>Recovery & order history</summary>
-        <div className="button-row">
-          <Button
-            className="secondary"
-            busy={busy === `${j.id}-reconcile`}
-            disabled={Boolean(busy)}
-            onClick={() => {
-              void action("reconcile");
-            }}
-          >
-            Reconcile saved outcome
-          </Button>
-          {j.attemptId && (
-            <Button
-              className="secondary"
-              busy={busy === `${j.id}-verify`}
-              disabled={Boolean(busy)}
-              onClick={() => {
-                void action("verify");
-              }}
-            >
-              Capture fresh evidence
-            </Button>
-          )}
-          {["dispatched", "running", "verifying"].includes(
-            j.productionState,
-          ) && (
-            <button
-              className="danger-outline"
-              onClick={() => setAbortConfirm(!abortConfirm)}
-            >
-              Request machine stop
-            </button>
-          )}
-        </div>
-        {abortConfirm && (
-          <Notice>
-            This requests a stop. It does not prove physical stoppage.{" "}
-            <button
-              className="text-button"
-              disabled={Boolean(busy)}
-              onClick={() => {
-                void action("abort");
-                setAbortConfirm(false);
-              }}
-            >
-              Confirm stop request
-            </button>
-          </Notice>
-        )}
-        <p className="fine-print">
-          Reconciliation checks the existing execution and payment records. It
-          must not silently start a second physical print.
-        </p>
-        <ol className="owner-history">
-          {j.history?.map((event, index) => (
-            <li key={index}>
-              <time dateTime={event.at}>{date(event.at)}</time>
-              <strong>{human(event.event)}</strong>
-              {event.reason && <span>{event.reason}</span>}
-            </li>
-          ))}
-        </ol>
-      </details>
-      {health?.mode === "simulation" && (
-        <details className="simulation-controls">
-          <summary>Owner simulation controls</summary>
+      <div className="owner-job-more">
+        <details className="provider-order-facts">
+          <summary>Order details</summary>
           <p>
-            Applies to the machine’s next simulated job. This does not validate
-            hardware.
+            {machineName || j.machineId || "Machine not reserved"} ·{" "}
+            {j.spec.quantity} × {j.spec.widthMm} × {j.spec.heightMm}
+            {j.spec.outputType === "3d"
+              ? ` × ${j.spec.depthMm} mm · ${j.spec.color} · estimated ${j.spec.estimatedSeconds} seconds`
+              : " mm"}{" "}
+            · {materialLabel(j.spec.material)}
           </p>
+          <dl>
+            <div>
+              <dt>Production</dt>
+              <dd>{describe(productionLabels, j.productionState)}</dd>
+            </div>
+            <div>
+              <dt>Payment</dt>
+              <dd>{describe(paymentLabels, j.paymentState)}</dd>
+            </div>
+            <div>
+              <dt>Collection</dt>
+              <dd>{describe(fulfillmentLabels, j.fulfillmentState)}</dd>
+            </div>
+            <div>
+              <dt>Ordered</dt>
+              <dd>{date(j.createdAt)}</dd>
+            </div>
+          </dl>
+        </details>
+        {j.quote && ["produced", "failed"].includes(j.productionState) && (
+          <TrialEconomicsForm
+            jobId={j.id}
+            economics={j.economics}
+            simulation={health?.mode !== "hardware"}
+            busy={Boolean(busy)}
+            onSubmit={(values) => action("economics", values)}
+          />
+        )}
+        <details className="recovery">
+          <summary>Recovery & order history</summary>
           <div className="button-row">
-            <select
-              aria-label="Next simulation outcome"
-              value={outcome}
-              onChange={(e) => setOutcome(e.target.value)}
-            >
-              <option value="pass">Visible output · pass</option>
-              <option value="fail">Missing output · fail</option>
-              <option value="review">Ambiguous evidence · review</option>
-              <option value="lost_ack">Lost acknowledgment · uncertain</option>
-            </select>
             <Button
               className="secondary"
-              disabled={Boolean(busy) || !j.machineId}
-              busy={busy === `${j.id}-simulation`}
+              busy={busy === `${j.id}-reconcile`}
+              disabled={Boolean(busy)}
               onClick={() => {
-                void simulation(outcome);
+                void action("reconcile");
               }}
             >
-              Set next simulated outcome
+              Reconcile saved outcome
             </Button>
+            {j.attemptId && (
+              <Button
+                className="secondary"
+                busy={busy === `${j.id}-verify`}
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  void action("verify");
+                }}
+              >
+                Capture fresh evidence
+              </Button>
+            )}
+            {["dispatched", "running", "verifying"].includes(
+              j.productionState,
+            ) && (
+              <button
+                className="danger-outline"
+                onClick={() => setAbortConfirm(!abortConfirm)}
+              >
+                Request machine stop
+              </button>
+            )}
           </div>
+          {abortConfirm && (
+            <Notice>
+              This requests a stop. It does not prove physical stoppage.{" "}
+              <button
+                className="text-button"
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  void action("abort");
+                  setAbortConfirm(false);
+                }}
+              >
+                Confirm stop request
+              </button>
+            </Notice>
+          )}
+          <p className="fine-print">
+            Reconciliation checks the existing execution and payment records. It
+            must not silently start a second physical print.
+          </p>
+          <ol className="owner-history">
+            {j.history?.map((event, index) => (
+              <li key={index}>
+                <time dateTime={event.at}>{date(event.at)}</time>
+                <strong>{human(event.event)}</strong>
+                {event.reason && <span>{event.reason}</span>}
+              </li>
+            ))}
+          </ol>
         </details>
-      )}
+        {health?.mode === "simulation" && (
+          <details className="simulation-controls">
+            <summary>Owner simulation controls</summary>
+            <p>
+              Applies to the machine’s next simulated job. This does not
+              validate hardware.
+            </p>
+            <div className="button-row">
+              <select
+                aria-label="Next simulation outcome"
+                value={outcome}
+                onChange={(e) => setOutcome(e.target.value)}
+              >
+                <option value="pass">Visible output · pass</option>
+                <option value="fail">Missing output · fail</option>
+                <option value="review">Ambiguous evidence · review</option>
+                <option value="lost_ack">
+                  Lost acknowledgment · uncertain
+                </option>
+              </select>
+              <Button
+                className="secondary"
+                disabled={Boolean(busy) || !j.machineId}
+                busy={busy === `${j.id}-simulation`}
+                onClick={() => {
+                  void simulation(outcome);
+                }}
+              >
+                Set next simulated outcome
+              </Button>
+            </div>
+          </details>
+        )}
+      </div>
     </article>
   );
 }
+const ledgerKinds: Record<string, string> = {
+  collection: "Payment collected",
+  release: "Payout to owner",
+  refund: "Refund to requester",
+};
+const ledgerStates: Record<string, string> = {
+  confirmed: "Confirmed",
+  pending: "Pending",
+  submitting: "Sending",
+  unknown: "Needs checking",
+  failed: "Failed",
+};
 function LedgerList({ ledger }: { ledger: Ledger[] }) {
   return ledger?.length ? (
     <div className="ledger-list">
-      {ledger.map((item, index) => (
-        <div className="ledger-entry" key={item.id || index}>
-          <div>
-            <strong>
-              {human(String(item.kind || item.type || "Payment record"))}
+      {ledger.map((item, index) => {
+        const state = String(item.state || item.status || "recorded");
+        const reference =
+          item.transactionRef || item.transactionHash || item.reference;
+        return (
+          <div className="ledger-entry" key={item.id || index}>
+            <div>
+              <strong>
+                {describe(
+                  ledgerKinds,
+                  String(item.kind || item.type || "Payment record"),
+                )}
+              </strong>
+              <small>
+                {item.jobId ? `Order ${shortId(item.jobId)}` : ""}
+                {item.mode === "mock"
+                  ? " · Mock record"
+                  : item.mode === "testnet"
+                    ? " · Testnet"
+                    : ""}
+              </small>
+            </div>
+            <Badge
+              tone={
+                state === "confirmed"
+                  ? "green"
+                  : ["failed", "unknown"].includes(state)
+                    ? "amber"
+                    : "neutral"
+              }
+            >
+              {describe(ledgerStates, state)}
+            </Badge>
+            <strong className="ledger-amount">
+              {money(Number(item.amountCents ?? item.cents ?? 0))}
             </strong>
-            <small>{item.jobId ? `Order ${shortId(item.jobId)}` : ""}</small>
+            {Boolean(reference) && (
+              <code className="transaction-ref">{String(reference)}</code>
+            )}
           </div>
-          <Badge>
-            {human(String(item.state || item.status || "recorded"))}
-          </Badge>
-          <strong>{money(Number(item.amountCents ?? item.cents ?? 0))}</strong>
-          {Boolean(
-            item.transactionRef || item.transactionHash || item.reference,
-          ) && (
-            <code className="transaction-ref">
-              {String(
-                item.transactionRef || item.transactionHash || item.reference,
-              )}
-            </code>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   ) : (
     <div className="empty compact">

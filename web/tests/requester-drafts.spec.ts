@@ -328,9 +328,7 @@ async function leaveWarning(page: Page) {
   };
   page.on("dialog", handle);
   try {
-    await page
-      .getByRole("link", { name: "Make something", exact: true })
-      .click();
+    await page.getByRole("link", { name: "Fabrary home", exact: true }).click();
     expect(dialogs).toEqual(["beforeunload"]);
   } finally {
     page.off("dialog", handle);

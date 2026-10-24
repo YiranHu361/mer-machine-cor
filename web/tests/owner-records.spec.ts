@@ -200,7 +200,7 @@ test("owner recovery forms validate references and submit measured trial records
   );
   await openProviderDetails(order, "Order details");
   await expect(order.locator(".provider-order-facts")).toContainText(
-    "release pending",
+    "Payout confirming",
   );
   expect(submittedReferences).toEqual([
     {
@@ -217,7 +217,7 @@ test("owner recovery forms validate references and submit measured trial records
     .click();
   await expect(reference).toHaveCount(0);
   await expect(
-    order.locator(".provider-order-facts dd").filter({ hasText: /^released$/ }),
+    order.locator(".provider-order-facts dd").filter({ hasText: /^Paid out$/ }),
   ).toBeVisible();
   expect(submittedReferences).toHaveLength(2);
   await openTrialMeasurements(order);

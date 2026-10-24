@@ -1,5 +1,9 @@
 # Browser verification evidence
 
+Current minimal redesign checkpoint: 260 full built cases pass in each of Chromium/Firefox/WebKit, 0 failed/skipped/flaky; 60 automated A/AA scans find 0 violations. Reports: `redesign-{chromium,firefox,webkit}-browser.json`; provenance in [`docs/evidence/redesign-qa.json`](../../docs/evidence/redesign-qa.json). `redesign-fixture-*.png` are intercepted fixture states (intake, matching, clarification, unavailable machine, preview, price, expired price, pickup, offline, session change, provider inbox, machines, payments, empty inbox) at 1440/390px and intake at 320px. `redesign-native-*.png` are read-only views of the actual built app. Screenshots written by the suites themselves (for example `overnight-requester-*`, `upload-first-*`, `owner-desktop.png`) now show the redesigned interface.
+
+The entries below are earlier checkpoints.
+
 Current minimal-UI checkpoint:260 full built cases pass in each of Chromium/Firefox/WebKit,0 failed/skipped/flaky;60 automated A/AA scans find0 violations. [Provenance and boundaries](../../docs/evidence/minimal-ui-qa.json). Reports: `minimal-ui-{chromium,firefox,webkit}-browser.json`. `minimal-ui-empty-320.png` and `minimal-ui-empty-1440.png` are isolated keyboard/intake fixture views. `minimal-ui-native-*.png` use actual built UI/retained Spacetime/local image statistics: requester upload/recommendation/preview/unpaid price and read-only provider desktop/mobile views. `minimal-ui-sse-reconnected.png` records the actual retained restart with polling disabled. Required physical/live acceptance and earlier interrupted endurance observation remain incomplete; heartbeat paused.
 
 The entries below are historical checkpoints, not the current screen or verification count.

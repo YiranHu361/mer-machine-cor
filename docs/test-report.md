@@ -1,5 +1,25 @@
 # Verification report
 
+## Minimal interface redesign checkpoint (October 23, 2026, 17:40 Pacific)
+
+The requester and provider screens were redesigned and then reduced to a minimal layout ([design notes](ui-redesign.md)); application state, request and recovery logic is unchanged. The global simulation/mock bar was removed; those labels now appear on the recommendation, the price and provider records. Frontend source fingerprint `a32cf72d54dac56e5cb442d7ed9d519eb257bc329db587315e07942bd35089e3` ([record](evidence/redesign-qa.json)).
+
+| Check | Result | Boundary / evidence |
+| --- | --- | --- |
+| Frontend types/build | PASS | Built bundle served by the backend on 127.0.0.1:4318 |
+| Web units | **29 passed** | API/storage/wallet boundaries |
+| Chromium | **260 passed** | 0 failed/skipped/flaky; [report](../web/evidence/redesign-chromium-browser.json) |
+| Firefox | **260 passed** | 0 failed/skipped/flaky; [report](../web/evidence/redesign-firefox-browser.json) |
+| WebKit | **260 passed** | 0 failed/skipped/flaky; [report](../web/evidence/redesign-webkit-browser.json) |
+| Automated accessibility | **60 scans, 0 detected violations** | 20 per engine; automated A/AA rules, not full conformance |
+| Read-only real-app inspection | PASS | Requester start and owner Orders/Machines at 1440px and 390px; no job, machine or payment requests; no horizontal overflow |
+
+Ten browser assertions changed for intentional interface changes: plain-language status values (“Preview approved”, “Made”, “Collected”, “Paid out”, “Payout confirming”, “Confirmed”), the fingerprint/specification version moving into **Order details**, the clarification re-check button, the start page no longer carrying the simulation/mock bar, and one leave-warning check using the logo link because the header now shows only the other side’s link. Recovery, consent, integrity and focus assertions are unchanged. Diagnostic runs found three real interface problems, all fixed before the final runs: a long hardware badge that overflowed at 320px, a focused recovery notice landing a sub-pixel below the fold, and a ~150px layout shift under **Add a note** when a recommendation arrived (now 0px). The first built WebKit run of the minimal pass failed 2 real-app cases because repeated suite runs had used the simulated sticker roll down to 0; it was restocked to the default 100 through the owner settings endpoint and WebKit then passed 260/260. Backend, node and integration suites were not rerun because no server, node or integration code changed.
+
+Screenshots: `web/evidence/redesign-fixture-*.png` (intercepted fixture states at 1440/390/320px) and `web/evidence/redesign-native-*.png` (actual built app, read-only). These are finite software checks; no physical, funded, live-model or endurance acceptance is implied.
+
+## Previous checkpoint
+
 Updated October 23, 2026, 14:26 Pacific for the minimal requester/provider interface. Source `88075bb584ca3deff4489a07aaf24dd7609af51eab4555d03facc371deda1260`. The overnight task has ended and its heartbeat remains **PAUSED**; this is separately authorized product work.
 
 **Software checks pass; required physical/live acceptance remains incomplete.** The current shared software check and final built browser suites are measured below. No physical, funded or live-model acceptance is implied.

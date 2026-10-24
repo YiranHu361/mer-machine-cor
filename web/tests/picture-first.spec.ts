@@ -961,7 +961,7 @@ for (const status of ["unavailable", "needs_clarification"] as const)
     state.mode = "recommended";
     await page
       .getByRole("button", {
-        name: /^(Find suitable machine|Check workshop again|Refine recommendation)$/,
+        name: /^(Find suitable machine|Check workshop again|Check again with this note|Refine recommendation)$/,
       })
       .click();
     await expect(result(page)).toContainText("Community sticker counter");

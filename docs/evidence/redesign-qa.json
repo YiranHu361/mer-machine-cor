@@ -1,0 +1,117 @@
+{
+  "checkpoint": "minimal interface redesign",
+  "recordedAt": "2026-10-23T17:40:00-07:00",
+  "baseCommit": "1375a29",
+  "frontendSourceSha256": "a32cf72d54dac56e5cb442d7ed9d519eb257bc329db587315e07942bd35089e3",
+  "frontendSourceScope": "sorted web/src/* and web/tests/*.ts paths and bytes",
+  "changedAreas": [
+    "web/src/App.tsx markup and copy",
+    "web/src/styles.css",
+    "web/src/requester-minimal.css",
+    "web/src/provider-minimal.css",
+    "10 browser assertions updated for intentional wording, folded details or removed shell chrome"
+  ],
+  "logicChanged": false,
+  "checks": {
+    "typecheck": "pass (tsc -b)",
+    "build": "pass (vite build, served by backend on 127.0.0.1:4318)",
+    "webUnits": {
+      "passed": 29,
+      "failed": 0
+    },
+    "browser": {
+      "chromium": {
+        "passed": 260,
+        "failed": 0,
+        "skipped": 0,
+        "flaky": 0,
+        "report": "web/evidence/redesign-chromium-browser.json"
+      },
+      "firefox": {
+        "passed": 260,
+        "failed": 0,
+        "skipped": 0,
+        "flaky": 0,
+        "report": "web/evidence/redesign-firefox-browser.json"
+      },
+      "webkit": {
+        "passed": 260,
+        "failed": 0,
+        "skipped": 0,
+        "flaky": 0,
+        "report": "web/evidence/redesign-webkit-browser.json"
+      }
+    },
+    "accessibilityScans": {
+      "total": 60,
+      "perEngine": 20,
+      "violations": 0,
+      "tags": "WCAG 2.0/2.1/2.2 A and AA rules via axe; not full conformance"
+    }
+  },
+  "diagnosticRuns": [
+    "Dev-server Chromium run: 250/260; 8 intentional wording/folded-detail assertions and 2 genuine 320px issues (unwrapped long badge; recovery notice sub-pixel below the fold). Both UI issues fixed.",
+    "First built Firefox run: 259/260; a click on Add a note landed while the recommendation card grew ~150px. Fixed with an analyzing skeleton (shift now 1-5px); the case passed 6/6 repeats before the final runs.",
+    "One full three-engine pass used the line reporter only and wrote no JSON; it was repeated with the configured reporters. Both passes were 260/260 per engine.",
+    "Minimal pass: the global simulation/mock bar, pill navigation and footer were removed; simulation and mock labels moved to the recommendation, price and provider records. Dev-server Chromium 260/260 before the built runs.",
+    "First built WebKit run of the minimal pass: 258/260. Both failures were the real backend reporting no available sticker machine because repeated real-app suite runs had used the simulated roll down to 0. The simulated machine was restocked to its default 100 through the owner settings endpoint and WebKit rerun 260/260; it read 99 afterwards."
+  ],
+  "screenshots": {
+    "fixture": "redesign-fixture-*: every /api request intercepted; no application records changed",
+    "native": "redesign-native-*: actual built app, read-only requester start plus owner Orders/Machines; only the owner session request was sent",
+    "files": [
+      "redesign-fixture-intake-analyzing-1440.png",
+      "redesign-fixture-intake-analyzing-320.png",
+      "redesign-fixture-intake-analyzing-390.png",
+      "redesign-fixture-intake-clarify-1440.png",
+      "redesign-fixture-intake-clarify-320.png",
+      "redesign-fixture-intake-clarify-390.png",
+      "redesign-fixture-intake-empty-1440.png",
+      "redesign-fixture-intake-empty-320.png",
+      "redesign-fixture-intake-empty-390.png",
+      "redesign-fixture-intake-recommended-1440.png",
+      "redesign-fixture-intake-recommended-320.png",
+      "redesign-fixture-intake-recommended-390.png",
+      "redesign-fixture-intake-unavailable-1440.png",
+      "redesign-fixture-intake-unavailable-320.png",
+      "redesign-fixture-intake-unavailable-390.png",
+      "redesign-fixture-offline-1440.png",
+      "redesign-fixture-offline-390.png",
+      "redesign-fixture-owner-empty-1440.png",
+      "redesign-fixture-owner-empty-390.png",
+      "redesign-fixture-owner-login-1440.png",
+      "redesign-fixture-owner-login-390.png",
+      "redesign-fixture-owner-machines-1440.png",
+      "redesign-fixture-owner-machines-390.png",
+      "redesign-fixture-owner-orders-1440.png",
+      "redesign-fixture-owner-orders-390.png",
+      "redesign-fixture-owner-payments-1440.png",
+      "redesign-fixture-owner-payments-390.png",
+      "redesign-fixture-preview-specified-1440.png",
+      "redesign-fixture-preview-specified-390.png",
+      "redesign-fixture-quote-expired-1440.png",
+      "redesign-fixture-quote-expired-390.png",
+      "redesign-fixture-quoted-1440.png",
+      "redesign-fixture-quoted-390.png",
+      "redesign-fixture-ready-pickup-1440.png",
+      "redesign-fixture-ready-pickup-390.png",
+      "redesign-fixture-session-ended-1440.png",
+      "redesign-fixture-session-ended-390.png",
+      "redesign-native-owner-machines-desktop.png",
+      "redesign-native-owner-machines-mobile.png",
+      "redesign-native-owner-orders-desktop.png",
+      "redesign-native-owner-orders-mobile.png",
+      "redesign-native-start-desktop.png",
+      "redesign-native-start-mobile.png",
+      "redesign-overview-provider.png",
+      "redesign-overview-requester.png"
+    ]
+  },
+  "notEstablished": [
+    "physical hardware output or timing",
+    "funded testnet payments",
+    "live Claude vision or semantic image understanding",
+    "continuous uptime or endurance",
+    "customer validation"
+  ]
+}

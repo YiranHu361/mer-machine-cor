@@ -207,7 +207,7 @@ test("a completed handoff moves to history and returns keyboard focus to queue c
   await expect(
     first
       .locator(".provider-order-facts dd")
-      .filter({ hasText: /^collected$/ }),
+      .filter({ hasText: /^Collected$/ }),
   ).toBeVisible();
 });
 
@@ -251,7 +251,7 @@ test("a settled follow-up leaves the active search safely and remains reachable 
   await expect(first).toBeVisible();
   await openProviderDetails(first, "Order details");
   await expect(
-    first.locator(".provider-order-facts dd").filter({ hasText: /^released$/ }),
+    first.locator(".provider-order-facts dd").filter({ hasText: /^Paid out$/ }),
   ).toBeVisible();
   await expect(order(page, "Collection order 2")).toBeVisible();
   await expect(search).toHaveValue("");

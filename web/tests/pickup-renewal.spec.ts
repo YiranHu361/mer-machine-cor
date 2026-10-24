@@ -543,7 +543,7 @@ test("an exact renewal replay returning current collected state never reopens pi
     .filter({ hasText: "Collection" })
     .locator("dd");
   await expect(collection).toBeVisible();
-  await expect(collection).toHaveText("collected");
+  await expect(collection).toHaveText("Collected");
   await expect(
     order(page).getByLabel("Pickup code", { exact: true }),
   ).toHaveCount(0);

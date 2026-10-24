@@ -67,12 +67,11 @@ for (const width of [320, 1440]) {
     await expect(
       page.getByLabel("What is it for?", { exact: true }),
     ).not.toBeVisible();
+    // The start page carries no environment chrome; mock and simulated
+    // labels appear where they matter (machine recommendation and payment).
     await expect(
       page.getByText("Simulation mode", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Mock payments · no money moves", { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     const uploadBox = await page.locator(".picture-upload").boundingBox();
     expect(uploadBox).not.toBeNull();
     expect(
