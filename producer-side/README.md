@@ -1,0 +1,40 @@
+# Producer side: machines and nodes
+
+One node process per machine. Each node dials out to the hub at `/ws/node`, takes jobs, and drives its machine through an adapter. `hub/gateway.py` is the hub's end of that connection.
+
+**How it works, and how to add a machine: [ARCHITECTURE.md](ARCHITECTURE.md).**
+
+| Machine | Adapter | Process | State |
+| --- | --- | --- | --- |
+| Phomemo M02 Pro | [`node/adapters/phomemo/`](node/adapters/phomemo/README.md) | `sticker_print` | Working on the real printer (BLE, macOS) |
+| Fujifilm Instax mini | `node/adapters/instax/` | `photo_print` | Not started |
+| Bambu Lab A1 mini | `node/adapters/bambu/` | `fdm_print` | Not started |
+
+## Setup
+
+```sh
+cd producer-side
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pytest -q
+```
+
+## Print a sticker with no hub
+
+```sh
+.venv/bin/python -m node.tools.scan_ble --prefix M02 --services          # find the printer
+.venv/bin/python -m node.tools.run_job --machine node/machines/m_sticker_01.json --text "hello"
+.venv/bin/python -m node.tools.run_job --machine node/machines/m_sticker_01.json sticker.png --width-mm 40
+```
+
+Add `--transport file` for a dry run: no printer, writes the bytes and a preview PNG under `.work/`. The printer must not be connected to the Phomemo phone app.
+
+## Run a node against the stub hub
+
+```sh
+.venv/bin/python -m hub.dev_server                                                    # terminal 1
+.venv/bin/python -m node.client --machine node/machines/m_sticker_01.json --hub http://localhost:8000   # terminal 2
+curl -X POST localhost:8000/dev/offer -H 'content-type: application/json' -d '{"machine_id":"m_sticker_01"}'
+curl localhost:8000/dev/events
+```
+
+Point `--hub` (or `FABRARY_HUB_URL`) at the real hub once it's deployed.
