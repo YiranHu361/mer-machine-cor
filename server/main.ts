@@ -13,6 +13,7 @@ import { Orchestrator } from "./orchestration/orchestrator.ts";
 import { IntegratedPayment } from "./external.ts";
 import { loadCatalog } from "./catalog.ts";
 import { mutate } from "./store.ts";
+import { ConvexPublisher, convexUrl, mirrorState } from "./convex-publish.ts";
 const dataDir = resolve(process.env.FABRARY_DATA_DIR ?? ".data");
 await mkdir(dataDir, { recursive: true });
 const configPath = join(dataDir, "local-credentials.json");
@@ -98,12 +99,21 @@ const service = new Service(
   config,
 );
 const orchestrator = new Orchestrator(service);
+// Convex is the live read model screens subscribe to; the store stays authoritative.
+const liveUrl = convexUrl();
+const stopMirror =
+  liveUrl && process.env.FABRARY_PUBLISH_SECRET
+    ? mirrorState(
+        store,
+        ConvexPublisher.connect(liveUrl, process.env.FABRARY_PUBLISH_SECRET),
+      )
+    : undefined;
 const app = createApp(service, undefined, { orchestrator });
 // Loopback by default. Set FABRARY_HOST to accept connectors from other computers.
 const host = process.env.FABRARY_HOST ?? "127.0.0.1";
 const server = app.listen(port, host, () =>
   console.log(
-    `Fabrary http://${host}:${port} (${mode}, ${storeMode}, ${config.paymentMode}). Owner access is in ${configPath}; credentials are never printed.`,
+    `Fabrary http://${host}:${port} (${mode}, ${storeMode}, ${config.paymentMode}, live view ${stopMirror ? liveUrl : "off"}). Owner access is in ${configPath}; credentials are never printed.`,
   ),
 );
 const tick = setInterval(
@@ -118,6 +128,7 @@ const tick = setInterval(
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.once(signal, () => {
     clearInterval(tick);
+    stopMirror?.();
     server.close(
       () => void Promise.resolve(store.close()).then(() => process.exit(0)),
     );

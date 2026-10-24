@@ -31,6 +31,31 @@ npm run demo
 
 This session has the installed SpacetimeDB 2.13.0 runtime and persistent data under ignored `.data/spacetime-runtime/`, and a private `.env` connected to `fabrary-app`. A fresh checkout needs local database publication and a publishing-identity token; see [the runbook](docs/demo-runbook.md). SQLite is available only as an explicitly selected isolated development mode.
 
+## Sticker MVP: "i want a sticker" and a picture
+
+One command starts the producer side's hub, the Phomemo M02 Pro node and this app, then moves the **Sticker counter** onto the hub:
+
+```sh
+python3 -m venv producer-side/.venv && producer-side/.venv/bin/pip install -r producer-side/requirements.txt   # once
+npm run convex:push        # once per change to convex/: needs CONVEX_DEPLOY_KEY and FABRARY_PUBLISH_SECRET in .env
+npm run mvp                # add -- --dry-run to write the printer bytes under producer-side/.work/ instead of printing
+```
+
+Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. After each print the owner checks it in **Owner workshop** before the machine takes the next order.
+
+## Convex live state
+
+Convex is the live read model every screen watches ([design doc](https://claude.ai/artifact/XCDCcTZ2uSeRnRRYSHj4mT), "Convex live state"). Each hub has one `publish(type, data)` that sends §5 events to the `publish:batch` mutation: this app mirrors its saved machines, plans and jobs ([server/convex-publish.ts](server/convex-publish.ts)), and the producer gateway forwards node status and job progress ([producer-side/hub/publish.py](producer-side/hub/publish.py)). The local store and the gateway stay authoritative, so a Convex outage never stops an order or a print. Browsers only read: `/make` shows the printer's live progress after confirmation, and `/live` lists every machine and the event feed.
+
+| Table | Written by | Holds |
+| --- | --- | --- |
+| `machines` | both hubs | §2 manifest with live status; registry machines link to the node that prints them |
+| `plans` | this app | §3 plan per order: stage, status, items, assignments, payment status |
+| `jobs` | both hubs, separate fields | §4 job: order-side states from this app; hub job id, progress and verification from the gateway |
+| `events` | both hubs | Append-only feed of state changes |
+
+No requester ids, pickup codes, signed file links or device settings are published. Schema and functions are in [convex/](convex/).
+
 ## Use
 
 The requester starts with one upload target for 1–4 pictures. There is no empty preview or empty order list, and no output, machine or model picker. Fabrary recommends a supported result and a saved machine. After uploading, **Add a note** and **Optional print settings** offer secondary refinements; the selected machine stays bound to the order. With no vision key, limited local image statistics are labeled clearly and uncertain pictures need clarification. Confirm artwork permission explicitly, then select **Preview your item** to inspect the actual production file. **Approve preview & see price** approves that file and obtains its quote together. Payment confirmation and **Start production** remain separate deliberate actions; analysis and preview approval never pay or dispatch. A newly unavailable device requires a fresh recommendation.

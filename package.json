@@ -23,10 +23,13 @@
     "test:calibration": "tsx scripts/calibration-acceptance.ts",
     "profile:build": "tsx scripts/build-profile.ts",
     "test:soak": "tsx scripts/soak-orders.ts",
-    "print:one": "tsx scripts/print-one.ts"
+    "print:one": "tsx scripts/print-one.ts",
+    "mvp": "node scripts/mvp.mjs",
+    "convex:push": "node scripts/convex-push.mjs"
   },
   "dependencies": {
     "context.dev": "3.15.0",
+    "convex": "1.46.0",
     "dotenv": "18.0.9",
     "express": "5.3.0",
     "multer": "2.5.0",

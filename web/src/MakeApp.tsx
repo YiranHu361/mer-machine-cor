@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { LiveOrder, liveEnabled } from "./live";
 
 /* The orchestrated request flow: describe or add photos, choose a draft when
    new art is needed, review the exact prepared result, confirm once, collect. */
@@ -521,6 +522,7 @@ export function MakeApp() {
               </article>
             );
           })}
+          {confirmed && liveEnabled && <LiveOrder orderId={o.id} />}
           {!confirmed && o.suggestions.length > 0 && stage === "proposed" && (
             <div className="make-extras" aria-label="Also make this as">
               {o.suggestions.map((s) => (

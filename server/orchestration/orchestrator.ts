@@ -48,7 +48,13 @@ import {
   type TimeScale,
 } from "../relief/index.ts";
 import { fixtureDrafts } from "./fixture-designs.ts";
-import { localIntent, NEUTRAL_TAG_TEXT, tagText } from "./intent.ts";
+import {
+  asksForColour,
+  localIntent,
+  NEUTRAL_TAG_TEXT,
+  requestedProcess,
+  tagText,
+} from "./intent.ts";
 import {
   PUBLISHED_PROFILES,
   producerProfile,
@@ -506,6 +512,11 @@ export class Orchestrator {
             })),
           ),
         });
+        // A process the person named is their choice of outcome: "i want a
+        // sticker" of a colour photo is a black-and-white sticker, as in the
+        // local rules, unless the request itself asks to keep the colour.
+        const asked = requestedProcess(o.draft.requestText);
+        const colourAsked = asksForColour(o.draft.requestText);
         return {
           provider: "claude",
           model: brief.model,
@@ -521,7 +532,8 @@ export class Orchestrator {
             photoAssetIds: i.photoAssetIds,
             ...(i.subject ? { subject: i.subject } : {}),
             ...(i.process === "fdm_print" ? { text: tagText(i.text) } : {}),
-            colorImportant: i.colorImportant,
+            colorImportant:
+              i.colorImportant && (i.process !== asked || colourAsked),
             ...(Object.keys(i.subjectBoxes).length
               ? { subjectBoxes: i.subjectBoxes }
               : {}),

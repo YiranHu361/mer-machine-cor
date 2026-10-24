@@ -13,6 +13,7 @@ Serves the real gateway plus just enough to push jobs by hand:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import itertools
 import logging
 from collections import deque
@@ -27,6 +28,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
 from .gateway import Gateway
+from .publish import ConvexPublisher
 
 log = logging.getLogger("dev_hub")
 HERE = Path(__file__).parent
@@ -70,14 +72,22 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
         log.info("event %-16s %s", type_, brief)
 
     gw.subscribe(record)
+    publisher = ConvexPublisher.from_env()
+    if publisher:
+        gw.subscribe(publisher.handle)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         if not (ASSETS / "test_sticker.png").exists():
             make_test_sticker(ASSETS / "test_sticker.png")
         gw.start()
+        publishing = asyncio.create_task(publisher.run()) if publisher else None
+        log.info("live view: %s", publisher.url if publisher else "off (set CONVEX_URL and FABRARY_PUBLISH_SECRET)")
         yield
         await gw.stop()
+        if publishing:
+            publishing.cancel()
+            await publisher.aclose()
 
     app = FastAPI(title="Fabrary dev hub", lifespan=lifespan)
     app.state.gateway = gw
@@ -144,6 +154,7 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8000)
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname).1s %(name)s: %(message)s", datefmt="%H:%M:%S")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per Convex publish otherwise
     uvicorn.run(create_app(), host=a.host, port=a.port, log_level="warning")
 
 

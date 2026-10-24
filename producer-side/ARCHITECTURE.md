@@ -16,6 +16,7 @@ Source of truth for the shared contracts: the *Fabrary — Cal Hacks Build Desig
 | Webcam frame capture and upload | Code written, no camera tested yet |
 | Claude vision check | Not started; results say `pass: null` (needs manual approval) |
 | Simulator (`sim/`, `SimAdapter`), outage, add-machine | Not started |
+| Convex publish (`hub/publish.py`) | Working: the stub hub forwards gateway events to Convex when `CONVEX_URL` (or a full `CONVEX_DEPLOY_KEY`) and `FABRARY_PUBLISH_SECRET` are set; progress at most every 2 s per job; signed links and adapter config stay in the hub |
 
 ## Picture
 

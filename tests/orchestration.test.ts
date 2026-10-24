@@ -29,6 +29,10 @@ import {
   safePublicUrl,
 } from "../server/orchestration/context-dev.ts";
 import { priceAssignment } from "../server/orchestration/pricing.ts";
+import type {
+  RequestBrief,
+  RequestInput,
+} from "../integrations/src/claude.ts";
 import {
   localIntent,
   drawableSubject,
@@ -197,6 +201,7 @@ function fixture(
     design?: "fixture" | "none";
     /** "cli" runs the real fabrary-producer; tests using it skip without uv. */
     producer?: "fake" | "cli";
+    understand?: (input: RequestInput) => Promise<RequestBrief>;
   } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), "fabrary-orchestration-"));
@@ -228,6 +233,7 @@ function fixture(
           }
         : producer.runner,
     designProvider: options.design ?? "fixture",
+    understand: options.understand,
     analyze: async (assets) => ({
       kind: "photo",
       colorful: true,
@@ -521,6 +527,53 @@ test("a colour photo is never silently sent to the monochrome printer", async ()
     assert.deepEqual(o.draft.photoAssetIds, [photo], "the photos are kept");
   } finally {
     f.close();
+  }
+});
+
+test("an explicit sticker request keeps the thermal printer even when Claude calls the photo's colour important", async () => {
+  const brief = (requestText: string, photo: string): RequestBrief => ({
+    provider: "claude",
+    model: "test-model",
+    outcome: "A sticker of your photo.",
+    question: null,
+    reason: "The request names a sticker.",
+    items: [
+      {
+        process: "sticker_print",
+        name: "A sticker of your photo",
+        why: requestText,
+        quantity: 1,
+        creation: "preserve",
+        photoAssetIds: [photo],
+        subject: null,
+        text: null,
+        colorImportant: true,
+        subjectBoxes: {},
+      },
+    ],
+  });
+  for (const [requestText, expected] of [
+    ["i want a sticker", "proposed"],
+    ["i want a sticker in full colour", "unavailable"],
+  ] as const) {
+    let photo = "";
+    const f = fixture({ understand: async (i) => brief(i.requestText, photo) });
+    try {
+      await f.ready(["phomemo_01"]);
+      photo = await f.photo(requester.id);
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText, photoAssetIds: [photo] },
+        `create-key-${expected}`,
+      );
+      await f.orchestrator.settle(order.id);
+      const o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, expected, requestText);
+      if (expected === "proposed")
+        assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+    } finally {
+      f.close();
+    }
   }
 });
 

@@ -31,7 +31,11 @@ export function drawableSubject(text: string) {
   const subject = (match?.[1] ?? "").trim();
   return subject && !/^(photo|picture|image)$/.test(subject) ? subject : null;
 }
-function requestedProcess(text: string): Process | null {
+/** True when the request itself asks to keep colour, e.g. "in full colour". */
+export function asksForColour(text: string) {
+  return /\b(colou?r(ed|ful)?|full[- ]colou?r)\b/i.test(text);
+}
+export function requestedProcess(text: string): Process | null {
   const t = text.toLowerCase();
   if (/\b(keychain|key chain|3d|charm|tag)\b/.test(t)) return "fdm_print";
   if (/\b(sticker|stickers|label|labels|decal)\b/.test(t))

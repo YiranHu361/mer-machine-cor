@@ -27,6 +27,7 @@ import {
 import { api, ApiError } from "./api";
 import { MakeApp } from "./MakeApp";
 import { ReliefApp } from "./ReliefApp";
+import { LivePage, liveEnabled } from "./live";
 import { prepareLabelPhoto } from "./label-photo";
 import {
   readStoredValue,
@@ -651,6 +652,7 @@ function App() {
   const isOwner = location.pathname.startsWith("/owner");
   const isRelief = location.pathname.startsWith("/relief");
   const isMake = location.pathname.startsWith("/make");
+  const isLive = liveEnabled && location.pathname.startsWith("/live");
   const [health, setHealth] = useState<Health | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [boot, setBoot] = useState(true);
@@ -723,6 +725,7 @@ function App() {
                 {isMake ? "Choose a machine myself" : "Just ask"}
               </a>
               <a href="/owner">Owner workshop</a>
+              {liveEnabled && <a href="/live">Live</a>}
             </>
           )}
         </nav>
@@ -744,7 +747,9 @@ function App() {
             </Notice>
           </div>
         )}
-        {boot ? (
+        {isLive ? (
+          <LivePage />
+        ) : boot ? (
           <div className="loading-shell" role="status">
             <span className="spinner" /> Opening the workshop…
           </div>
