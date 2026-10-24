@@ -781,3 +781,26 @@
     gap: 18px;
   }
 }
+
+/* ---------- Identifying a machine ---------- */
+.add-machine-intro {
+  font-size: 14px;
+  color: var(--muted);
+}
+.identify-form {
+  margin: 8px 0 20px;
+}
+.identify-form input[type="file"] {
+  max-width: 100%;
+  font-size: 14px;
+}
+.identify-result {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.identify-result.is-supported {
+  color: var(--success);
+}
+.identify-result.is-unsupported {
+  color: var(--danger);
+}

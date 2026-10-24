@@ -25,6 +25,7 @@ import {
   useOwnerDraft,
 } from "./owner-drafts";
 import { api, ApiError } from "./api";
+import { prepareLabelPhoto } from "./label-photo";
 import {
   readStoredValue,
   writeStoredValue,
@@ -108,6 +109,15 @@ type IssuedSetupCode = SetupCodeView & {
   code: string;
   command: string;
   platformUrl: string;
+};
+type MachineIdentification = {
+  status: "supported" | "unsupported" | "unclear";
+  model?: string;
+  modelName?: string;
+  seen: string | null;
+  source: "description" | "photo";
+  provider: "claude" | "local";
+  message: string;
 };
 type Spec = {
   assetIds: string[];
@@ -3556,6 +3566,13 @@ function OwnerApp({
   const [mode, setMode] = useState("simulation");
   const [setupCode, setSetupCode] = useState<IssuedSetupCode | null>(null);
   const [copied, setCopied] = useState(false);
+  const [identifyText, setIdentifyText] = useState("");
+  const [identifyPhoto, setIdentifyPhoto] = useState<File | null>(null);
+  const [identification, setIdentification] =
+    useState<MachineIdentification | null>(null);
+  const readsPhotos = String(health?.integrations?.claude ?? "").startsWith(
+    "configured",
+  );
   const [tab, setTab] = useState("queue");
   const [visitedTabs, setVisitedTabs] = useState(["queue"]);
   const selectTab = (id: string) => {
@@ -4282,6 +4299,72 @@ function OwnerApp({
                     }
                   >
                     <summary>Add a machine</summary>
+                    <p className="add-machine-intro">
+                      Tell Fabrary what the machine is, then run one command on
+                      the computer next to it. Fabrary checks that computer,
+                      asks before each step, and writes the settings for you.
+                    </p>
+                    <form
+                      className="identify-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void act("identify", async () => {
+                          const body = new FormData();
+                          body.set("description", identifyText);
+                          if (identifyPhoto)
+                            body.set(
+                              "photo",
+                              await prepareLabelPhoto(identifyPhoto),
+                              "label.jpg",
+                            );
+                          const { identification } = await api<{
+                            identification: MachineIdentification;
+                          }>("/owner/machine-identification", body);
+                          setIdentification(identification);
+                          if (identification.model)
+                            setModel(identification.model);
+                        });
+                      }}
+                    >
+                      <div className="form-grid">
+                        <Field label="What machine is it?">
+                          <input
+                            type="text"
+                            value={identifyText}
+                            maxLength={200}
+                            placeholder="For example, Phomemo M02 Pro"
+                            onChange={(e) => setIdentifyText(e.target.value)}
+                          />
+                        </Field>
+                        {readsPhotos && (
+                          <Field label="Or a photo of its label or box">
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              onChange={(e) =>
+                                setIdentifyPhoto(e.target.files?.[0] ?? null)
+                              }
+                            />
+                          </Field>
+                        )}
+                      </div>
+                      <Button
+                        className="secondary"
+                        type="submit"
+                        busy={busy === "identify"}
+                        disabled={!identifyText.trim() && !identifyPhoto}
+                      >
+                        Identify
+                      </Button>
+                      {identification && (
+                        <p
+                          className={`identify-result is-${identification.status}`}
+                          role="status"
+                        >
+                          {identification.message}
+                        </p>
+                      )}
+                    </form>
                     <form
                       className="setup-code-form"
                       onSubmit={(e) => {
@@ -4301,16 +4384,16 @@ function OwnerApp({
                         });
                       }}
                     >
-                      <p>
-                        Choose the machine, then run one command on the computer
-                        next to it. Fabrary checks that computer, asks before
-                        each step, and writes the settings for you.
-                      </p>
                       <div className="form-grid">
                         <Field label="Supported model">
                           <select
                             value={model}
-                            onChange={(e) => setModel(e.target.value)}
+                            onChange={(e) => {
+                              setModel(e.target.value);
+                              // The identified model no longer describes the choice.
+                              if (identification?.model !== e.target.value)
+                                setIdentification(null);
+                            }}
                           >
                             <option value="phomemo-m02pro">
                               Phomemo M02Pro

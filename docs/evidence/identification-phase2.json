@@ -1,0 +1,65 @@
+{
+  "checkpoint": "Agentic machine onboarding, phase 2: machine identification (simulation, no live model call)",
+  "recordedAt": "2026-10-24T10:25:28.660Z",
+  "baseCommit": "9c00fd176cdf22f84bcbf311115a43ef6031c8f0",
+  "design": "Typed names are matched by fixed rules without a model call. A label photo is read by Claude, which only transcribes brand, model and label text; fixed rules decide support. Near relatives ask for confirmation; a photo contradicting the typed name selects nothing; the owner still confirms the selected model before a setup code is issued.",
+  "checks": {
+    "sharedCheck": {
+      "command": "npm run check",
+      "result": "PASS",
+      "application": 273,
+      "node": 156,
+      "paymentsClaude": 33,
+      "fetch": 5,
+      "webBuild": "pass",
+      "webUnits": 29
+    },
+    "newTests": {
+      "backend": "tests/machine-identification.test.ts: 5 passed (fixed matching without Claude, owner-only access, photo byte check and 4 MiB limit, Claude reading matched by fixed code including packaging text, contradiction selects nothing, photo needs a configured key)",
+      "claude": "integrations/test/claude.test.ts: 2 new passed (reading parser drops chosen-model fields; request sends photo and description as data, validates input before any call)",
+      "browser": "web/tests/machine-identification.spec.ts: 2 passed per engine (typed and photo identification, in-browser JPEG shrink, stale result cleared, photo hidden without a key, 390px accessibility)"
+    },
+    "browser": {
+      "target": "Isolated built instance on 127.0.0.1:4410 (own local SpacetimeDB on 3012, node on 8798, own credentials) with ANTHROPIC_API_KEY blanked so no test could call Claude; simulation devices and mock payments.",
+      "diagnostic": "First run of this code: Chromium 263 and WebKit 263 passed; Firefox 262 passed, 1 failed. The failure was a color-contrast reading of #7e8188 on an order-row label in the requester accessibility check: the muted text at about 81% opacity while a row button faded from its disabled opacity (120 ms transition). The accessibility helper now waits for finite CSS transitions to settle before scanning; all three engines were then rerun.",
+      "chromium": {
+        "report": "web/evidence/identify-chromium-browser.json",
+        "startTime": "2026-10-24T10:17:16.942Z",
+        "duration": 149454.423,
+        "expected": 263,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 22,
+        "accessibilityViolations": 0
+      },
+      "firefox": {
+        "report": "web/evidence/identify-firefox-browser.json",
+        "startTime": "2026-10-24T10:19:47.150Z",
+        "duration": 179851.115,
+        "expected": 263,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 22,
+        "accessibilityViolations": 0
+      },
+      "webkit": {
+        "report": "web/evidence/identify-webkit-browser.json",
+        "startTime": "2026-10-24T10:22:47.593Z",
+        "duration": 153349.232,
+        "expected": 263,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 22,
+        "accessibilityViolations": 0
+      }
+    }
+  },
+  "notEstablished": [
+    "No live Claude call was made; photo reading is tested with a fake reader and recorded request shapes only.",
+    "No photo of a real machine label has been read.",
+    "Typed-name rules cover the three supported models and their close relatives; other spellings may be reported as unclear."
+  ]
+}

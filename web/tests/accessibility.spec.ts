@@ -9,6 +9,16 @@ const widths = [320, 390, 768, 1440];
 
 async function audit(page: Page, state: string) {
   await page.evaluate(() => document.fonts.ready);
+  // Audit the settled screen: a button fading in from its disabled opacity
+  // would otherwise be measured part-way through the transition.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();

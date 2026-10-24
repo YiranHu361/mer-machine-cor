@@ -1,5 +1,19 @@
 # Verification report
 
+## Agentic machine onboarding, phase 2: identifying the machine (October 24, 2026)
+
+**Add a machine** now starts with **What machine is it?** The owner types the make and model, or adds a photo of the label or box when a Claude key is configured, and **Identify** selects the matching supported model or explains why it can't. Claude only transcribes what the label says (brand, model, the text it relied on); fixed rules in `server/machine-identification.ts` decide support, so near relatives such as a plain M02, a mini Link or a full-size A1 ask for confirmation and packaging text listing compatible models is ignored. Typed names never call Claude. A photo that contradicts the typed name selects nothing, and the owner still confirms the model before a setup code is issued ([record](evidence/identification-phase2.json)).
+
+| Check | Result | Boundary / evidence |
+| --- | --- | --- |
+| Shared check (`npm run check`) | PASS | Types, 273 application (5 new), 156 node, 33 payments/Claude (2 new), 5 Fetch, web build, 29 wallet units |
+| Chromium | **263 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/identify-chromium-browser.json) |
+| Firefox | **263 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/identify-firefox-browser.json) |
+| WebKit | **263 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/identify-webkit-browser.json) |
+| Automated accessibility | **66 scans, 0 detected violations** | Includes the identify form at 390px; automated A/AA rules, not full conformance |
+
+The browser suites ran against the isolated instance with the Claude key blanked, so no test could make a model call. The first run of this code passed Chromium and WebKit but failed 1 Firefox case: the requester accessibility scan read an order-row label at 3.9:1 because a row button was still fading in from its disabled opacity (the text is the normal muted color at about 81% opacity). The shared accessibility helper now waits for finite CSS transitions to settle before scanning, and the runs in the table followed that change. **No live Claude call has been made**: photo reading is verified with a fake reader and the recorded request shape (image block, description sent as data, input checked before any call). No photo of a real label has been read.
+
 ## Agentic machine onboarding, phase 1 (October 24, 2026)
 
 **Add a machine** now issues a one-time setup code and a one-line command for the computer next to the machine. The connector it installs dials out to the workshop (no inbound port or SSH tunnel), runs a fixed checklist for the chosen model where every step that touches the device waits for the owner's click in the workshop, writes the machine config privately and registers the machine. Calibration, listing and resuming stay explicit owner steps. Contract: [node integration](node-integration.md#connector-mode-outbound-one-command-setup); setup guide: [Raspberry Pi and M02 Pro](raspberry-pi-m02pro.md). Source fingerprint `1e839ded58a5a0e014aa78b2ad3ad06ab4b741a5097b7e09bbd34983b6037145` ([record](evidence/onboarding-phase1.json)).

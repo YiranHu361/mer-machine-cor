@@ -39,6 +39,10 @@ import {
   supportedModels,
 } from "./connectors.ts";
 import {
+  registerIdentificationRoutes,
+  type IdentificationDependencies,
+} from "./machine-identification.ts";
+import {
   calibrationDeviceContext,
   calibrationOperationContext,
   calibrationStartObservation,
@@ -139,6 +143,7 @@ export function createApp(
   webDirectory = resolve("web/dist"),
   options: {
     recommendations?: RecommendationDependencies;
+    identification?: IdentificationDependencies;
     relay?: ConnectorRelay;
   } = {},
 ) {
@@ -195,13 +200,24 @@ export function createApp(
     if (hasBody && /^\/api(?:\/|$)/i.test(req.path)) {
       const isUpload =
         req.method === "POST" && /^\/api\/uploads\/?$/i.test(req.path);
-      if (!req.is(isUpload ? "multipart/form-data" : "application/json"))
+      const isMachinePhoto =
+        req.method === "POST" &&
+        /^\/api\/owner\/machine-identification\/?$/i.test(req.path);
+      if (
+        !req.is(
+          isUpload || isMachinePhoto
+            ? "multipart/form-data"
+            : "application/json",
+        )
+      )
         return next(
           new Problem(
             "UNSUPPORTED_CONTENT_TYPE",
             isUpload
               ? "Upload artwork as a multipart image upload."
-              : "Send this request as application/json, or omit its body when no input is needed.",
+              : isMachinePhoto
+                ? "Send the machine name and photo as a multipart upload."
+                : "Send this request as application/json, or omit its body when no input is needed.",
             415,
           ),
         );
@@ -1003,6 +1019,10 @@ export function createApp(
     res.status(201).json({ machine });
   });
   registerConnectorRoutes(app, { service, relay, owner, registerMachine });
+  registerIdentificationRoutes(app, {
+    owner,
+    dependencies: options.identification,
+  });
   app.patch("/api/owner/machines/:id", async (req, res) => {
     await owner(req);
     const body = machineSchema.parse(req.body);

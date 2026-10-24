@@ -32,7 +32,7 @@ For a USB webcam, also `sudo apt install -y fswebcam`. Open a new shell afterwar
 
 ### Connect
 
-1. In the provider workspace, open **Machines → Add a machine**, choose **Phomemo M02Pro** and **Hardware · a real machine**, and click **Get setup command**.
+1. In the provider workspace, open **Machines → Add a machine**. Type **Phomemo M02 Pro** (or add a photo of the label under the printer) and click **Identify**; it should select **Phomemo M02Pro**. Choose **Hardware · a real machine** and click **Get setup command**.
 2. Copy the command and run it on the Pi. It downloads the connector into `~/.fabrary-connector`, installs it with the Pi's own Python (which has Bluetooth support), and connects using the one-time code. The code works once and expires after 15 minutes.
 3. Back in the workshop, a checklist appears for the Sticker counter. Each step waits for your button:
    - **Check this computer** runs on its own: Linux, Bluetooth serial support, `bluetoothctl` and `sdptool`.
