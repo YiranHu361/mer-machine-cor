@@ -72,4 +72,4 @@ Input: a `.gcode` sliced in Bambu Studio / OrcaSlicer **for the A1 mini**, or a 
 
 ## Network gotcha: iPhone hotspot
 
-An iPhone hotspot tells clients it prefers IPv6-only (DHCP option 108). macOS honors that and gets no IPv4 address; you'll see only `192.0.0.2`. The printer ignores it and gets `172.20.10.x`. The Mac can then hear the printer's broadcasts (`discover` works), but it can't reach ports 8883 and 990. Fix: give the Mac a manual IPv4 on the hotspot subnet with `networksetup -setmanual Wi-Fi 172.20.10.14 255.255.255.240 172.20.10.1`. Undo it with `networksetup -setdhcp Wi-Fi`.
+On an iPhone hotspot, a Mac gets no IPv4 address and can't reach the printer, even though `discover` finds it. Fix it with a separate macOS network Location: [MAC_NETWORK_SETUP.md](../../../MAC_NETWORK_SETUP.md).

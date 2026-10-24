@@ -36,7 +36,7 @@ echo BAMBU_ACCESS_CODE=<code from the printer screen> >> .env       # once; .env
 .venv/bin/python -m node.tools.bambu print samples/yiran_PLA_11m11s.gcode   # upload, start, follow to FINISH
 ```
 
-Needs LAN Only + Developer Mode on the printer, a microSD card, and the printer IP in `node/machines/m_fdm_01.json`. See [the adapter README](node/adapters/bambu/README.md).
+Needs LAN Only + Developer Mode on the printer, a microSD card, and the printer IP in `node/machines/m_fdm_01.json`. See [the adapter README](node/adapters/bambu/README.md). On an iPhone hotspot, a Mac needs a one-time network setting first: [MAC_NETWORK_SETUP.md](MAC_NETWORK_SETUP.md).
 
 ## Run a node against the stub hub
 
