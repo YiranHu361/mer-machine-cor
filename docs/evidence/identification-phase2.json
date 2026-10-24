@@ -1,5 +1,5 @@
 {
-  "checkpoint": "Agentic machine onboarding, phase 2: machine identification (simulation, no live model call)",
+  "checkpoint": "Agentic machine onboarding, phase 2: machine identification (simulation; one live model call)",
   "recordedAt": "2026-10-24T10:25:28.660Z",
   "baseCommit": "9c00fd176cdf22f84bcbf311115a43ef6031c8f0",
   "design": "Typed names are matched by fixed rules without a model call. A label photo is read by Claude, which only transcribes brand, model and label text; fixed rules decide support. Near relatives ask for confirmation; a photo contradicting the typed name selects nothing; the owner still confirms the selected model before a setup code is issued.",
@@ -58,8 +58,26 @@
     }
   },
   "notEstablished": [
-    "No live Claude call was made; photo reading is tested with a fake reader and recorded request shapes only.",
-    "No photo of a real machine label has been read.",
+    "No photo of a real machine label has been read; the live check used a generated, clearly printed label.",
     "Typed-name rules cover the three supported models and their close relatives; other spellings may be reported as unclear."
-  ]
+  ],
+  "liveCheck": {
+    "at": "2026-10-24T17:12:54.888Z",
+    "model": "claude-sonnet-5-5",
+    "durationMs": 2853,
+    "image": "web/evidence/identify-live-label.png (generated label, not a photo of a real printer)",
+    "reading": {
+      "brand": "PHOMEMO",
+      "machineModel": "M02 Pro",
+      "readable": true,
+      "reason": "The label clearly prints the brand PHOMEMO and the model designation \"M02 Pro\"."
+    },
+    "match": {
+      "status": "supported",
+      "model": "phomemo-m02pro",
+      "modelName": "Phomemo M02Pro"
+    },
+    "result": "pass",
+    "path": "integrations/src/claude.ts readMachine, then server/machine-identification.ts matchMachine; one call, run directly rather than through the HTTP route"
+  }
 }
