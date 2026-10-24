@@ -27,6 +27,8 @@ export function machineDeviceFingerprint(machine: Machine) {
     mode: machine.mode,
     outputType: machine.outputType,
     nodeUrl: machine.nodeUrl,
+    // Omitted when absent so fingerprints of directly connected machines are unchanged.
+    ...(machine.connectorId ? { connectorId: machine.connectorId } : {}),
     paired: machine.paired,
     configured: machine.configured,
   });

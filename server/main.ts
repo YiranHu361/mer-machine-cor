@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { initialState } from "./model.ts";
 import { SqliteStore, type Store } from "./store.ts";
 import { HttpNode } from "./node-client.ts";
+import { ConnectorRelay, RoutingNode } from "./connectors.ts";
 import { Service, type Config } from "./service.ts";
 import { createApp } from "./app.ts";
 import { IntegratedPayment } from "./external.ts";
@@ -69,16 +70,23 @@ if (catalog.assets.length)
   await mutate(store, (s) => {
     for (const asset of catalog.assets) s.assets[asset.id] = asset;
   });
+// Directly configured nodes use HTTP; machines set up with a connector use the relay.
 const service = new Service(
   store,
-  new HttpNode(config.nodeUrl, process.env.FABRARY_NODE_KEY, config.secret),
+  new RoutingNode(
+    new HttpNode(config.nodeUrl, process.env.FABRARY_NODE_KEY, config.secret),
+    new ConnectorRelay(),
+    config.secret,
+  ),
   new IntegratedPayment(store),
   config,
 );
 const app = createApp(service);
-const server = app.listen(port, "127.0.0.1", () =>
+// Loopback by default. Set FABRARY_HOST to accept connectors from other computers.
+const host = process.env.FABRARY_HOST ?? "127.0.0.1";
+const server = app.listen(port, host, () =>
   console.log(
-    `Fabrary http://127.0.0.1:${port} (${mode}, ${storeMode}, ${config.paymentMode}). Owner access is in ${configPath}; credentials are never printed.`,
+    `Fabrary http://${host}:${port} (${mode}, ${storeMode}, ${config.paymentMode}). Owner access is in ${configPath}; credentials are never printed.`,
   ),
 );
 const tick = setInterval(

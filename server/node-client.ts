@@ -11,6 +11,47 @@ export interface NodeBoundary {
   ): { token: string; expires_at: number };
   fetchFrame?(url: string, machine: Machine): Promise<Buffer>;
 }
+export function signNodeToken(
+  secret: string,
+  job: Job,
+  machine: Machine,
+  scope: string,
+  extra?: { targetScope: "dispatch" | "calibration" },
+) {
+  requireThat(
+    machine.mode === "simulation" || machine.mode === "hardware",
+    "INVALID_MACHINE_MODE",
+    "The saved machine mode could not be confirmed. Ask the owner to register the current device before authorizing work.",
+    409,
+  );
+  requireThat(
+    scope !== "cancel_before_acceptance" ||
+      extra?.targetScope === "dispatch" ||
+      extra?.targetScope === "calibration",
+    "INVALID_CANCELLATION_SCOPE",
+    "Cancellation must bind the original dispatch or calibration authorization.",
+    422,
+  );
+  const expires_at = Math.floor(Date.now() / 1000) + 300;
+  const payload = {
+    machine_id: machine.id,
+    expected_mode: machine.mode,
+    ...(scope === "cancel_before_acceptance"
+      ? { target_scope: extra!.targetScope }
+      : {}),
+    job_id: job.id,
+    attempt_id: job.attemptId ?? "calibration",
+    artifact_sha256: job.artifact.sha256,
+    parameters: parameters(job),
+    expires_at,
+    scope,
+  };
+  const raw = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return {
+    token: `${raw}.${createHmac("sha256", secret).update(raw).digest("hex")}`,
+    expires_at,
+  };
+}
 export class HttpNode implements NodeBoundary {
   constructor(
     public baseUrl: string,
@@ -23,39 +64,7 @@ export class HttpNode implements NodeBoundary {
     scope: string,
     extra?: { targetScope: "dispatch" | "calibration" },
   ) {
-    requireThat(
-      machine.mode === "simulation" || machine.mode === "hardware",
-      "INVALID_MACHINE_MODE",
-      "The saved machine mode could not be confirmed. Ask the owner to register the current device before authorizing work.",
-      409,
-    );
-    requireThat(
-      scope !== "cancel_before_acceptance" ||
-        extra?.targetScope === "dispatch" ||
-        extra?.targetScope === "calibration",
-      "INVALID_CANCELLATION_SCOPE",
-      "Cancellation must bind the original dispatch or calibration authorization.",
-      422,
-    );
-    const expires_at = Math.floor(Date.now() / 1000) + 300;
-    const payload = {
-      machine_id: machine.id,
-      expected_mode: machine.mode,
-      ...(scope === "cancel_before_acceptance"
-        ? { target_scope: extra!.targetScope }
-        : {}),
-      job_id: job.id,
-      attempt_id: job.attemptId ?? "calibration",
-      artifact_sha256: job.artifact.sha256,
-      parameters: parameters(job),
-      expires_at,
-      scope,
-    };
-    const raw = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    return {
-      token: `${raw}.${createHmac("sha256", this.secret).update(raw).digest("hex")}`,
-      expires_at,
-    };
+    return signNodeToken(this.secret, job, machine, scope, extra);
   }
   async fetchFrame(url: string, machine: Machine) {
     const u = new URL(url, machine.nodeUrl ?? this.baseUrl);

@@ -79,6 +79,11 @@ test("requester and owner complete an honest simulated order, independent handli
     }),
   });
   await openProviderDetails(ownerPage, "Add a machine");
+  // Manual registration now sits beside the one-command setup.
+  await openProviderDetails(
+    ownerPage,
+    "Use a node already set up on this computer",
+  );
   await ownerPage
     .getByRole("button", { name: "Register supported device", exact: true })
     .click();

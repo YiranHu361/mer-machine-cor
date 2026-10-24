@@ -31,6 +31,14 @@ import {
 } from "../integrations/src/payments.ts";
 import { mutate } from "./store.ts";
 import {
+  ConnectorRelay,
+  RoutingNode,
+  connectorView,
+  registerConnectorRoutes,
+  setupCodeView,
+  supportedModels,
+} from "./connectors.ts";
+import {
   calibrationDeviceContext,
   calibrationOperationContext,
   calibrationStartObservation,
@@ -129,9 +137,17 @@ const machineSchema = z
 export function createApp(
   service: Service,
   webDirectory = resolve("web/dist"),
-  options: { recommendations?: RecommendationDependencies } = {},
+  options: {
+    recommendations?: RecommendationDependencies;
+    relay?: ConnectorRelay;
+  } = {},
 ) {
   const app = express();
+  const relay =
+    options.relay ??
+    (service.node instanceof RoutingNode
+      ? service.node.relay
+      : new ConnectorRelay());
   const serializeMachinePatch = machinePatchQueue();
   const serializeJobCreation = jobCreationQueue();
   app.disable("x-powered-by");
@@ -193,8 +209,14 @@ export function createApp(
     next();
   });
   const parseJson = express.json({ limit: "100kb" });
+  // Connector replies can carry one camera frame; every other request stays small.
+  const parseRelayJson = express.json({ limit: "12mb" });
   app.use((req, res, next) => {
-    parseJson(req, res, (error) => {
+    const parse =
+      req.method === "POST" && req.path === "/api/connectors/reply"
+        ? parseRelayJson
+        : parseJson;
+    parse(req, res, (error) => {
       if (!error) return next();
       const status = [400, 413, 415].includes(error.status)
         ? error.status
@@ -374,7 +396,7 @@ export function createApp(
     res.json({
       revision,
       machines: Object.values(data.machines).map(
-        ({ ownerId, nodeUrl, ownerAddress, ...m }) => m,
+        ({ ownerId, nodeUrl, connectorId, ownerAddress, ...m }) => m,
       ),
     });
   });
@@ -872,42 +894,31 @@ export function createApp(
       machines: Object.values(s.machines).map(ownerMachineView),
       jobs: Object.values(s.jobs).map(view),
       ledger: Object.values(s.operations),
+      connectors: Object.values(s.connectors ?? {})
+        .filter((connector) => !connector.revokedAt)
+        .map((connector) => connectorView(connector, relay)),
+      setupCodes: Object.values(s.setupCodes ?? {})
+        .filter(
+          (code) => !code.usedAt && Date.parse(code.expiresAt) > Date.now(),
+        )
+        .map(setupCodeView),
     });
   });
-  app.post("/api/owner/machines", async (req, res) => {
-    await owner(req);
-    const slug = String(req.body.model);
-    const models: Record<string, string> = {
-      "phomemo-m02pro": "phomemo_01",
-      "instax-mini-link-3": "instax_01",
-      "bambu-a1-mini": "bambu_01",
-      "Phomemo M02Pro": "phomemo_01",
-      "Instax Mini Link 3": "instax_01",
-      "Bambu Lab A1 mini": "bambu_01",
-    };
-    const machineId = ownValue(models, slug);
-    requireThat(
-      machineId,
-      "UNSUPPORTED_DEVICE",
-      "Supported adapters are Phomemo M02Pro, Instax Mini Link 3 (compatibility unverified), and Bambu A1 mini.",
-      422,
-    );
-    requireThat(
-      req.body.mode === "simulation" || req.body.mode === "hardware",
-      "INVALID_MODE",
-      "Choose simulation or configured hardware.",
-      422,
-    );
-    const nodeUrl =
-      process.env[
-        `FABRARY_${machineId.split("_")[0].toUpperCase()}_NODE_URL`
-      ] ?? service.config.nodeUrl;
+  // One registration path for both directly configured nodes and connectors.
+  const registerMachine = async (
+    machineId: string,
+    mode: "simulation" | "hardware",
+    target: { nodeUrl: string } | { connectorId: string },
+  ) => {
     const observed = (await service.read()).machines[machineId];
     const observedSettings = machineSettingsFingerprint(observed);
     const observedInspection = machineInspectionFingerprint(observed);
     const observedPolicy = observed.policyObservationId;
     const registrationId = id("registration");
-    const selected = { ...observed, nodeUrl };
+    const selected: Machine =
+      "connectorId" in target
+        ? { ...observed, nodeUrl: undefined, connectorId: target.connectorId }
+        : { ...observed, nodeUrl: target.nodeUrl, connectorId: undefined };
     const manifest = await service.node.call(
       "get_capabilities",
       { machine_id: machineId },
@@ -918,7 +929,7 @@ export function createApp(
       "NODE_UNAVAILABLE",
       "The configured node did not provide capabilities.",
     );
-    const machine = await mutate(service.store, (s) => {
+    return mutate(service.store, (s) => {
       const m = s.machines[machineId];
       requireThat(
         machineSettingsFingerprint(m) === observedSettings &&
@@ -934,14 +945,20 @@ export function createApp(
         "Finish existing orders before registering a different adapter.",
       );
       requireThat(
-        manifest.mode === req.body.mode,
+        manifest.mode === mode,
         "MODE_MISMATCH",
         "The configured node must be in the selected simulation or hardware mode.",
       );
-      m.mode = req.body.mode;
+      m.mode = mode;
       // Even an identical accepted observation supersedes older pending reads.
       m.registrationId = registrationId;
-      m.nodeUrl = nodeUrl;
+      if ("connectorId" in target) {
+        m.connectorId = target.connectorId;
+        delete m.nodeUrl;
+      } else {
+        m.nodeUrl = target.nodeUrl;
+        delete m.connectorId;
+      }
       m.paired = manifest.paired === true;
       m.configured = manifest.configured === true;
       if (Number.isInteger(manifest.max_job_seconds))
@@ -959,8 +976,33 @@ export function createApp(
         : "Registered; calibration and owner inspection required.";
       return m;
     });
+  };
+  app.post("/api/owner/machines", async (req, res) => {
+    await owner(req);
+    const slug = String(req.body.model);
+    const machineId = ownValue(supportedModels, slug);
+    requireThat(
+      machineId,
+      "UNSUPPORTED_DEVICE",
+      "Supported adapters are Phomemo M02Pro, Instax Mini Link 3 (compatibility unverified), and Bambu A1 mini.",
+      422,
+    );
+    requireThat(
+      req.body.mode === "simulation" || req.body.mode === "hardware",
+      "INVALID_MODE",
+      "Choose simulation or configured hardware.",
+      422,
+    );
+    const nodeUrl =
+      process.env[
+        `FABRARY_${machineId.split("_")[0].toUpperCase()}_NODE_URL`
+      ] ?? service.config.nodeUrl;
+    const machine = await registerMachine(machineId, req.body.mode, {
+      nodeUrl,
+    });
     res.status(201).json({ machine });
   });
+  registerConnectorRoutes(app, { service, relay, owner, registerMachine });
   app.patch("/api/owner/machines/:id", async (req, res) => {
     await owner(req);
     const body = machineSchema.parse(req.body);

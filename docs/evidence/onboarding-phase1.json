@@ -1,0 +1,187 @@
+{
+  "checkpoint": "Agentic machine onboarding, phase 1 (simulation)",
+  "recordedAt": "2026-10-24T09:45:42.928Z",
+  "baseCommit": "8c4623a4b9873ffecce403d3506a566ba3f1e7e9",
+  "sourceSha256": "1e839ded58a5a0e014aa78b2ad3ad06ab4b741a5097b7e09bbd34983b6037145",
+  "sourceScope": "sorted .ts/.tsx/.py/.css paths and bytes under server, node/fabrary_node, web/src, web/tests and tests",
+  "checks": {
+    "sharedCheck": {
+      "command": "npm run check",
+      "result": "PASS",
+      "typecheck": "pass",
+      "application": {
+        "passed": 268,
+        "failed": 0
+      },
+      "node": {
+        "passed": 156,
+        "failed": 0,
+        "note": "includes 9 connector tests; hardware extra installed"
+      },
+      "integrations": {
+        "passed": 31,
+        "failed": 0
+      },
+      "fetch": {
+        "passed": 5,
+        "failed": 0
+      },
+      "webBuild": "pass",
+      "webUnits": {
+        "passed": 29,
+        "failed": 0
+      }
+    },
+    "browser": {
+      "target": "Isolated built instance on 127.0.0.1:4410 with its own local SpacetimeDB 2.13 server (127.0.0.1:3012, database fabrary-qa), own node on 8798 and own credentials; simulation devices and mock payments. The user's live app on 4318 was not used because its sticker machine holds an order waiting for owner handling.",
+      "diagnostic": "First full Chromium run on the fresh instance: 257 passed, 4 failed. The edited manual-registration step looked up its button by role inside a closed disclosure (test error); 3 cases needing a ready sticker machine failed after it. Fixed the test, ran tests/workflow.spec.ts once (3 passed) to prepare the fresh instance, then ran the final suites.",
+      "chromium": {
+        "report": "web/evidence/onboarding-chromium-browser.json",
+        "startTime": "2026-10-24T09:38:05.482Z",
+        "duration": 139193.64800000002,
+        "expected": 261,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 21,
+        "accessibilityViolations": 0
+      },
+      "firefox": {
+        "report": "web/evidence/onboarding-firefox-browser.json",
+        "startTime": "2026-10-24T09:40:25.282Z",
+        "duration": 156096.984,
+        "expected": 261,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 21,
+        "accessibilityViolations": 0
+      },
+      "webkit": {
+        "report": "web/evidence/onboarding-webkit-browser.json",
+        "startTime": "2026-10-24T09:43:02.158Z",
+        "duration": 156643.815,
+        "expected": 261,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0,
+        "accessibilityScans": 21,
+        "accessibilityViolations": 0
+      }
+    },
+    "endToEnd": {
+      "target": "Isolated backend on 127.0.0.1:4400 (SQLite development store, simulation, mock payments)",
+      "result": "pass",
+      "steps": [
+        {
+          "name": "isolated backend up",
+          "mode": "simulation",
+          "payment": "mock",
+          "store": "sqlite-development"
+        },
+        {
+          "name": "setup command shown",
+          "command": "curl -fsSL http://127.0.0.1:4400/connect.sh | sh -s -- FAB-****-****"
+        },
+        {
+          "name": "connector enrolled and checklist visible"
+        },
+        {
+          "name": "Allow a short Bluetooth search (simulated)"
+        },
+        {
+          "name": "Allow pairing (simulated)"
+        },
+        {
+          "name": "Take a test photo (simulated)"
+        },
+        {
+          "name": "Confirm it is ready"
+        },
+        {
+          "name": "registered through connector",
+          "connectorBound": true,
+          "online": true,
+          "checks": [
+            "connector:done",
+            "system:done",
+            "search:done",
+            "pair:done",
+            "camera:done",
+            "ready:done",
+            "config:done",
+            "register:done"
+          ],
+          "calibrated": false,
+          "paused": true,
+          "reason": "Registered; calibration and owner inspection required."
+        },
+        {
+          "name": "simulation calibration via relay",
+          "status": 200
+        },
+        {
+          "name": "listed",
+          "status": 200
+        },
+        {
+          "name": "resumed",
+          "status": 200
+        },
+        {
+          "name": "machine state",
+          "calibrated": true,
+          "listed": true,
+          "ready": true,
+          "paused": false,
+          "media": 100
+        },
+        {
+          "name": "recommended",
+          "text": "Suitable machine found · Local picture analysisThermal stickerSticker counter · Phomemo M02Pro · Simulated device53 × 49"
+        },
+        {
+          "name": "production started"
+        },
+        {
+          "name": "produced; result photo fetched through relay"
+        },
+        {
+          "name": "order record",
+          "production": "produced",
+          "payment": "released",
+          "machine": "phomemo_01",
+          "evidenceSource": "simulation",
+          "history": [
+            "specified",
+            "specification_approved",
+            "quoted",
+            "collection_pending",
+            "collection_confirmed",
+            "dispatch_authorized",
+            "media_estimate_observed",
+            "device_completed",
+            "verification_pass",
+            "release_pending",
+            "release_confirmed"
+          ]
+        }
+      ],
+      "reconnect": "Backend and connector restarted without a setup code; the connector came back online with saved credentials and a settings change was relayed (pass)",
+      "credentialFiles": "connector.json, machines.json and setup.json mode 0600 in a 0700 folder"
+    }
+  },
+  "screenshots": [
+    "web/evidence/onboarding-01-setup-command.png",
+    "web/evidence/onboarding-02-first-allowance.png",
+    "web/evidence/onboarding-03-checklist-progress.png",
+    "web/evidence/onboarding-04-machine-connected.png",
+    "web/evidence/onboarding-05-order-through-relay.png"
+  ],
+  "notEstablished": [
+    "No Bluetooth search, pairing, RFCOMM print or camera capture was run; hardware steps are tested with fake commands only.",
+    "Instax Link 3 and Bambu A1 mini hardware setup is not automated; their connector reports that plainly.",
+    "No machine identification from photos or model lookup (planned phase 2).",
+    "The setup command uses plain HTTP on the local network; no TLS or remote (internet) relay was tested."
+  ]
+}

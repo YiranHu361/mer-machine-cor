@@ -1,5 +1,26 @@
 # Verification report
 
+## Agentic machine onboarding, phase 1 (October 24, 2026)
+
+**Add a machine** now issues a one-time setup code and a one-line command for the computer next to the machine. The connector it installs dials out to the workshop (no inbound port or SSH tunnel), runs a fixed checklist for the chosen model where every step that touches the device waits for the owner's click in the workshop, writes the machine config privately and registers the machine. Calibration, listing and resuming stay explicit owner steps. Contract: [node integration](node-integration.md#connector-mode-outbound-one-command-setup); setup guide: [Raspberry Pi and M02 Pro](raspberry-pi-m02pro.md). Source fingerprint `1e839ded58a5a0e014aa78b2ad3ad06ab4b741a5097b7e09bbd34983b6037145` ([record](evidence/onboarding-phase1.json)).
+
+| Check | Result | Boundary / evidence |
+| --- | --- | --- |
+| Shared check (`npm run check`) | PASS | Types, 268 application, 156 node (9 new connector), 31 payments/Claude, 5 Fetch, web build, 29 wallet units |
+| New backend connector tests | **8 passed** | Setup codes (shown once, single use, older codes expire, owner-only, guessing limited), relay round trip and at-most-once failures, per-connector token secrets, allowance-gated checklist and registration, idle-only registration and removal, validated address in the setup script |
+| New connector tests (Python) | **9 passed** | Each step waits for its own allowance and a retry needs a new one, M02 search/pair/channel/camera with fake commands, clear blockers for unsupported computers and models, restart keeps finished steps, private config files, relayed path allow-list, asset-only transport, removal stops the connector |
+| Chromium | **261 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/onboarding-chromium-browser.json) |
+| Firefox | **261 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/onboarding-firefox-browser.json) |
+| WebKit | **261 passed** | 0 failed, 0 skipped, 0 flaky; [report](../web/evidence/onboarding-webkit-browser.json) |
+| Automated accessibility | **63 scans, 0 detected violations** | Includes the new setup checklist at 390px; automated A/AA rules, not full conformance |
+| End-to-end onboarding | PASS | Real `connect.sh` enrolled; each allowance granted in the UI; registration, calibration and an order (dispatch, completion, result photo, mock payout) ran through the relay; restart reconnected without a code |
+
+The browser suites ran against an isolated built instance (its own local SpacetimeDB server and database, node and credentials). The live app on 4318 was restarted on the new code but not used for these runs: its sticker machine holds an order made and paid out that waits for the owner to remove, label and store the output, and these tests do not confirm physical handling. One existing browser test changed: manual registration now sits under **Use a node already set up on this computer**, so the test opens that section first. The first full Chromium run on the fresh instance failed 4 cases: that test looked for the button inside the closed section (a test error), and the 3 cases that need a ready sticker machine failed after it. The test was corrected, one workflow-only pass (3 passed) prepared the sticker machine on the fresh instance as the live app had it, and the final runs in the table followed.
+
+Not established: no Bluetooth search, pairing, print or camera capture has been run on hardware (hardware checks use fake commands only); Instax and Bambu setup are not automated; there is no machine identification from photos yet; and setup over the internet or with TLS was not tested.
+
+Screenshots: `web/evidence/onboarding-0*.png` (setup command, first allowance, checklist in progress, connected machine, order through the relay).
+
 ## Minimal interface redesign checkpoint (October 23, 2026, 17:40 Pacific)
 
 The requester and provider screens were redesigned and then reduced to a minimal layout ([design notes](ui-redesign.md)); application state, request and recovery logic is unchanged. The global simulation/mock bar was removed; those labels now appear on the recommendation, the price and provider records. Frontend source fingerprint `a32cf72d54dac56e5cb442d7ed9d519eb257bc329db587315e07942bd35089e3` ([record](evidence/redesign-qa.json)).

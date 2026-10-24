@@ -78,6 +78,36 @@ type Machine = {
   policyReconciliationRequired?: boolean;
   calibrationAt?: string;
   reservation?: { jobId: string; expiresAt: string };
+  connectorId?: string;
+};
+type ConnectorCheckView = {
+  id: string;
+  label: string;
+  status: "pending" | "running" | "waiting" | "done" | "failed";
+  detail?: string;
+  consent?: string;
+};
+type ConnectorView = {
+  id: string;
+  machineId: string;
+  mode: "simulation" | "hardware";
+  hostLabel: string;
+  online: boolean;
+  lastSeenAt?: string;
+  ready: boolean;
+  registeredAt?: string;
+  checks: ConnectorCheckView[];
+};
+type SetupCodeView = {
+  id: string;
+  machineId: string;
+  mode: string;
+  expiresAt: string;
+};
+type IssuedSetupCode = SetupCodeView & {
+  code: string;
+  command: string;
+  platformUrl: string;
 };
 type Spec = {
   assetIds: string[];
@@ -3519,9 +3549,13 @@ function OwnerApp({
     machines: Machine[];
     jobs: Job[];
     ledger: Ledger[];
+    connectors?: ConnectorView[];
+    setupCodes?: SetupCodeView[];
   } | null>(null);
   const [model, setModel] = useState("phomemo-m02pro");
   const [mode, setMode] = useState("simulation");
+  const [setupCode, setSetupCode] = useState<IssuedSetupCode | null>(null);
+  const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("queue");
   const [visitedTabs, setVisitedTabs] = useState(["queue"]);
   const selectTab = (id: string) => {
@@ -3642,6 +3676,16 @@ function OwnerApp({
   };
   const machines = dashboard?.machines || [];
   const jobs = dashboard?.jobs || [];
+  const connectors = dashboard?.connectors || [];
+  // Setups still in progress; registered connectors show on their machine card.
+  const connecting = connectors.filter((connector) => !connector.registeredAt);
+  // Shown until the code is used or expires; the checklist then takes over.
+  const liveSetupCode =
+    setupCode &&
+    dashboard?.setupCodes?.some((code) => code.id === setupCode.id) &&
+    Date.parse(setupCode.expiresAt) > Date.now()
+      ? setupCode
+      : null;
   const handling = jobs.filter(
     (j) =>
       j.fulfillmentState === "awaiting_owner" &&
@@ -4133,6 +4177,19 @@ function OwnerApp({
                       <OwnerMachine
                         key={machine.id}
                         machine={machine}
+                        connector={connectors.find(
+                          (connector) =>
+                            connector.id === machine.connectorId &&
+                            connector.registeredAt,
+                        )}
+                        onRemoveConnector={(connectorId) =>
+                          act(`${connectorId}-remove`, () =>
+                            request(
+                              `/owner/connectors/${connectorId}/revoke`,
+                              {},
+                            ),
+                          )
+                        }
                         busy={busy}
                         action={(action, body, options) =>
                           act(
@@ -4176,30 +4233,79 @@ function OwnerApp({
                       />
                     ))}
                   </div>
+                  {connecting.length > 0 && (
+                    <div className="connector-setups">
+                      {connecting.map((connector) => (
+                        <ConnectorSetup
+                          key={connector.id}
+                          connector={connector}
+                          machineName={
+                            machines.find(
+                              (machine) => machine.id === connector.machineId,
+                            )?.name ?? connector.machineId
+                          }
+                          busy={busy}
+                          onConsent={(check) =>
+                            act(`${connector.id}-consent-${check}`, () =>
+                              request(
+                                `/owner/connectors/${connector.id}/consent`,
+                                { check },
+                              ),
+                            )
+                          }
+                          onRetry={() =>
+                            act(`${connector.id}-register`, () =>
+                              request(
+                                `/owner/connectors/${connector.id}/register`,
+                                {},
+                              ),
+                            )
+                          }
+                          onRemove={() =>
+                            act(`${connector.id}-remove`, () =>
+                              request(
+                                `/owner/connectors/${connector.id}/revoke`,
+                                {},
+                              ),
+                            )
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
                   <details
                     className="provider-registration"
-                    open={machines.length === 0}
+                    open={
+                      machines.length === 0 ||
+                      Boolean(liveSetupCode) ||
+                      undefined
+                    }
                   >
                     <summary>Add a machine</summary>
                     <form
-                      className="register-form"
+                      className="setup-code-form"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        void act("register", async () => {
-                          await request("/owner/machines", {
-                            model,
-                            mode,
+                        void act("setup-code", async () => {
+                          const issued = await api<{
+                            setupCode: IssuedSetupCode;
+                            command: string;
+                            platformUrl: string;
+                          }>("/owner/setup-codes", { model, mode });
+                          setCopied(false);
+                          setSetupCode({
+                            ...issued.setupCode,
+                            command: issued.command,
+                            platformUrl: issued.platformUrl,
                           });
                         });
                       }}
                     >
-                      <div>
-                        <h3>Add a supported machine</h3>
-                        <p>
-                          Choose a supported model. Fabrary uses the connection
-                          configured in your local setup.
-                        </p>
-                      </div>
+                      <p>
+                        Choose the machine, then run one command on the computer
+                        next to it. Fabrary checks that computer, asks before
+                        each step, and writes the settings for you.
+                      </p>
                       <div className="form-grid">
                         <Field label="Supported model">
                           <select
@@ -4226,26 +4332,94 @@ function OwnerApp({
                               Simulation · no physical job
                             </option>
                             <option value="hardware">
-                              Hardware · requires configured node
+                              Hardware · a real machine
                             </option>
                           </select>
                         </Field>
                       </div>
-                      {mode === "hardware" && (
-                        <p className="fine-print">
-                          Your local setup must already include the device
-                          connection and credential. Registration checks that
-                          connection; physical calibration is a separate step.
-                        </p>
-                      )}
                       <Button
                         className="primary"
                         type="submit"
-                        busy={busy === "register"}
+                        busy={busy === "setup-code"}
                       >
-                        Register supported device
+                        Get setup command
                       </Button>
                     </form>
+                    {liveSetupCode && (
+                      <div className="setup-code-panel" role="status">
+                        <p>
+                          On the computer next to the machine
+                          {liveSetupCode.mode === "hardware" &&
+                          liveSetupCode.machineId === "phomemo_01"
+                            ? " (a Raspberry Pi or Linux computer with Bluetooth)"
+                            : ""}
+                          , run:
+                        </p>
+                        <div className="command-box">
+                          <code>{liveSetupCode.command}</code>
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => {
+                              void navigator.clipboard
+                                ?.writeText(liveSetupCode.command)
+                                .then(() => setCopied(true))
+                                .catch(() => setCopied(false));
+                            }}
+                          >
+                            {copied ? "Copied" : "Copy command"}
+                          </button>
+                        </div>
+                        <p className="fine-print">
+                          Setup code {liveSetupCode.code} works once and expires
+                          at{" "}
+                          {new Date(liveSetupCode.expiresAt).toLocaleTimeString(
+                            undefined,
+                            { hour: "numeric", minute: "2-digit" },
+                          )}
+                          . It is shown only here.
+                          {/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(
+                            liveSetupCode.platformUrl,
+                          )
+                            ? " This address works only on this computer. To connect another computer, set FABRARY_HOST=0.0.0.0 and FABRARY_PUBLIC_ORIGIN to this computer's network address, then restart the workshop."
+                            : ""}
+                        </p>
+                        <p className="setup-waiting">
+                          <span className="spinner" aria-hidden="true" />{" "}
+                          Waiting for the machine computer to connect…
+                        </p>
+                      </div>
+                    )}
+                    <details className="manual-registration">
+                      <summary>
+                        Use a node already set up on this computer
+                      </summary>
+                      <form
+                        className="register-form"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void act("register", async () => {
+                            await request("/owner/machines", {
+                              model,
+                              mode,
+                            });
+                          });
+                        }}
+                      >
+                        <p>
+                          Registers the model and mode chosen above with the
+                          node configured in this computer’s private local
+                          setup. Calibration is a separate step.
+                        </p>
+                        <Button
+                          className="secondary"
+                          type="submit"
+                          busy={busy === "register"}
+                        >
+                          Register supported device
+                        </Button>
+                      </form>
+                    </details>
                   </details>
                 </>
               )}
@@ -4273,12 +4447,142 @@ function OwnerApp({
     </OwnerDraftProvider>
   );
 }
+const checkWords: Record<ConnectorCheckView["status"], string> = {
+  done: "Done",
+  waiting: "Needs you",
+  running: "In progress",
+  failed: "Needs attention",
+  pending: "Not started",
+};
+/** Live setup of one machine computer. Each consented step waits for the owner. */
+function ConnectorSetup({
+  connector,
+  machineName,
+  busy,
+  onConsent,
+  onRetry,
+  onRemove,
+}: {
+  connector: ConnectorView;
+  machineName: string;
+  busy: string;
+  onConsent: (check: string) => Promise<boolean>;
+  onRetry: () => Promise<boolean>;
+  onRemove: () => Promise<boolean>;
+}) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const headingId = useId();
+  const current =
+    connector.checks.find((check) => check.status !== "done") ?? null;
+  const position = current ? connector.checks.indexOf(current) + 1 : 0;
+  return (
+    <section className="connector-setup" aria-labelledby={headingId}>
+      <div className="connector-head">
+        <h3 id={headingId}>
+          Setting up {machineName}
+          {connector.mode === "simulation" ? " (simulation)" : ""}
+        </h3>
+        <Badge tone={connector.online ? "green" : "amber"}>
+          {connector.online ? "Connected" : "Offline"} · {connector.hostLabel}
+        </Badge>
+      </div>
+      <p className="sr-only" aria-live="polite">
+        {current
+          ? `Step ${position} of ${connector.checks.length}: ${current.label}, ${checkWords[current.status].toLowerCase()}.`
+          : "Setup is complete."}
+      </p>
+      <ol className="setup-checklist">
+        {connector.checks.map((check) => (
+          <li key={check.id} className={`setup-check is-${check.status}`}>
+            <span className="check-mark" aria-hidden="true">
+              {check.status === "done" ? (
+                "✓"
+              ) : check.status === "failed" ? (
+                "!"
+              ) : check.status === "running" ? (
+                <span className="spinner" />
+              ) : null}
+            </span>
+            <div>
+              <strong>{check.label}</strong>
+              <span className="sr-only"> · {checkWords[check.status]}</span>
+              {check.detail && <p>{check.detail}</p>}
+              {check.status === "waiting" && check.consent && (
+                <Button
+                  className={check === current ? "primary" : "secondary"}
+                  busy={busy === `${connector.id}-consent-${check.id}`}
+                  disabled={Boolean(busy) || !connector.online}
+                  onClick={() => {
+                    void onConsent(check.id);
+                  }}
+                >
+                  {check.consent}
+                </Button>
+              )}
+              {check.id === "register" && check.status === "failed" && (
+                <Button
+                  className="secondary"
+                  busy={busy === `${connector.id}-register`}
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    void onRetry();
+                  }}
+                >
+                  Try again
+                </Button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+      {!connector.online && (
+        <p className="fine-print">
+          The connector on {connector.hostLabel} is not reaching this workshop.
+          Make sure it is still running there.
+        </p>
+      )}
+      {confirmRemove ? (
+        <div className="button-row">
+          <Button
+            className="danger"
+            busy={busy === `${connector.id}-remove`}
+            disabled={Boolean(busy)}
+            onClick={() => {
+              void onRemove();
+            }}
+          >
+            Cancel setup
+          </Button>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setConfirmRemove(false)}
+          >
+            Keep setting up
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="text-button subdued"
+          onClick={() => setConfirmRemove(true)}
+        >
+          Cancel this setup…
+        </button>
+      )}
+    </section>
+  );
+}
 function OwnerMachine({
   machine: m,
+  connector,
+  onRemoveConnector,
   busy,
   action,
 }: {
   machine: Machine;
+  connector?: ConnectorView;
+  onRemoveConnector?: (connectorId: string) => Promise<boolean>;
   busy: string;
   action: (
     name: string,
@@ -4357,23 +4661,27 @@ function OwnerMachine({
     if (accepted) setInspected(false);
     return accepted;
   };
-  const nextStep = m.activeJobId
-    ? "A job is using this machine. Fabrary will track its progress."
-    : m.policyReconciliationRequired
-      ? "Open Settings to synchronize this machine’s saved policy."
-      : !m.paired || !m.configured
-        ? "Check the configured device connection before calibration."
-        : !m.calibrated
-          ? m.mode === "simulation"
-            ? "Run a simulation calibration to finish this test setup."
-            : "Open Machine checks to run and inspect a supervised calibration."
-          : m.paused
-            ? "Inspect and clear the machine, then resume when it is safe."
-            : !m.listed
-              ? "Open Settings to list this machine when you are ready."
-              : !m.ready
-                ? "Check the saved status below before accepting more work."
-                : "Setup is complete. Fabrary checks availability for each request.";
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const nextStep =
+    connector && !connector.online
+      ? `The machine computer ${connector.hostLabel} is not connected. Start the connector there again.`
+      : m.activeJobId
+        ? "A job is using this machine. Fabrary will track its progress."
+        : m.policyReconciliationRequired
+          ? "Open Settings to synchronize this machine’s saved policy."
+          : !m.paired || !m.configured
+            ? "Check the configured device connection before calibration."
+            : !m.calibrated
+              ? m.mode === "simulation"
+                ? "Run a simulation calibration to finish this test setup."
+                : "Open Machine checks to run and inspect a supervised calibration."
+              : m.paused
+                ? "Inspect and clear the machine, then resume when it is safe."
+                : !m.listed
+                  ? "Open Settings to list this machine when you are ready."
+                  : !m.ready
+                    ? "Check the saved status below before accepting more work."
+                    : "Setup is complete. Fabrary checks availability for each request.";
   const setup = [
     ["Connected", m.paired && m.configured],
     ["Calibrated", m.calibrated],
@@ -4749,6 +5057,43 @@ function OwnerMachine({
           live physical inspection.
         </p>
         {m.reason && <p className="machine-reason">{m.reason}</p>}
+        {connector && (
+          <div className="machine-connector">
+            <p>
+              Connected through <strong>{connector.hostLabel}</strong> ·{" "}
+              {connector.online ? "online" : "offline"}
+            </p>
+            {confirmRemove ? (
+              <div className="button-row">
+                <Button
+                  className="danger"
+                  busy={busy === `${connector.id}-remove`}
+                  disabled={Boolean(busy)}
+                  onClick={() => {
+                    void onRemoveConnector?.(connector.id);
+                  }}
+                >
+                  Remove connector
+                </Button>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setConfirmRemove(false)}
+                >
+                  Keep it
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="text-button subdued"
+                onClick={() => setConfirmRemove(true)}
+              >
+                Remove connector…
+              </button>
+            )}
+          </div>
+        )}
       </details>
     </article>
   );

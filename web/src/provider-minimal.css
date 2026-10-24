@@ -493,6 +493,151 @@
   border-top: 1px solid var(--line);
 }
 
+/* ---------- Connecting a machine ---------- */
+.setup-code-form > p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.setup-code-form .form-grid {
+  margin-top: 8px;
+}
+.setup-code-panel {
+  margin: 16px 0 4px;
+}
+.setup-code-panel > p {
+  font-size: 14px;
+}
+.command-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0;
+  padding: 10px 10px 10px 14px;
+  border-radius: var(--radius-s);
+  background: var(--sunken);
+}
+.command-box code {
+  flex: 1 1 260px;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.setup-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.manual-registration {
+  margin-top: 8px;
+}
+.manual-registration > summary {
+  font-size: 13px;
+  color: var(--muted);
+}
+.manual-registration .register-form p {
+  font-size: 14px;
+  color: var(--muted);
+}
+.connector-setups {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+}
+.connector-setup {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.connector-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 12px;
+}
+.connector-head h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.setup-checklist {
+  list-style: none;
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.setup-check {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+}
+.setup-check > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.setup-check strong {
+  font-weight: 500;
+}
+.setup-check p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.setup-check button {
+  margin-top: 8px;
+}
+.check-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 1.5px solid #c8c8c4;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.setup-check.is-done .check-mark {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+.setup-check.is-waiting .check-mark {
+  border-color: var(--ink);
+}
+.setup-check.is-waiting strong {
+  font-weight: 600;
+}
+.setup-check.is-failed .check-mark {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.setup-check.is-failed p {
+  color: var(--danger);
+}
+.setup-check.is-pending {
+  color: var(--muted);
+}
+.check-mark .spinner {
+  width: 12px;
+  height: 12px;
+}
+.machine-connector {
+  margin-top: 8px;
+  font-size: 14px;
+}
+.machine-connector p {
+  margin: 0;
+}
+
 /* ---------- Supervised physical calibration ---------- */
 .physical-calibration > summary {
   font-size: 14px;

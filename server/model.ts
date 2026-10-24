@@ -144,6 +144,8 @@ export interface Machine {
   activeJobId: string | null;
   reservation?: { jobId: string; expiresAt: string };
   nodeUrl?: string;
+  /** Set when the machine is reached through an outbound connector. */
+  connectorId?: string;
   policy: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
   policyReconciliationRequired?: boolean;
@@ -259,6 +261,44 @@ export interface Operation {
   receipt?: any;
   retryable?: boolean;
 }
+/** A one-time code that lets one machine computer enroll one connector. */
+export interface SetupCode {
+  id: string;
+  codeHash: string;
+  machineId: string;
+  mode: "simulation" | "hardware";
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
+  connectorId?: string;
+}
+export type ConnectorCheckStatus =
+  "pending" | "running" | "waiting" | "done" | "failed";
+/** One step of automatic setup, reported by the connector or the backend. */
+export interface ConnectorCheck {
+  id: string;
+  label: string;
+  status: ConnectorCheckStatus;
+  detail?: string;
+  /** The owner must allow this step before the connector runs it. */
+  consent?: string;
+}
+/** An enrolled machine computer that dials out to this workshop. */
+export interface Connector {
+  id: string;
+  machineId: string;
+  mode: "simulation" | "hardware";
+  keyHash: string;
+  hostLabel: string;
+  createdAt: string;
+  updatedAt: string;
+  revokedAt?: string;
+  checks: ConnectorCheck[];
+  consents: Record<string, string>;
+  ready?: boolean;
+  registeredAt?: string;
+  registrationError?: string;
+}
 export interface State {
   machines: Record<string, Machine>;
   jobs: Record<string, Job>;
@@ -270,6 +310,8 @@ export interface State {
   >;
   paymentReferences: Record<string, string>;
   calibrations?: Record<string, Job>;
+  setupCodes?: Record<string, SetupCode>;
+  connectors?: Record<string, Connector>;
   schemaVersion: 1;
 }
 export function initialState(): State {
