@@ -116,28 +116,45 @@ const login = await fetch(`${app}/api/session`, {
   }),
 });
 const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
-const switched = await fetch(
-  `${app}/api/owner/machines/${ourMachine}/producer-hub`,
-  {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({
-      producerMachineId: producerMachine,
-      confirmTestPrint: true,
-    }),
-  },
-);
-if (switched.ok)
+const dashboard = await (
+  await fetch(`${app}/api/owner/dashboard`, { headers: { cookie } })
+).json();
+const ours = dashboard.machines?.find((m) => m.id === ourMachine);
+if (ours?.producerHub?.machineId === producerMachine)
   console.log(
-    `• ${ourMachine} now prints through the producer side's hub as ${producerMachine}${dryRun ? " (dry run: no paper)" : ""}.`,
+    `• ${ourMachine} already prints through the producer side's hub as ${producerMachine}.`,
   );
-else
+else {
+  const switched = await fetch(
+    `${app}/api/owner/machines/${ourMachine}/producer-hub`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        producerMachineId: producerMachine,
+        confirmTestPrint: true,
+      }),
+    },
+  );
   console.log(
-    `• ${ourMachine} was not moved onto the hub: ${(await switched.text()).slice(0, 200)}`,
+    switched.ok
+      ? `• ${ourMachine} now prints through the producer side's hub as ${producerMachine}${dryRun ? " (dry run: no paper)" : ""}.`
+      : `• ${ourMachine} was not moved onto the hub: ${(await switched.text()).slice(0, 200)}`,
+  );
+}
+const waiting = (dashboard.jobs ?? []).filter(
+  (j) => j.machineId === ourMachine && j.productionState === "needs_review",
+);
+if (waiting.length)
+  console.log(
+    `• ${waiting.length} print${waiting.length > 1 ? "s are" : " is"} waiting for your check, so the printer takes no new order yet.\n` +
+      `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
+      `  and press "Printed fine · approve and free the printer".`,
   );
 console.log(
   `\nReady. Open ${app}/make, type "i want a sticker", add a picture and press Start.\n` +
-    `Tick the permission box, then "Pay & make" (mock payment).` +
+    `Tick the permission box, then "Pay & make" (mock payment).\n` +
+    `After each print, approve it in ${app}/owner so the printer takes the next order.` +
     (convexUrl
       ? `\nLive view from Convex: ${app}/live`
       : `\nLive view is off: set CONVEX_URL or the full CONVEX_DEPLOY_KEY in .env, then npm run convex:push.`),

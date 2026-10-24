@@ -20,6 +20,7 @@ import { cliRunner } from "../server/orchestration/producer.ts";
 /** A stand-in for producer-side/hub/dev_server.py with the same endpoints. */
 function fakeHub() {
   const offers: any[] = [];
+  const approvals: any[] = [];
   const events: { type: string; data: any }[] = [];
   const machines = [
     {
@@ -58,12 +59,19 @@ function fakeHub() {
         return reply(200, job);
       }
       if (req.url === "/dev/cancel") return reply(200, { ok: "sent" });
+      if (req.url === "/dev/approve") {
+        const ref = JSON.parse(body);
+        approvals.push(ref);
+        const job = offers.find((o) => o.job_id === ref.job_id);
+        events.push({ type: "job.done", data: { ...job, state: "done" } });
+        return reply(200, { ...job, state: "done" });
+      }
       reply(404, { detail: "not found" });
     });
   });
   const report = (job: any, change: Record<string, unknown>) =>
     events.push({ type: "job.updated", data: { ...job, ...change } });
-  return { server, offers, events, machines, report };
+  return { server, offers, approvals, events, machines, report };
 }
 
 const ready = existsSync(
@@ -263,15 +271,46 @@ test(
         "nothing is released before the owner's check",
       );
 
-      // A declined job is refunded and never retried by itself.
-      await mutate(store, (s) => {
-        Object.assign(s.machines.phomemo_01, {
-          ready: true,
-          paused: false,
-          activeJobId: null,
-        });
-        delete s.machines.phomemo_01.reservation;
+      // Until the owner checks it, a new order hears the printer is busy.
+      const waiting = await orchestrator.createOrder(
+        requester,
+        { requestText: "I want a cat sticker" },
+        "hub-order-waiting",
+      );
+      await orchestrator.settle(waiting.order.id);
+      let w = await orchestrator.view(requester, waiting.order.id);
+      await orchestrator.chooseDesign(requester, w.id, {
+        expectedRevision: w.draft.revision,
+        candidateSetId: w.candidates!.id,
+        candidateId: w.candidates!.candidates[0].id,
       });
+      await orchestrator.settle(w.id);
+      w = await orchestrator.view(requester, w.id);
+      assert.equal(w.draft.stage, "unavailable");
+      assert.match(w.draft.reason!, /finishing another order/);
+
+      // No camera on the producer side: the owner's own check approves the
+      // print, records handling and frees the printer in one step.
+      const approve = (body: object) =>
+        owner.post(`/api/owner/jobs/${a.child!.id}/approve-print`).send(body);
+      await approve({}).expect(422);
+      await approve({ checked: true }).expect(200);
+      const approved = (await service.read()).jobs[a.child!.id];
+      assert.equal(approved.productionState, "produced");
+      assert.equal(approved.fulfillmentState, "ready_for_pickup");
+      assert.equal(approved.evidence.source, "owner_inspection");
+      assert.equal(approved.evidence.manual, true);
+      assert.ok(["release_pending", "released"].includes(approved.paymentState));
+      assert.deepEqual(hub.approvals, [
+        { machine_id: "m_sticker_live", job_id: offer.job_id },
+      ]);
+      const freed = (await service.read()).machines.phomemo_01;
+      assert.deepEqual(
+        [freed.ready, freed.paused, freed.activeJobId],
+        [true, false, null],
+      );
+
+      // A declined job is refunded and never retried by itself.
       const second = await order("hub-order-2");
       const declined = hub.offers[1];
       hub.report(declined, {

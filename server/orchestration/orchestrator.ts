@@ -60,7 +60,11 @@ import {
   producerProfile,
   type MachineKnowledgeProfile,
 } from "./knowledge.ts";
-import { eligibleRegistryMachines, PROCESS_OUTPUT } from "./matching.ts";
+import {
+  BUSY_REASON,
+  eligibleRegistryMachines,
+  PROCESS_OUTPUT,
+} from "./matching.ts";
 import { PRICE_POLICY, priceAssignment, registryPriceCard } from "./pricing.ts";
 import {
   cliRunner,
@@ -1078,7 +1082,9 @@ export class Orchestrator {
           item.colorImportant &&
             rejected.some((r) => r.reason.includes("colour"))
             ? "No available machine can keep these colours right now."
-            : `No available machine can make "${item.name}" right now.`,
+            : rejected.some((r) => r.reason === BUSY_REASON)
+              ? `The machine for "${item.name}" is finishing another order; the owner frees it after checking that print. Try again in a moment.`
+              : `No available machine can make "${item.name}" right now.`,
         );
         continue;
       }

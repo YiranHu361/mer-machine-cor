@@ -33,6 +33,8 @@ export interface Rejection {
  * Every registry machine that can make the intended result now. Unknown or
  * assumed critical facts exclude hardware rather than becoming guesses.
  */
+/** A machine that is set up but still finishing (or holding) another order. */
+export const BUSY_REASON = "Busy with another order.";
 export function eligibleRegistryMachines(
   state: State,
   item: Pick<IntentItem, "process" | "quantity" | "colorImportant">,
@@ -69,7 +71,11 @@ export function eligibleRegistryMachines(
       m.policyReconciliationRequired ||
       liveReservation
     ) {
-      reject("Not ready, listed and idle.");
+      reject(
+        m.activeJobId || liveReservation
+          ? BUSY_REASON
+          : "Not ready, listed and idle.",
+      );
       continue;
     }
     if (

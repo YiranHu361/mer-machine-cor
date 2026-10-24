@@ -158,6 +158,25 @@ export class ProducerHubNode {
           "Cancel sent to the producer side; the printer stops between chunks and may still print what it already has.",
       };
     }
+    if (tool === "/reconcile") {
+      // The owner inspected the print. A pass is recorded at the producer side
+      // as its labeled manual approval, so both sides agree the job is done.
+      // Best effort: the owner's inspection stands even when the hub has
+      // restarted (and forgotten the job) or is unreachable.
+      try {
+        const job = await this.find(input.attempt_id);
+        if (job && input.result === "completed" && job.state !== "done")
+          await this.hub("/dev/approve", {
+            machine_id: theirs,
+            job_id: job.job_id,
+          });
+      } catch {}
+      return {
+        execution_status: input.result === "completed" ? "completed" : "failed",
+        completion_credible: false,
+        reason: `Owner inspection: ${input.reason}`,
+      };
+    }
     if (tool === "camera_snapshot")
       throw new Problem(
         "CAMERA_UNAVAILABLE",
@@ -299,6 +318,60 @@ export function registerProducerHubRoutes(
       m.paused = false;
       m.policyReconciliationRequired = false;
       m.reason = `Prints through the producer side's hub as ${theirs}. The owner confirmed a test print; the owner checks each print.`;
+      return m;
+    });
+    res.json({ machine });
+  });
+  /**
+   * "Approve manually" for a print from the producer side, which has no
+   * camera yet: the owner checked the item and took it off the printer. One
+   * step records the passing review, the handling and the resume, so the
+   * printer takes the next order. Each step keeps its own checks.
+   */
+  app.post("/api/owner/jobs/:id/approve-print", async (req, res) => {
+    await owner(req);
+    requireThat(
+      req.body?.checked === true,
+      "INSPECTION_REQUIRED",
+      "Confirm that you checked the print and took it off the printer.",
+      422,
+    );
+    const jobId = String(req.params.id);
+    const job = ownValue((await service.read()).jobs, jobId);
+    requireThat(job, "NOT_FOUND", "Order not found.", 404);
+    const machineId = job.machineId!;
+    requireThat(
+      (await service.read()).machines[machineId]?.producerHub,
+      "NOT_ON_HUB",
+      "Only prints from the producer side's hub are approved this way.",
+      409,
+    );
+    const reason =
+      typeof req.body.reason === "string" && req.body.reason.trim().length >= 8
+        ? req.body.reason.trim()
+        : "Checked the print by eye and took it off the printer.";
+    if (job.productionState === "needs_review")
+      await service.operatorReview(jobId, "pass", reason);
+    if ((await service.job(jobId)).productionState === "produced")
+      await service.prepare(jobId, {
+        removed: true,
+        labeled: true,
+        stored: true,
+        cleared: true,
+      });
+    const machine = await mutate(service.store, (s) => {
+      const m = s.machines[machineId];
+      requireThat(
+        m.producerHub &&
+          m.calibrated &&
+          !m.activeJobId &&
+          !m.policyReconciliationRequired,
+        "OWNER_RECOVERY_REQUIRED",
+        "The printer still has an order on it. Refresh and check that order first.",
+      );
+      m.paused = false;
+      m.ready = true;
+      m.reason = `Prints through the producer side's hub as ${m.producerHub.machineId}. The owner checks each print.`;
       return m;
     });
     res.json({ machine });

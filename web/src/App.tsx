@@ -79,6 +79,8 @@ type Machine = {
   policy?: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
   settingsFingerprint?: string;
+  /** Set when the machine prints through the producer side's hub. */
+  producerHub?: { machineId: string; since: string };
   policyReconciliationRequired?: boolean;
   calibrationAt?: string;
   reservation?: { jobId: string; expiresAt: string };
@@ -4096,6 +4098,11 @@ function OwnerApp({
                                     (machine) => machine.id === job.machineId,
                                   )?.name
                                 }
+                                onProducerHub={
+                                  !!machines.find(
+                                    (machine) => machine.id === job.machineId,
+                                  )?.producerHub
+                                }
                                 ledger={dashboard.ledger}
                                 busy={busy}
                                 health={health}
@@ -7084,10 +7091,13 @@ function OwnerJob({
   ledger,
   refresh,
   machineName,
+  onProducerHub,
 }: {
   job: Job;
   ledger: Ledger[];
   machineName?: string;
+  /** The machine prints through the producer side's hub, which has no camera yet. */
+  onProducerHub?: boolean;
   busy: string;
   health: Health | null;
   action: OwnerJobAction;
@@ -7359,6 +7369,25 @@ function OwnerJob({
           </div>
         </details>
       )}
+      {onProducerHub &&
+        j.productionState === "needs_review" &&
+        j.attemptId && (
+          <div className="approve-print">
+            <p>
+              This printer has no camera yet, so you are the check. Look at the
+              print, take it off the printer, then approve it to free the
+              printer for the next order.
+            </p>
+            <Button
+              className="primary"
+              busy={busy === `${j.id}-approve-print`}
+              disabled={Boolean(busy)}
+              onClick={() => void action("approve-print", { checked: true })}
+            >
+              Printed fine · approve and free the printer
+            </Button>
+          </div>
+        )}
       {j.productionState === "needs_review" && (
         <form
           className="review-form"

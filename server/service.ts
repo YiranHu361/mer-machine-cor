@@ -2151,8 +2151,12 @@ export class Service {
           operatorOverride: true,
         };
       } catch (e) {
+        // The producer side's hub has no camera yet, so for its machines the
+        // owner's own inspection is the evidence: a labeled manual approval,
+        // never presented as a camera check.
+        const manual = result === "pass" && !!m.producerHub;
         requireThat(
-          result === "fail",
+          result === "fail" || manual,
           "EVIDENCE_REQUIRED",
           "A passing override requires a usable fresh result frame.",
         );
@@ -2160,11 +2164,12 @@ export class Service {
           capturedAt: now(),
           machineId: m.id,
           jobId: j.id,
-          result: "fail",
-          source: m.mode,
+          result,
+          source: manual ? "owner_inspection" : m.mode,
           completionCredible: false,
           reason,
           operatorOverride: true,
+          ...(manual ? { manual: true } : {}),
         };
       }
       await this.resolveEvidence(jobId, evidence, reason, {
