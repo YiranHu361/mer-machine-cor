@@ -46,7 +46,7 @@ async def main() -> None:
     ap.add_argument("--text")
     ap.add_argument("--copies", type=int, default=1)
     ap.add_argument("--width-mm", type=float)
-    ap.add_argument("--transport", choices=["ble", "serial", "file"])
+    ap.add_argument("--transport", choices=["ble", "serial", "lan", "file"])
     ap.add_argument("--out", type=Path, default=Path(".work/run_job"))
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()

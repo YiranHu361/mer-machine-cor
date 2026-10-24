@@ -279,7 +279,7 @@ def main() -> None:
     ap.add_argument("--hub", default=os.environ.get("FABRARY_HUB_URL", "http://localhost:8000"))
     ap.add_argument("--work-dir", type=Path, default=Path(".work"))
     ap.add_argument("--max-queue", type=int, default=3)
-    ap.add_argument("--transport", choices=["ble", "serial", "file"],
+    ap.add_argument("--transport", choices=["ble", "serial", "lan", "file"],
                     help="override adapter.transport (file = dry run, no printer)")
     ap.add_argument("--probe", action="store_true", help="connect to the machine once before going online")
     ap.add_argument("-v", "--verbose", action="store_true")

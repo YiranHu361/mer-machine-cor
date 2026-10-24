@@ -1,0 +1,75 @@
+# Bambu Lab A1 mini adapter
+
+`adapter.type: "bambu_a1mini"` · process `fdm_print` · printed on our A1 mini (firmware 01.05.00.00, serial `0300CA661802587`) on 2026-10-24.
+
+| File | What it does |
+| --- | --- |
+| `adapter.py` | `BambuA1Mini`: prepare (wrap/check the file), run (pre-flight, upload, start, follow), `preflight()` |
+| `gcode.py` | Pure: `inspect_gcode` (model, nozzle, filament, grams, time from the slicer header), `build_gcode_3mf` |
+| `transport.py` | `lan` (MQTT :8883 + implicit FTPS :990), `file` (dry run), SSDP `discover`, serial from the TLS cert |
+
+**Scope: a rudimentary first test.** It takes one G-code file someone already sliced for the A1 mini and prints it. We have printed one part with it: [`samples/yiran_PLA_11m11s.gcode`](../../../samples/yiran_PLA_11m11s.gcode), 15 layers, 1.9 g of PLA, about 11 min.
+
+Next steps:
+
+- Slice on the node. The consumer sends an STL, and `prepare` runs the OrcaSlicer / Bambu Studio CLI with one fixed A1 mini PLA profile.
+- Or download ready-sliced A1 mini G-code / `.gcode.3mf` from model sites.
+- Test with more models (bigger, longer, overhangs, multi-object plates) before trusting the time and gram estimates for pricing.
+- Add a hub → node "plate cleared" message.
+
+## Printer setup (once)
+
+1. Printer and node computer on the **same network**. Check with `python -m node.tools.bambu discover`.
+2. On the printer: **Settings → WLAN → LAN Only Mode: on**, then **Developer Mode: on** (firmware ≥ 01.04 rejects third-party print commands without it). Note the **Access Code** shown there. It changes whenever LAN mode is toggled.
+3. A **microSD card** in the printer. Uploaded jobs are stored on it.
+4. Set the code: `echo BAMBU_ACCESS_CODE=12345678 >> producer-side/.env` (git-ignored), and the IP in `node/machines/m_fdm_01.json` → `adapter.host`.
+5. On the printer, set the external spool's filament type (PLA). Pre-flight compares it with the file.
+
+## Print a file
+
+```sh
+cd producer-side
+.venv/bin/python -m node.tools.bambu status
+.venv/bin/python -m node.tools.bambu inspect samples/yiran_PLA_11m11s.gcode   # would we refuse it?
+.venv/bin/python -m node.tools.bambu print part.gcode            # upload, start, follow to FINISH
+.venv/bin/python -m node.tools.bambu print part.gcode --dry-run  # fake printer
+.venv/bin/python -m node.tools.bambu stop
+```
+
+`node.tools.run_job --machine node/machines/m_fdm_01.json part.gcode` and the hub path (`node.client`) drive the same adapter.
+
+Input: a `.gcode` sliced in Bambu Studio / OrcaSlicer **for the A1 mini**, or a `.gcode.3mf` (File → Export plate sliced file). Plain G-code is wrapped into a single-plate `.gcode.3mf`, byte for byte, because that is what the `project_file` command prints. STL slicing on the node is not built yet.
+
+## What happens to a job
+
+1. **prepare** reads the slicer's header and wraps the file → `<job_id>.gcode.3mf`.
+2. **run**:
+   1. MQTT connect and `pushall` for a full report.
+   2. **Pre-flight.** Any failure refuses the job before anything is uploaded:
+
+      | Reason | When |
+      | --- | --- |
+      | `wrong_printer` / `wrong_nozzle` | File sliced for another model or nozzle |
+      | `printer_busy` | Printer is PREPARE, RUNNING or PAUSE |
+      | `plate_not_cleared` | This node printed and nobody cleared the plate, or the printer says FINISH/FAILED and `--plate-cleared` wasn't given |
+      | `no_sd_card` | No microSD card in the printer |
+      | `wrong_material` | File's filament type ≠ printer's spool setting (manifest if unset). Override: `--allow-material-mismatch` |
+      | `out_of_media` | File's grams + `min_spare_g` (2 g) > `media_loaded.remaining_est` |
+      | `too_long` | Slicer estimate > `limits.max_job_minutes` |
+
+   3. FTPS upload to the SD card root as `fabrary_<job_id>.gcode.3mf`.
+   4. `project_file` over MQTT: bed leveling on, flow/vibration calibration off, external spool.
+   5. Follow the reports. The job counts as started when the printer reports PREPARE/RUNNING for our `subtask_name` (120 s limit). Progress maps 0–100 % to 0.05–0.9, then 1.0 on FINISH. FAILED raises with `print_error` and HMS codes.
+   6. Subtract the file's grams from `remaining_est`, and set status `error` / `plate_not_cleared`. Policy then rejects jobs until `plate_cleared()` is called. The hub message for this isn't in the contract yet.
+3. **cancel** sends `stop` at the next report (≤ 20 s). The part stays on the plate.
+
+## Confirmed on our printer
+
+- The minimal `.gcode.3mf` and `url: file:///sdcard/<name>` are accepted; the printer reports our `subtask_name`.
+- The broker never PUBACKs QoS 1 publishes, so commands go out at QoS 0.
+- Reports: `vt_tray.tray_type` = `PLA`, `sdcard: true` and `nozzle_diameter: "0.4"` are all present, so pre-flight uses live values.
+- The A1 mini reports RUNNING (layer 0) during heating and leveling, before the first layer.
+
+## Network gotcha: iPhone hotspot
+
+An iPhone hotspot tells clients it prefers IPv6-only (DHCP option 108). macOS honors that and gets no IPv4 address; you'll see only `192.0.0.2`. The printer ignores it and gets `172.20.10.x`. The Mac can then hear the printer's broadcasts (`discover` works), but it can't reach ports 8883 and 990. Fix: give the Mac a manual IPv4 on the hotspot subnet with `networksetup -setmanual Wi-Fi 172.20.10.14 255.255.255.240 172.20.10.1`. Undo it with `networksetup -setdhcp Wi-Fi`.

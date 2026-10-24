@@ -14,7 +14,7 @@ from .base import Adapter, AdapterError, Progress
 REGISTRY: dict[str, str] = {
     "phomemo_m02pro": "phomemo:PhomemoM02Pro",
     # "instax_mini": "instax:InstaxMini",       # photo_print, TODO
-    # "bambu_a1mini": "bambu:BambuA1Mini",      # fdm_print, TODO
+    "bambu_a1mini": "bambu:BambuA1Mini",
     # "sim": "sim:SimAdapter",                  # every simulated process, TODO
 }
 

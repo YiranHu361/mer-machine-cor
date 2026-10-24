@@ -1,0 +1,41 @@
+{
+  "machine_id": "m_fdm_01",
+  "process": "fdm_print",
+  "display_name": "Table Bambu Lab A1 mini",
+  "owner": "team",
+  "owner_wallet": "0xOWNER_WALLET_ON_BASE_SEPOLIA",
+  "simulated": false,
+  "location": {"lat": 37.8029, "lng": -122.4484, "label": "Palace of Fine Arts, our table"},
+  "media_loaded": {"kind": "pla_white_1.75", "material": "PLA", "color": "white", "remaining_est": 15, "unit": "g"},
+  "limits": {"max_size_mm": [180, 180, 180], "max_job_minutes": 60, "hours": "00:00-24:00"},
+  "time_model": {"setup_s": 300, "per_unit_s": 900},
+  "price_card": {
+    "material_unit": "g",
+    "material_cost_usd": 0.03,
+    "unit_cost_usd": 1.00,
+    "time_rate_usd_per_min": 0.05,
+    "min_price_usd": 2.00
+  },
+  "status": "idle",
+
+  "adapter": {
+    "type": "bambu_a1mini",
+    "transport": "lan",
+    "host": "172.20.10.3",
+    "serial": "0300CA661802587",
+    "access_code_env": "BAMBU_ACCESS_CODE",
+    "printer_model": "Bambu Lab A1 mini",
+    "nozzle_diameter": 0.4,
+    "plate": 1,
+    "url_template": "file:///sdcard/{name}",
+    "bed_leveling": true,
+    "flow_cali": false,
+    "vibration_cali": false,
+    "timelapse": false,
+    "allow_material_mismatch": false,
+    "min_spare_g": 2.0,
+    "start_timeout_s": 120,
+    "quiet_refresh_s": 20
+  },
+  "camera": {"index": null, "warmup_frames": 8, "delay_s": 1.0}
+}

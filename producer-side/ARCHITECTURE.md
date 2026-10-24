@@ -12,7 +12,7 @@ Source of truth for the shared contracts: the *Fabrary — Cal Hacks Build Desig
 | Gateway: `/ws/node`, offline detection, dispatch, frame upload, events | Working against the stub hub; not yet mounted in the consumer's hub |
 | Phomemo M02 Pro adapter (`sticker_print`) | Working on the real printer over BLE from macOS |
 | Instax mini adapter (`photo_print`) | Not started |
-| Bambu A1 mini adapter (`fdm_print`) | Not started |
+| Bambu A1 mini adapter (`fdm_print`) | Rudimentary: prints a pre-sliced `.gcode` / `.gcode.3mf` over LAN. One test part printed on the real printer. No STL slicing yet |
 | Webcam frame capture and upload | Code written, no camera tested yet |
 | Claude vision check | Not started; results say `pass: null` (needs manual approval) |
 | Simulator (`sim/`, `SimAdapter`), outage, add-machine | Not started |
@@ -52,14 +52,17 @@ producer-side/
       __init__.py        REGISTRY: adapter.type → "package:Class", lazy import
       base.py            Adapter ABC, Progress, AdapterError
       phomemo/           Phomemo M02 Pro (see its README.md)
-    machines/            one manifest per real machine: m_sticker_01.json
+      bambu/             Bambu Lab A1 mini over LAN (see its README.md)
+    machines/            one manifest per real machine: m_sticker_01.json, m_fdm_01.json
     tools/
       run_job.py         run one job through any adapter with no hub (bring-up)
       scan_ble.py        find BLE machines and list their GATT services
+      bambu.py           A1 mini: discover, status, inspect, print, stop
   hub/
     gateway.py           Gateway class + `gateway` singleton for the consumer's hub
     dev_server.py        stub hub: gateway + /assets + /dev/offer etc., for testing nodes alone
-  tests/                 raster, policy, end-to-end (stub hub → node → dry-run printer)
+  samples/               sample job files (A1 mini PLA G-code)
+  tests/                 raster, policy, bambu, end-to-end (stub hub → node → dry-run printer)
 ```
 
 ## The node loop (`node/client.py`)

@@ -8,7 +8,7 @@ One node process per machine. Each node dials out to the hub at `/ws/node`, take
 | --- | --- | --- | --- |
 | Phomemo M02 Pro | [`node/adapters/phomemo/`](node/adapters/phomemo/README.md) | `sticker_print` | Working on the real printer (BLE, macOS) |
 | Fujifilm Instax mini | `node/adapters/instax/` | `photo_print` | Not started |
-| Bambu Lab A1 mini | `node/adapters/bambu/` | `fdm_print` | Not started |
+| Bambu Lab A1 mini | [`node/adapters/bambu/`](node/adapters/bambu/README.md) | `fdm_print` | Rudimentary: prints a pre-sliced G-code file over LAN; one test part printed |
 
 ## Setup
 
@@ -27,6 +27,16 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 Add `--transport file` for a dry run: no printer, writes the bytes and a preview PNG under `.work/`. The printer must not be connected to the Phomemo phone app.
+
+## Print a sliced G-code file on the A1 mini
+
+```sh
+echo BAMBU_ACCESS_CODE=<code from the printer screen> >> .env       # once; .env is git-ignored
+.venv/bin/python -m node.tools.bambu status                          # printer reachable?
+.venv/bin/python -m node.tools.bambu print samples/yiran_PLA_11m11s.gcode   # upload, start, follow to FINISH
+```
+
+Needs LAN Only + Developer Mode on the printer, a microSD card, and the printer IP in `node/machines/m_fdm_01.json`. See [the adapter README](node/adapters/bambu/README.md).
 
 ## Run a node against the stub hub
 
