@@ -33,6 +33,8 @@ export interface IntentBrief {
   model?: string;
   outcome: string;
   items: IntentItem[];
+  /** How many of the items the request asked for (several-thing orders); later ones are extras. Absent means one. */
+  requested?: number;
   question: string | null;
   reason: string;
 }
@@ -254,6 +256,8 @@ export interface Order {
   experience: Experience;
   /** Absent on orders made before sources were recorded: those came from the web. */
   source?: OrderSource;
+  /** The name the person gave, for the maker's screens. */
+  requesterName?: string;
   createdAt: string;
   updatedAt: string;
   version: number;

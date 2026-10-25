@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { BOUNDS, PALACE, PROCESS_LABEL, SFMap, WORLD_MACHINES, formatKm, pointAlong, type MapPin } from "../shared/map";
 import { PHASE_TEXT } from "./estimate";
-import { groupOrders, shortId } from "./orderGroups";
+import { customerOf, groupOrders, orderName, shortId } from "./orderGroups";
 import { machineStatus, MACHINE_LABEL } from "./status";
 import { courierEstimate, frameAround, tripKm, useStreetRoute, type OrderDelivery } from "./deliveries";
 import type { Dashboard } from "./data";
@@ -41,7 +41,7 @@ export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: L
     ...out.map((x) => ({
       id: `home-${x.o.key}`,
       at: x.d.to,
-      label: `Customer · ${x.d.to.label}`,
+      label: `${customerOf(x.o, "Customer")} · ${x.d.to.label}`,
       sub: `#${shortId(x.o)} · ${PHASE_TEXT[x.est.phase]}`,
       tone: "home" as const,
       interactive: true,
@@ -129,7 +129,7 @@ export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: L
                       {x.courier.name} · {x.courier.vehicle}
                     </b>
                     <span className="sl-fine">
-                      #{shortId(x.o)} {x.o.title} · {PHASE_TEXT[x.est.phase]} · to {x.d.to.label}
+                      #{shortId(x.o)} {orderName(x.o)} · {PHASE_TEXT[x.est.phase]} · to {x.d.to.label}
                       {tripKm(x.d, workshop) ? ` (${formatKm(tripKm(x.d, workshop)!)})` : ""} · drop-off in {x.est.dropoffMin} min
                     </span>
                   </li>

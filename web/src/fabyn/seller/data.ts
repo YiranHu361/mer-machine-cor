@@ -62,6 +62,8 @@ export interface OwnerJob {
   history: { at: string; event: string; reason: string }[];
   /** Where the order was placed: the fabyn site, or a chat with the Fabyn agent on ASI:One. */
   source?: "web" | "asi1";
+  /** The name the customer gave with the order. */
+  requesterName?: string;
   quote?: { totalCents: number; ownerCents: number };
   economics?: { ownerNetCents: number };
 }

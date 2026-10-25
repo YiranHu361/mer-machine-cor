@@ -668,7 +668,7 @@ test("a colour photo prints for real as a black-and-white sticker rather than on
   }
 });
 
-test("an explicit sticker request keeps the thermal printer even when Claude calls the photo's colour important", async () => {
+test("an explicit sticker request keeps the thermal printer even when Claude calls the photo's colour important; colour asked in words is a colour print", async () => {
   const brief = (requestText: string, photo: string): RequestBrief => ({
     provider: "claude",
     model: "test-model",
@@ -690,25 +690,28 @@ test("an explicit sticker request keeps the thermal printer even when Claude cal
       },
     ],
   });
-  for (const [requestText, expected] of [
-    ["i want a sticker", "proposed"],
-    ["i want a sticker in full colour", "unavailable"],
+  // Colour in words makes it a colour print; with no colour printer free the
+  // existing fallback makes it a named black-and-white sticker instead.
+  for (const [requestText, machines, machine, name] of [
+    ["i want a sticker", ["phomemo_01"], "phomemo_01", /^A sticker of your photo$/],
+    ["i want a sticker in full colour", ["phomemo_01", "instax_01"], "instax_01", /^A print of your photo$/],
+    ["i want a sticker in full colour", ["phomemo_01"], "phomemo_01", /black-and-white sticker/],
   ] as const) {
     let photo = "";
     const f = fixture({ understand: async (i) => brief(i.requestText, photo) });
     try {
-      await f.ready(["phomemo_01"]);
+      await f.ready([...machines]);
       photo = await f.photo(requester.id);
       const { order } = await f.orchestrator.createOrder(
         requester,
         { requestText, photoAssetIds: [photo] },
-        `create-key-${expected}`,
+        `create-key-${machines.length}-${machine}`,
       );
       await f.orchestrator.settle(order.id);
       const o = await f.orchestrator.view(requester, order.id);
-      assert.equal(o.draft.stage, expected, requestText);
-      if (expected === "proposed")
-        assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+      assert.equal(o.draft.stage, "proposed", requestText);
+      assert.equal(o.plan!.assignments[0].machineId, machine, requestText);
+      assert.match(o.plan!.items[0].name, name, requestText);
     } finally {
       f.close();
     }
@@ -2400,5 +2403,242 @@ test("a requester can get a 10-minute link to their own draft preview, for the c
     await stranger.post(`/api/assets/${assetId}/link`).expect(403);
   } finally {
     f.close();
+  }
+});
+
+test("a request naming three things proposes one requested item per thing, each on its own machine, with drafts only for the drawn one", async () => {
+  const f = fixture();
+  try {
+    await f.ready(["phomemo_01", "instax_01", "bambu_01"]);
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      {
+        requestText: "a keychain that says Henry, a cat sticker and a print of this photo",
+        photoAssetIds: [photo],
+      },
+      "create-key-several-1",
+    );
+    await f.orchestrator.settle(order.id);
+    let o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "awaiting_design_choice");
+    assert.equal(o.candidates!.itemId, "it_2", "the cat sticker is the one drawn");
+    assert.equal(o.candidates!.subject, "cat");
+    o = await f.orchestrator.chooseDesign(requester, order.id, {
+      expectedRevision: 1,
+      candidateSetId: o.candidates!.id,
+      candidateId: o.candidates!.candidates[1].id,
+    });
+    await f.orchestrator.settle(order.id);
+    o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed");
+    assert.deepEqual(
+      o.plan!.items.map((i) => [i.id, i.process, i.source, i.design.kind]),
+      [
+        ["it_1", "fdm_print", "requested", "text_tag"],
+        ["it_2", "sticker_print", "requested", "svg"],
+        ["it_3", "photo_print", "requested", "photos"],
+      ],
+    );
+    assert.equal(o.plan!.items[0].design.text, "Henry");
+    assert.equal(o.plan!.items[1].design.candidateId, o.candidates!.candidates[1].id);
+    assert.deepEqual(o.plan!.items[2].design.photoAssetIds, [photo]);
+    assert.deepEqual(
+      o.plan!.assignments.map((a) => [a.itemId, a.machineId]),
+      [
+        ["it_1", "bambu_01"],
+        ["it_2", "phomemo_01"],
+        ["it_3", "instax_01"],
+      ],
+    );
+    assert.deepEqual(o.suggestions, [], "extras are offered only on one-item orders");
+    // one confirmation makes all three under the same order
+    o = await f.orchestrator.confirm(requester, order.id, confirmBody(o));
+    const jobs = Object.values((await f.service.read()).jobs).filter((j) => j.orderId === order.id);
+    assert.deepEqual(jobs.map((j) => j.machineId).sort(), ["bambu_01", "instax_01", "phomemo_01"]);
+  } finally {
+    f.close();
+  }
+});
+
+test("a several-thing order waits for every thing it asked for, and never moves one to another kind of printer", async () => {
+  const f = fixture();
+  try {
+    await f.ready(["phomemo_01", "bambu_01"]);
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: 'a keychain that says "Henry" and a print of this photo', photoAssetIds: [photo] },
+      "create-key-several-2",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "unavailable");
+    assert.match(o.draft.reason!, /A print of your photo/);
+    assert.equal(o.plan, undefined);
+  } finally {
+    f.close();
+  }
+});
+
+test("orders from the ASI:One agent stay one item, as its chat describes one", async () => {
+  const f = fixture();
+  try {
+    await f.ready(["phomemo_01", "instax_01", "bambu_01"]);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: 'a keychain that says "Henry" and a cat sticker', source: "asi1" },
+      "create-key-several-3",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.plan!.items.length, 1);
+    assert.equal(o.plan!.items[0].design.text, "Henry");
+  } finally {
+    f.close();
+  }
+});
+
+test("several things from Claude: each named one keeps its kind, a repeated kind is dropped, and the single-only flag reaches Claude", async () => {
+  const asked: RequestInput[] = [];
+  const item = (over: Partial<RequestBrief["items"][number]>): RequestBrief["items"][number] => ({
+    process: "sticker_print",
+    name: "A cat sticker",
+    why: "asked",
+    quantity: 1,
+    creation: "generate",
+    photoAssetIds: [],
+    subject: "cat",
+    text: null,
+    colorImportant: false,
+    subjectBoxes: {},
+    ...over,
+  });
+  const f = fixture({
+    understand: async (input) => {
+      asked.push(input);
+      return {
+        provider: "claude",
+        model: "test-model",
+        outcome: "A keychain and a cat sticker.",
+        question: null,
+        reason: "Two things were asked.",
+        items: [
+          item({ process: "fdm_print", name: "A keychain", subject: null, text: "Henry" }),
+          // colour called important, but a sticker was named: it stays a sticker
+          item({ colorImportant: true }),
+          item({ name: "A dog sticker", subject: "dog" }),
+        ],
+      };
+    },
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01", "bambu_01"]);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "a keychain that says Henry and a cat sticker" },
+      "create-key-several-4",
+    );
+    await f.orchestrator.settle(order.id);
+    let o = await f.orchestrator.view(requester, order.id);
+    assert.equal(asked[0].single, undefined);
+    o = await f.orchestrator.chooseDesign(requester, order.id, {
+      expectedRevision: 1,
+      candidateSetId: o.candidates!.id,
+      candidateId: o.candidates!.candidates[0].id,
+    });
+    await f.orchestrator.settle(order.id);
+    o = await f.orchestrator.view(requester, order.id);
+    assert.deepEqual(
+      o.plan!.assignments.map((a) => [a.itemId, a.machineId]),
+      [
+        ["it_1", "bambu_01"],
+        ["it_2", "phomemo_01"],
+      ],
+    );
+    assert.deepEqual(o.plan!.items.map((i) => i.source), ["requested", "requested"]);
+    const s = await f.service.read();
+    assert.equal(s.orders![order.id].intent!.requested, 2);
+    assert.equal(s.orders![order.id].intent!.items[1].colorImportant, false);
+    const agent = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "a keychain that says Henry and a cat sticker", source: "asi1" },
+      "create-key-several-5",
+    );
+    await f.orchestrator.settle(agent.order.id);
+    assert.equal(asked[1].single, true);
+  } finally {
+    f.close();
+  }
+});
+
+test("colour asked in words is a colour print drafted in colour, on Claude's path with a named sticker and on the local rules", async () => {
+  for (const claude of [true, false]) {
+    const asked: ImageDraftInput[] = [];
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(args.join(" "));
+    const f = fixture({
+      design: "openai",
+      // Claude's reply names a sticker and calls colour unimportant; or Claude fails.
+      understand: async (i) => {
+        if (!claude) throw new Error("CLAUDE_REQUEST_FAILED: HTTP 529; check API key");
+        return {
+          provider: "claude",
+          model: "test-model",
+          outcome: "A chicken nugget sticker.",
+          question: null,
+          reason: "A sticker was named.",
+          items: [
+            {
+              process: "sticker_print",
+              name: "A colorful chicken nugget sticker",
+              why: i.requestText,
+              quantity: 1,
+              creation: "generate",
+              photoAssetIds: [],
+              subject: "chicken nuggets",
+              text: null,
+              colorImportant: false,
+              subjectBoxes: {},
+            },
+          ],
+        };
+      },
+      imageDraft: async (input) => {
+        asked.push(input);
+        return [{ title: "nuggets · Flat colour", image: { bytes: gradientPng(48, 48), mediaType: "image/png" as const } }];
+      },
+    });
+    try {
+      await f.ready(["phomemo_01", "instax_01"]);
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText: "a colorful chicken nugget sticker" },
+        `create-key-nuggets-${claude}`,
+      );
+      await f.orchestrator.settle(order.id);
+      let o = await f.orchestrator.view(requester, order.id);
+      assert.equal(asked[0].colour, true, "drafts are drawn in colour");
+      o = await f.orchestrator.chooseDesign(requester, order.id, {
+        expectedRevision: 1,
+        candidateSetId: o.candidates!.id,
+        candidateId: o.candidates!.candidates[0].id,
+      });
+      await f.orchestrator.settle(order.id);
+      o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.plan!.items[0].process, "photo_print");
+      assert.match(o.plan!.items[0].name, /print$/);
+      assert.equal(o.plan!.assignments[0].machineId, "instax_01");
+      const line = warned.find((w) => w.includes("[fabyn] Claude could not read"));
+      if (claude) assert.equal(line, undefined);
+      else {
+        assert.ok(line?.includes("CLAUDE_REQUEST_FAILED: HTTP 529"), String(line));
+        assert.ok(!line!.includes("nugget") && !line!.includes("API key"), "no request text, no key hints");
+      }
+    } finally {
+      console.warn = warn;
+      f.close();
+    }
   }
 });

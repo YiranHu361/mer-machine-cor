@@ -29,6 +29,15 @@ export function registerOrchestrationRoutes(
   },
 ) {
   const param = (req: Request, name: string) => String(req.params[name]);
+  // A relief order is the coordinator's: its routes use the owner session even
+  // when the same browser also holds a requester one.
+  const orderActor = async (req: Request): Promise<Actor> => {
+    const orders = (await orchestrator.service.read()).orders ?? {};
+    const id = param(req, "id");
+    return Object.hasOwn(orders, id) && orders[id].experience === "relief"
+      ? ((await owner(req)) as Actor)
+      : actor(req);
+  };
   // The order, with the x402 settlement header once its collection is confirmed.
   const sendOrder = async (res: Response, order: any) => {
     const operation = (await orchestrator.service.read()).operations[
@@ -62,7 +71,10 @@ export function registerOrchestrationRoutes(
     res.json(await orchestrator.checkNow(param(req, "id")));
   });
   app.post("/api/orders", async (req, res) => {
-    const a = await actor(req);
+    const a =
+      req.body?.experience === "relief"
+        ? ((await owner(req)) as Actor)
+        : await actor(req);
     const { order, created } = await orchestrator.createOrder(
       a,
       req.body,
@@ -74,7 +86,7 @@ export function registerOrchestrationRoutes(
   });
   app.get("/api/orders/:id", async (req, res) => {
     res.json({
-      order: await orchestrator.view(await actor(req), param(req, "id")),
+      order: await orchestrator.view(await orderActor(req), param(req, "id")),
     });
   });
   app.get("/api/orders/:id/events", async (req, res) => {
@@ -86,13 +98,13 @@ export function registerOrchestrationRoutes(
       422,
     );
     res.json(
-      await orchestrator.events(await actor(req), param(req, "id"), after),
+      await orchestrator.events(await orderActor(req), param(req, "id"), after),
     );
   });
   app.patch("/api/orders/:id/draft", async (req, res) => {
     res.json({
       order: await orchestrator.editDraft(
-        await actor(req),
+        await orderActor(req),
         param(req, "id"),
         req.body,
       ),
@@ -101,7 +113,7 @@ export function registerOrchestrationRoutes(
   app.post("/api/orders/:id/design-choice", async (req, res) => {
     res.json({
       order: await orchestrator.chooseDesign(
-        await actor(req),
+        await orderActor(req),
         param(req, "id"),
         req.body,
       ),
@@ -110,7 +122,7 @@ export function registerOrchestrationRoutes(
   app.post("/api/orders/:id/more-like-this", async (req, res) => {
     res.json({
       order: await orchestrator.moreLikeThis(
-        await actor(req),
+        await orderActor(req),
         param(req, "id"),
         req.body,
       ),
@@ -121,7 +133,7 @@ export function registerOrchestrationRoutes(
     async (req, res) => {
       res.json({
         order: await orchestrator.selectAlternative(
-          await actor(req),
+          await orderActor(req),
           param(req, "id"),
           param(req, "suggestion"),
           req.body,
@@ -131,7 +143,7 @@ export function registerOrchestrationRoutes(
   );
   for (const action of ["confirm", "pay"]) {
     app.post(`/api/orders/:id/${action}`, async (req, res) => {
-      const a = await actor(req);
+      const a = await orderActor(req);
       let payload = req.body?.paymentPayload;
       if (req.get("PAYMENT-SIGNATURE")) {
         try {
@@ -169,7 +181,7 @@ export function registerOrchestrationRoutes(
       "TEST_WALLET_UNAVAILABLE",
       "The built-in test wallet is off: it needs testnet payment mode, FABYN_TREASURY_ADDRESS and FABYN_TEST_PAYER_PRIVATE_KEY.",
     );
-    const a = await actor(req),
+    const a = await orderActor(req),
       id = param(req, "id");
     let challenge: any;
     try {
@@ -202,14 +214,14 @@ export function registerOrchestrationRoutes(
   });
   app.post("/api/orders/:id/cancel", async (req, res) => {
     res.json({
-      order: await orchestrator.cancel(await actor(req), param(req, "id")),
+      order: await orchestrator.cancel(await orderActor(req), param(req, "id")),
     });
   });
   // Pickup or delivery: the person's choice, then the owner's courier.
   app.post("/api/orders/:id/delivery", async (req, res) => {
     res.json({
       order: await orchestrator.chooseDelivery(
-        await actor(req),
+        await orderActor(req),
         param(req, "id"),
         req.body,
       ),

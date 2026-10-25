@@ -9,7 +9,7 @@ import { PALACE, SFMap, formatKm } from "../shared/map";
 import { JobActions, type Act } from "./JobActions";
 import { clockIn, PHASE_TEXT } from "./estimate";
 import { courierEstimate, deliveriesOf, frameAround, handoffKind, sentOut, tripKm, useStreetRoute, type OrderDelivery } from "./deliveries";
-import { groupOrders, shortId, type SellerOrder } from "./orderGroups";
+import { customerOf, groupOrders, orderName, shortId, type SellerOrder } from "./orderGroups";
 import { jobStateLabel, jobTitle, needsHandling, waitingPickup } from "./status";
 import { MAKER, type Dashboard } from "./data";
 
@@ -71,7 +71,7 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
               <OrderHead o={o} />
               <Handling o={o} dash={dash} busy={busy} act={act} now={now} pickup={false} />
               <p className="sl-fine">
-                Going to the customer in {d.to?.label ?? "their neighbourhood"}
+                Going to {customerOf(o)} in {d.to?.label ?? "their neighbourhood"}
                 {km ? ` · ${formatKm(km)} away` : ""}.
               </p>
               {o.jobs.some(waitingPickup) && <p className="sl-fine">The customer has a pickup code for this order and shows it to the courier at the door.</p>}
@@ -129,7 +129,8 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
                 <li key={o.key}>
                   <span className="sl-thumb sm">{o.jobs[0]?.artifact?.previewUrl ? <img src={o.jobs[0].artifact.previewUrl} alt="" /> : null}</span>
                   <span className="sl-done-title">
-                    #{shortId(o)} {o.title}
+                    #{shortId(o)} {o.requesterName ? `${orderName(o)} · ` : ""}
+                    {o.title}
                   </span>
                   <span className="sl-done-meta">
                     {d?.courier
@@ -166,9 +167,10 @@ function OrderHead({ o }: { o: SellerOrder }) {
       <span className="sl-thumb">{preview ? <img src={preview} alt={`Preview of ${o.title}`} /> : <span aria-hidden="true">▢</span>}</span>
       <div>
         <h4 className="sl-h3">
-          {o.title} <span className="sl-order-id">#{shortId(o)}</span>
+          {orderName(o)} <span className="sl-order-id">#{shortId(o)}</span>
         </h4>
         <p className="sl-chips">
+          {o.requesterName && <span>{o.title}</span>}
           <span className="from">from · {o.intake.label}</span>
           {o.viaAgent && <span className="agent">via ASI:One</span>}
           <span>
@@ -251,7 +253,7 @@ function CourierCard({ o, d, now, dash, busy, act, onCancel }: { o: SellerOrder;
   const est = courierEstimate(courier, now);
   const route = useStreetRoute(PALACE, d.to);
   const km = tripKm(d);
-  const place = d.to?.label ?? "the customer";
+  const place = d.to?.label ?? customerOf(o);
   return (
     <li className="sl-delivery courier">
       <OrderHead o={o} />
@@ -260,7 +262,7 @@ function CourierCard({ o, d, now, dash, busy, act, onCancel }: { o: SellerOrder;
           <SFMap
             pins={[
               { id: "workshop", at: PALACE, label: `${MAKER.name}’s workshop`, tone: "place", showLabel: true },
-              ...(d.to ? [{ id: "home", at: d.to, label: `Customer · ${d.to.label}`, tone: "home" as const, showLabel: true }] : []),
+              ...(d.to ? [{ id: "home", at: d.to, label: `${customerOf(o, "Customer")} · ${d.to.label}`, tone: "home" as const, showLabel: true }] : []),
             ]}
             route={route}
             progress={est.routeFraction}
@@ -284,7 +286,7 @@ function CourierCard({ o, d, now, dash, busy, act, onCancel }: { o: SellerOrder;
               <dd>{est.pickupMin > 0 ? `${clockIn(est.pickupMin, now)} · ${est.pickupMin} min` : est.phase === "at_workshop" ? "here now" : `picked up ${new Date(courier.pickupAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</dd>
             </div>
             <div>
-              <dt>At the customer</dt>
+              <dt>At {customerOf(o)}</dt>
               <dd>
                 {new Date(courier.arriveAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {est.dropoffMin} min
               </dd>

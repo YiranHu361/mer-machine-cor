@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { JobActions, type Act } from "./JobActions";
 import { estimateAll, formatEta } from "./estimate";
-import { groupOrders, matchesFilter, shortId, type OrderFilter, type SellerOrder } from "./orderGroups";
+import { groupOrders, matchesFilter, orderName, shortId, type OrderFilter, type SellerOrder } from "./orderGroups";
 import { deliveriesOf, handoffKind, sentOut, type OrderDelivery } from "./deliveries";
 import { jobStateLabel, jobTitle, stopReason } from "./status";
 import type { Dashboard, OwnerJob } from "./data";
@@ -92,7 +92,7 @@ function OrderCard({
       <div className="sl-order-thumb">{preview ? <img src={preview} alt={`Preview of ${o.title}`} /> : <span aria-hidden="true">▢</span>}</div>
       <div className="sl-order-main">
         <header className="sl-order-head">
-          <h3 className="sl-h3">{o.title}</h3>
+          <h3 className="sl-h3">{orderName(o)}</h3>
           <span className="sl-order-id">#{shortId(o)}</span>
         </header>
         <p className="sl-chips">

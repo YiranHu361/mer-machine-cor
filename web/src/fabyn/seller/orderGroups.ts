@@ -10,6 +10,8 @@ export interface SellerOrder {
   orderId?: string;
   jobs: OwnerJob[];
   title: string;
+  /** The name the customer gave, when they gave one. */
+  requesterName?: string;
   intake: { label: string; detail: string };
   viaAgent: boolean;
   createdAt: string;
@@ -60,6 +62,7 @@ export function groupOrders(jobs: OwnerJob[], sentOut: ReadonlySet<string> = new
       orderId: sorted[0].orderId,
       jobs: sorted,
       title: titles.length > 1 ? `${titles[0]} + ${titles.length - 1} more` : titles[0] ?? jobTitle(sorted[0]),
+      requesterName: sorted.find((j) => j.requesterName)?.requesterName,
       intake: intakeOf(sorted[0]),
       viaAgent: sorted.some(viaAgent),
       createdAt: sorted[0].createdAt,
@@ -82,6 +85,15 @@ export function matchesFilter(o: SellerOrder, f: OrderFilter): boolean {
   if (f === "ready") return o.ready;
   return !o.done && !o.ready && o.jobs.some(onLine);
 }
+
+/** "Henry’s order" when the customer gave a name, else what the order makes. */
+export function orderName(o: SellerOrder): string {
+  if (!o.requesterName) return o.title;
+  return `${o.requesterName}${/s$/i.test(o.requesterName) ? "’" : "’s"} order`;
+}
+
+/** Who the order goes to: their name, or "the customer". */
+export const customerOf = (o: SellerOrder, fallback = "the customer") => o.requesterName ?? fallback;
 
 /** A short order number customers and couriers can read out. */
 export function shortId(o: SellerOrder): string {

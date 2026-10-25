@@ -117,7 +117,7 @@ export default function SellerApp() {
   // Session check on load.
   useEffect(() => {
     mounted.current = true;
-    api<{ role: string | null }>("/session", undefined, "GET")
+    api<{ role: string | null }>("/session?role=owner", undefined, "GET")
       .then(async (s) => {
         if (!mounted.current) return;
         if (s.role === "owner") return setSession("owner");
@@ -196,7 +196,8 @@ export default function SellerApp() {
 
   const endSession = async () => {
     try {
-      await api("/session", undefined, "DELETE");
+      // only the workshop session: a customer page open in this browser keeps its own
+      await api("/session?role=owner", undefined, "DELETE");
     } catch {
       // The screen still closes; the cookie expires on its own.
     }

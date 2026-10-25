@@ -61,9 +61,14 @@ import {
   asksForColour,
   latestName,
   latestProcess,
+  leftOutNote,
   localIntent,
+  namedProcesses,
   NEUTRAL_TAG_TEXT,
+  oneOfEach,
+  requestedThings,
   tagText,
+  wantsColour,
 } from "./intent.ts";
 import {
   PUBLISHED_PROFILES,
@@ -319,6 +324,23 @@ export class Orchestrator {
         : "best_single";
     // The ASI:One agent says so in the body; everything else is the web app.
     const source: OrderSource = body?.source === "asi1" ? "asi1" : "web";
+    // The person's own name for the order, shown to the maker ("Henry's order").
+    requireThat(
+      body?.requesterName == null || typeof body.requesterName === "string",
+      "INVALID_NAME",
+      "Give your name as text, up to 40 characters.",
+      422,
+    );
+    const requesterName = String(body?.requesterName ?? "")
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    requireThat(
+      requesterName.length <= 40 && !/[<>]/.test(requesterName),
+      "INVALID_NAME",
+      "Give your name as text, up to 40 characters.",
+      422,
+    );
     requireThat(
       experience !== "relief" || actor.role === "owner",
       "COORDINATOR_REQUIRED",
@@ -392,6 +414,7 @@ export class Orchestrator {
         creationKey: key as string,
         experience,
         source,
+        ...(requesterName ? { requesterName } : {}),
         createdAt: at,
         updatedAt: at,
         version: 1,
@@ -983,14 +1006,17 @@ export class Orchestrator {
   private async understand(o: Order, s: State): Promise<IntentBrief> {
     const assets = o.draft.photoAssetIds.map((a) => s.assets[a]);
     const experience = o.experience as "best_single" | "gift";
+    // The ASI:One agent describes one item per order, so its orders stay single.
+    const single = o.source === "asi1";
     // A name tag whose name is stated needs no reading: the local rules are exact.
     if (
       experience === "best_single" &&
       !assets.length &&
       latestProcess(o.draft.requestText) === "fdm_print" &&
-      latestName(o.draft.requestText)
+      latestName(o.draft.requestText) &&
+      (single || requestedThings(o.draft.requestText).length < 2)
     )
-      return localIntent(experience, o.draft.requestText, []);
+      return localIntent(experience, o.draft.requestText, [], { single });
     let facts: {
       assetId: string;
       colorful: boolean;
@@ -1023,6 +1049,7 @@ export class Orchestrator {
         const brief = await understand({
           requestText: o.draft.requestText,
           experience,
+          ...(single ? { single } : {}),
           processes: ["sticker_print", "photo_print", "fdm_print"],
           photos: await Promise.all(
             assets.map(async (a) => ({
@@ -1039,21 +1066,29 @@ export class Orchestrator {
         // local rules, unless the request itself asks to keep the colour.
         const asked = latestProcess(o.draft.requestText);
         const colourAsked = asksForColour(o.draft.requestText);
-        return {
-          provider: "claude",
-          model: brief.model,
-          outcome: brief.outcome,
-          question: brief.question,
-          reason: brief.reason,
-          items: brief.items.map((i) => {
+        // Several things asked: each one the request names counts as named.
+        const several = experience === "best_single" && brief.items.length > 1;
+        const named = several ? namedProcesses(o.draft.requestText) : null;
+        const isAsked = (p: string) => (named ? named.has(p as Process) : p === asked);
+        // Colour asked for in words makes a colour print even of a named
+        // sticker: the whole request for one item, or the words of that item's
+        // own part when several things are asked (none when they cannot be told apart).
+        const things = several ? requestedThings(o.draft.requestText) : [];
+        const colourWords = (p: string) =>
+          experience === "best_single" &&
+          (several
+            ? wantsColour(things.find((t) => t.process === p)?.text ?? "")
+            : wantsColour(o.draft.requestText));
+        const mapped: IntentItem[] = brief.items.map((i) => {
             // A sticker printer prints only black. When colour matters and no
             // sticker was named, the item is a colour print, so its drafts are
             // drawn in colour and a colour printer can take it.
             const toColour =
-              experience === "best_single" &&
-              i.process === "sticker_print" &&
-              asked !== "sticker_print" &&
-              (i.colorImportant || colourAsked);
+              (experience === "best_single" &&
+                i.process === "sticker_print" &&
+                !isAsked("sticker_print") &&
+                (i.colorImportant || colourAsked)) ||
+              (i.process === "sticker_print" && colourWords(i.process));
             const process = toColour ? "photo_print" : (i.process as Process);
             return {
               process,
@@ -1068,18 +1103,33 @@ export class Orchestrator {
               ...(process === "fdm_print" ? { text: tagText(i.text) } : {}),
               colorImportant:
                 toColour ||
-                (i.colorImportant && (i.process !== asked || colourAsked)),
+                (i.process === "photo_print" && colourWords(i.process)) ||
+                (i.colorImportant && (!isAsked(i.process) || colourAsked)),
               ...(Object.keys(i.subjectBoxes).length
                 ? { subjectBoxes: i.subjectBoxes }
                 : {}),
             };
-          }),
+          });
+        const kept = several ? oneOfEach(mapped) : { items: mapped, left: [] };
+        return {
+          provider: "claude",
+          model: brief.model,
+          outcome: brief.outcome,
+          question: brief.question ?? leftOutNote(kept.left),
+          reason: brief.reason,
+          items: kept.items,
+          ...(kept.items.length > 1 && experience === "best_single"
+            ? { requested: kept.items.length }
+            : {}),
         };
-      } catch {
+      } catch (e) {
         // Fall through to the labelled local rules; the order stays usable.
+        // One line, so it shows next time: the error code only, never the request.
+        const why = /^[A-Z_]+(?:: HTTP \d{3})?/.exec(String((e as Error)?.message ?? ""))?.[0];
+        console.warn(`[fabyn] Claude could not read order ${o.id} (${why ?? (e as Error)?.name ?? "error"}); using the local rules.`);
       }
     }
-    return localIntent(experience, o.draft.requestText, facts);
+    return localIntent(experience, o.draft.requestText, facts, { single });
   }
   private reliefIntent(o: Order): IntentBrief {
     const quantities = this.reliefQuantities(o.draft.headCount ?? 300);
@@ -1668,6 +1718,7 @@ export class Orchestrator {
     const assignments: Assignment[] = [];
     const allowed = (m: ExecutionMode) => this.service.modeAllowed(m);
     const unavailable: string[] = [];
+    let missingRequested = false;
     for (const [index, intended] of o.intent!.items.entries()) {
       const itemId = `it_${index + 1}`;
       if (o.experience === "relief") {
@@ -1689,8 +1740,11 @@ export class Orchestrator {
       // is free, the other flat printer makes it if a real one is free there,
       // rather than a simulated machine that makes nothing physical. The
       // proposal names what it becomes, so the person sees it before paying.
+      // Several requested things keep their own kinds, one machine each.
       const other =
-        !real(candidates).length && o.experience === "best_single"
+        !real(candidates).length &&
+        o.experience === "best_single" &&
+        this.requestedCount(o) === 1
           ? otherFlatPrint(item, asksForColour(o.draft.requestText))
           : null;
       if (other) {
@@ -1709,6 +1763,7 @@ export class Orchestrator {
       ];
       const chosen = candidates[0];
       if (!chosen) {
+        if (index < this.requestedCount(o)) missingRequested = true;
         unavailable.push(
           silent.size
             ? silent.size > 1
@@ -1738,6 +1793,7 @@ export class Orchestrator {
         ),
       });
       if ("rejected" in receipt) {
+        if (index < this.requestedCount(o)) missingRequested = true;
         unavailable.push(
           `"${item.name}" could not be prepared: ${receipt.rejected}`,
         );
@@ -1749,6 +1805,7 @@ export class Orchestrator {
         item.process === "fdm_print" &&
         jobSeconds(receipt, item.quantity) > chosen.machine.maxJobSeconds
       ) {
+        if (index < this.requestedCount(o)) missingRequested = true;
         unavailable.push(
           `"${item.name}" takes about ${Math.ceil(jobSeconds(receipt, item.quantity) / 60)} min; ${chosen.machine.name} allows ${Math.floor(chosen.machine.maxJobSeconds / 60)} min per job.`,
         );
@@ -1788,9 +1845,13 @@ export class Orchestrator {
     }
     await this.commit(orderId, revision, lease, (x, state) => {
       stage(x, "preflighting");
+      // One requested thing with extras goes ahead without a missing extra;
+      // a several-thing order needs every requested thing, like a gift.
       if (
         unavailable.length &&
-        (o.experience !== "best_single" || !items.length)
+        (o.experience !== "best_single" ||
+          !items.length ||
+          (missingRequested && this.requestedCount(o) > 1))
       ) {
         stage(x, "unavailable", unavailable.join(" "));
         x.status = "preparing";
@@ -1815,7 +1876,7 @@ export class Orchestrator {
       ? 3
       : o.experience === "relief"
         ? o.intent!.items.length
-        : 1;
+        : (o.intent?.requested ?? 1);
   }
   private assignment(
     itemId: string,
@@ -3334,6 +3395,7 @@ function orderView(o: Order, s: State, actor: Actor) {
     id: o.id,
     experience: o.experience,
     source: o.source ?? "web",
+    requesterName: o.requesterName,
     status: o.status,
     version: o.version,
     createdAt: o.createdAt,

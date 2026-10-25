@@ -80,6 +80,10 @@ import {
   type Job,
 } from "./model.ts";
 const exec = promisify(execFile);
+/** The requester's session cookie (the ASI:One agent forwards it by this name). */
+const SESSION_COOKIE = "fabyn_session";
+/** The workshop owner's session cookie, so both pages work in one browser. */
+const OWNER_COOKIE = "fabyn_owner_session";
 const removeFiles = async (paths: string[]) => {
   await Promise.all(paths.map((path) => unlink(path).catch(() => {})));
 };
@@ -267,31 +271,57 @@ export function createApp(
     req.body ??= {};
     next();
   });
-  const actor = async (req: Request) => {
-    const cookie = req.headers.cookie
+  // Two cookies, so the customer page and the workshop page can be open in one
+  // browser: the requester session in fabyn_session, the owner's in
+  // fabyn_owner_session. Owner sessions made before the split live in fabyn_session.
+  const cookieOf = (req: Request, name: string) =>
+    req.headers.cookie
       ?.split(";")
       .map((c) => c.trim())
-      .find((c) => c.startsWith("fabyn_session="))
-      ?.slice("fabyn_session=".length);
+      .find((c) => c.startsWith(`${name}=`))
+      ?.slice(name.length + 1);
+  const sessionsOf = async (req: Request) => {
     const s = await service.read();
-    const session = cookie ? ownValue(s.sessions, cookie) : undefined;
+    const live = (token: string | undefined) => {
+      const session = token ? ownValue(s.sessions, token) : undefined;
+      return session && Date.parse(session.expiresAt) > Date.now()
+        ? session
+        : undefined;
+    };
+    const main = live(cookieOf(req, SESSION_COOKIE));
+    const ownerCookie = live(cookieOf(req, OWNER_COOKIE));
+    return {
+      main,
+      owner:
+        ownerCookie?.role === "owner"
+          ? ownerCookie
+          : main?.role === "owner"
+            ? main
+            : undefined,
+    };
+  };
+  /** The requester session first, then the owner's. */
+  const actor = async (req: Request) => {
+    const { main, owner } = await sessionsOf(req);
+    const session = main ?? owner;
+    requireThat(session, "AUTH_REQUIRED", "Sign in to continue.", 401);
+    return session;
+  };
+  const owner = async (req: Request) => {
+    const sessions = await sessionsOf(req);
     requireThat(
-      session && Date.parse(session.expiresAt) > Date.now(),
+      sessions.owner || sessions.main,
       "AUTH_REQUIRED",
       "Sign in to continue.",
       401,
     );
-    return session;
-  };
-  const owner = async (req: Request) => {
-    const a = await actor(req);
     requireThat(
-      a.role === "owner",
+      sessions.owner,
       "OWNER_REQUIRED",
       "Owner access is required.",
       403,
     );
-    return a;
+    return sessions.owner;
   };
   const owned = async (req: Request) => {
     const a = await actor(req);
@@ -350,7 +380,14 @@ export function createApp(
       },
     });
   });
+  // ?role=owner answers for the workshop page; without it, the requester
+  // session (or the owner's when there is none, for the older /owner page).
   app.get("/api/session", async (req, res) => {
+    if (req.query.role === "owner") {
+      const { owner } = await sessionsOf(req);
+      res.json(owner ?? { role: null });
+      return;
+    }
     try {
       res.json(await actor(req));
     } catch (error) {
@@ -392,7 +429,7 @@ export function createApp(
       s.sessions[token] = session;
     });
     res
-      .cookie("fabyn_session", token, {
+      .cookie(role === "owner" ? OWNER_COOKIE : SESSION_COOKIE, token, {
         httpOnly: true,
         sameSite: "strict",
         maxAge: 7 * 86400000,
@@ -400,17 +437,19 @@ export function createApp(
       })
       .json(session);
   });
+  // ?role=owner signs the workshop out and keeps the customer's session.
   app.delete("/api/session", async (req, res) => {
-    const cookie = req.headers.cookie
-      ?.split(";")
-      .map((c) => c.trim())
-      .find((c) => c.startsWith("fabyn_session="))
-      ?.slice("fabyn_session=".length);
-    if (cookie)
+    const names =
+      req.query.role === "owner" ? [OWNER_COOKIE] : [SESSION_COOKIE, OWNER_COOKIE];
+    const tokens = names
+      .map((name) => cookieOf(req, name))
+      .filter((t): t is string => !!t);
+    if (tokens.length)
       await mutate(service.store, (s) => {
-        delete s.sessions[cookie];
+        for (const token of tokens) delete s.sessions[token];
       });
-    res.clearCookie("fabyn_session").json({ ok: true });
+    for (const name of names) res.clearCookie(name);
+    res.json({ ok: true });
   });
   app.get("/api/machines", async (req, res) => {
     const { version: revision, data } = await service.store.read();
@@ -866,10 +905,12 @@ export function createApp(
       /^[0-9a-f]{64}$/i.test(sig) &&
       timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
     if (!signed) {
-      const a = await actor(req);
+      // either session in this browser may open it: its owner, or the workshop
+      const { main, owner: workshop } = await sessionsOf(req);
+      requireThat(main || workshop, "AUTH_REQUIRED", "Sign in to continue.", 401);
       requireThat(
-        a.id === asset.ownerId ||
-          a.role === "owner" ||
+        main?.id === asset.ownerId ||
+          !!workshop ||
           asset.ownerId === "catalog",
         "ASSET_ACCESS",
         "You cannot access this artwork.",
@@ -903,6 +944,8 @@ export function createApp(
       jobs: Object.values(s.jobs).map((j) => ({
         ...view(j),
         source: (j.orderId && s.orders?.[j.orderId]?.source) || "web",
+        // The name the customer gave with the order, when they gave one.
+        requesterName: (j.orderId && s.orders?.[j.orderId]?.requesterName) || undefined,
       })),
       ledger: Object.values(s.operations),
       // Pickup or delivery per order; only delivery orders carry the person's spot.
