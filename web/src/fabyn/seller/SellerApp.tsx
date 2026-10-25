@@ -53,6 +53,8 @@ export default function SellerApp() {
   const [live, setLive] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [signInNote, setSignInNote] = useState("");
+  // false until the server refuses a sign-in without a code
+  const [codeRequired, setCodeRequired] = useState(false);
   const revision = useRef(-1);
   const mounted = useRef(true);
   const liveMachines = useLiveMachines(session === "owner", dash?.revision ?? 0);
@@ -79,6 +81,17 @@ export default function SellerApp() {
     [],
   );
 
+  /** Opens the workshop when the server has no access code; false when it asks for one. */
+  const openWithoutCode = useCallback(async () => {
+    try {
+      await api("/session", { role: "owner" });
+      return true;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "ACCESS_CODE") setCodeRequired(true);
+      return false;
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const next = await api<Dashboard>("/owner/dashboard");
@@ -93,22 +106,24 @@ export default function SellerApp() {
     } catch (error) {
       if (!mounted.current) return false;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
-        void signOut("Your workshop session ended. Enter the access code to open it again.");
+        if (!codeRequired && (await openWithoutCode())) return false;
+        void signOut(codeRequired ? "Your workshop session ended. Enter the access code to open it again." : "Your workshop session ended.");
         return false;
       }
       setLive(false);
       return false;
     }
-  }, [signOut]);
+  }, [signOut, codeRequired, openWithoutCode]);
 
   // Session check on load.
   useEffect(() => {
     mounted.current = true;
     api<{ role: string | null }>("/session", undefined, "GET")
-      .then((s) => {
+      .then(async (s) => {
         if (!mounted.current) return;
-        if (s.role === "owner") setSession("owner");
-        else setSession("signed-out");
+        if (s.role === "owner") return setSession("owner");
+        const opened = await openWithoutCode();
+        if (mounted.current) setSession(opened ? "owner" : "signed-out");
       })
       .catch(() => {
         if (mounted.current) setSession("signed-out");
@@ -116,7 +131,7 @@ export default function SellerApp() {
     return () => {
       mounted.current = false;
     };
-  }, []);
+  }, [openWithoutCode]);
 
   // Data: on sign-in, then on server change events, with a poll as backup.
   useEffect(() => {
@@ -205,6 +220,8 @@ export default function SellerApp() {
         <Header onHome={() => go(ROUTES.home)} />
         <SignIn
           notice={signInNote}
+          codeRequired={codeRequired}
+          onNeedsCode={() => setCodeRequired(true)}
           onSignedIn={() => {
             setSignInNote("");
             setSession("owner");

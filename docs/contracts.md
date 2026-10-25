@@ -4,7 +4,7 @@ Local-only application. Backend TypeScript, Express, node:sqlite isolated develo
 
 ## UI API (same origin /api)
 
-All mutating calls JSON unless upload. API errors `{error:{code,message}}`. `POST /api/session {role:'requester'|'owner', accessCode?:string}` sets HttpOnly SameSite cookie; dev credentials configured locally, requester signup/session automatic. `GET /api/session` returns role/id. Owner login requires FABYN_OWNER_CODE (local setup generates and prints once). UI owner form requests access code. Requesters own their jobs. `/api/health` public returns `{mode:'simulation'|'hardware',paymentMode:'mock'|'testnet',store:'sqlite-development'|'spacetimedb',integrations:{...}}`.
+All mutating calls JSON unless upload. API errors `{error:{code,message}}`. `POST /api/session {role:'requester'|'owner', accessCode?:string}` sets HttpOnly SameSite cookie; dev credentials configured locally, requester signup/session automatic. `GET /api/session` returns role/id. Owner login is open unless FABYN_OWNER_CODE sets a code; then the UI owner form asks for it. Requesters own their jobs. `/api/health` public returns `{mode:'simulation'|'hardware',paymentMode:'mock'|'testnet',store:'sqlite-development'|'spacetimedb',integrations:{...}}`.
 
 `GET /api/machines` => `{machines:[Machine]}` (public capabilities only).
 Machine `{id,name,model,outputType:'sticker'|'instax'|'3d',adapterVersion,mode,paired,configured,calibrated,listed,ready,paused,reason,mediaRemaining,material,priceCard:{consumables,machine,handling,platform},hours:{start,end},maxJobSeconds,collectionPoint,activeJobId}`. Simulation devices explicitly labeled. `GET /api/owner/dashboard` => `{machines,jobs,ledger}` full owner scoped records.

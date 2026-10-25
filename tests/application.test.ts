@@ -14,7 +14,7 @@ const image = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
   "base64",
 );
-function fixture() {
+function fixture(ownerCode = "test-owner-code") {
   const dir = mkdtempSync(join(tmpdir(), "fabyn-http-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const node = new HttpNode(
@@ -30,7 +30,7 @@ function fixture() {
     secret: "test-secret",
     quoteMs: 120000,
     pickupMs: 10000,
-    ownerCode: "test-owner-code",
+    ownerCode,
     dataDir: dir,
     nodeUrl: "http://127.0.0.1:1",
   };
@@ -56,6 +56,25 @@ const spec = (assetId: string) => ({
   material: "thermal-paper",
   permission: "authorized",
   crop: "contain",
+});
+test("with no owner code configured the workshop opens without one", async () => {
+  const f = fixture("");
+  try {
+    const a = request.agent(f.app);
+    await a.get("/api/owner/dashboard").expect(401);
+    const opened = await a.post("/api/session").send({ role: "owner" }).expect(200);
+    assert.equal(opened.body.role, "owner");
+    await a.get("/api/owner/dashboard").expect(200);
+    // scripts that still send the old code keep working
+    await request(f.app).post("/api/session").send({ role: "owner", accessCode: "any-old-code" }).expect(200);
+    await request(f.app)
+      .post("/api/session")
+      .set("Origin", "https://attacker.example")
+      .send({ role: "owner" })
+      .expect(403);
+  } finally {
+    f.close();
+  }
 });
 test("HTTP authentication, owner boundaries and cross-origin writes", async () => {
   const f = fixture();

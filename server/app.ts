@@ -364,7 +364,8 @@ export function createApp(
       "Choose requester or owner access.",
       422,
     );
-    if (role === "owner") {
+    // With no owner code configured the workshop is open: any owner sign-in is accepted.
+    if (role === "owner" && service.config.ownerCode) {
       const provided = String(req.body.accessCode ?? "");
       const providedBytes = Buffer.from(provided),
         expectedBytes = Buffer.from(service.config.ownerCode);

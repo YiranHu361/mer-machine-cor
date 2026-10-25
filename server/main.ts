@@ -77,7 +77,8 @@ const config: Config = {
   secret: process.env.FABYN_TOKEN_SECRET,
   quoteMs: 120000,
   pickupMs: 86400000,
-  ownerCode: process.env.FABYN_OWNER_CODE ?? credentials.ownerCode,
+  // The workshop opens without a code unless FABYN_OWNER_CODE sets one.
+  ownerCode: process.env.FABYN_OWNER_CODE ?? "",
   dataDir,
   nodeUrl: process.env.FABYN_NODE_URL ?? "http://127.0.0.1:8788",
 };

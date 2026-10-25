@@ -55,7 +55,7 @@ Prerequisites:
    - For builds and tests, start it with `FABYN_DESIGN_PROVIDER=fixture ANTHROPIC_API_KEY= OPENAI_API_KEY= GEMINI_API_KEY=` so nothing makes paid calls.
    - The startup line should read `(simulation, convex, testnet, … test wallet 0x…)`.
 4. **macOS Desktop gotcha:** on `~/Desktop`, macOS marks `node/.venv/lib/python3.12/site-packages/*.pth` hidden, and Python 3.12 skips them. Orders then fail with `PRODUCER_FAILED … No module named 'fabyn_node'`. After every backend start, run `ln -sfn "$PWD/node/fabyn_node" node/.venv/lib/python3.12/site-packages/fabyn_node`. Check it with `node/.venv/bin/fabyn-producer --help`; it should print a JSON rejection, not a traceback.
-5. **Make the machines ready:** sign in as owner (code in `.data/local-credentials.json`), then calibrate, list and resume each machine. Give the A1 a job time limit of 1800 s, because a keychain takes about 14 minutes and the default is 15. Henry's Mac has helpers for this in `.data/tools/` (`run-backend.sh`, `free.mjs`, `dev-ready.mjs`).
+5. **Make the machines ready:** open the seller page (no access code unless `FABYN_OWNER_CODE` is set), then calibrate, list and resume each machine. Give the A1 a job time limit of 1800 s, because a keychain takes about 14 minutes and the default is 15. Henry's Mac has helpers for this in `.data/tools/` (`run-backend.sh`, `free.mjs`, `dev-ready.mjs`).
 6. **Web:** `npm --prefix web run dev` on :4317. Open:
    - http://127.0.0.1:4317/fabyn (home)
    - http://127.0.0.1:4317/fabyn/order (consumer)

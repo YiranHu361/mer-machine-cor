@@ -2,7 +2,7 @@
 
 A local requester and owner application that starts with pictures. Upload images and Fabyn recommends a supported output and a suitable machine from the registered database. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
 
-Open the running application at **http://127.0.0.1:4318**. Requester sessions are private; owner access comes from ignored `.data/local-credentials.json` (`ownerCode`). Do not copy that file into reports.
+Open the running application at **http://127.0.0.1:4318**. Requester sessions are private; the maker side opens without an access code unless `FABYN_OWNER_CODE` sets one. Do not copy `.data/local-credentials.json` into reports.
 
 ## Run
 

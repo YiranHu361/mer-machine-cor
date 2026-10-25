@@ -2,21 +2,35 @@ import { useState, type FormEvent } from "react";
 import { api, ApiError } from "../../api";
 import { MAKER } from "./data";
 
-export function SignIn({ onSignedIn, notice }: { onSignedIn: () => void; notice?: string }) {
+/** The workshop door. Without an access code on the server it is one button. */
+export function SignIn({
+  onSignedIn,
+  onNeedsCode,
+  codeRequired,
+  notice,
+}: {
+  onSignedIn: () => void;
+  onNeedsCode: () => void;
+  codeRequired: boolean;
+  notice?: string;
+}) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!code.trim()) return;
+    if (codeRequired && !code.trim()) return;
     setBusy(true);
     setError("");
     try {
-      await api("/session", { role: "owner", accessCode: code });
+      await api("/session", codeRequired ? { role: "owner", accessCode: code } : { role: "owner" });
       setCode("");
       onSignedIn();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "The workshop could not be reached. Check the local service and try again.");
+      if (!codeRequired && e instanceof ApiError && e.code === "ACCESS_CODE") {
+        onNeedsCode();
+        setError("This workshop has an access code. Enter it to open the workshop.");
+      } else setError(e instanceof ApiError ? e.message : "The workshop could not be reached. Check the local service and try again.");
     } finally {
       setBusy(false);
     }
@@ -37,29 +51,31 @@ export function SignIn({ onSignedIn, notice }: { onSignedIn: () => void; notice?
               {MAKER.name} · {MAKER.place}
             </p>
           </div>
-          <div className="sl-field">
-            <label htmlFor="sl-code" className="sl-label">
-              Access code
-            </label>
-            <input
-              id="sl-code"
-              className="sl-input"
-              type="password"
-              autoComplete="current-password"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "sl-code-error" : undefined}
-              required
-            />
-          </div>
+          {codeRequired && (
+            <div className="sl-field">
+              <label htmlFor="sl-code" className="sl-label">
+                Access code
+              </label>
+              <input
+                id="sl-code"
+                className="sl-input"
+                type="password"
+                autoComplete="current-password"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? "sl-code-error" : undefined}
+                required
+              />
+            </div>
+          )}
           {notice && !error && <p className="sl-note" role="status">{notice}</p>}
           {error && (
             <p className="sl-error" id="sl-code-error" role="alert">
               {error}
             </p>
           )}
-          <button className="sl-btn solid" type="submit" disabled={busy || !code.trim()}>
+          <button className="sl-btn solid" type="submit" disabled={busy || (codeRequired && !code.trim())}>
             {busy ? "Opening…" : "Open the workshop"}
           </button>
         </form>
