@@ -561,7 +561,7 @@ test("a failed bundle payment releases the reservations and dispatches nothing",
   }
 });
 
-test("with no colour printer free, a photo becomes a named black-and-white sticker, even when colour or a photo print was asked for", async () => {
+test("with no colour printer free, a photo order waits and offers a black-and-white sticker as a button; pressing it makes the sticker", async () => {
   const f = fixture();
   try {
     await f.ready(["phomemo_01"]); // the photo printer is not ready
@@ -575,35 +575,42 @@ test("with no colour printer free, a photo becomes a named black-and-white stick
       await f.orchestrator.settle(order.id);
       return f.orchestrator.view(requester, order.id);
     };
-    const o = await order("", "create-key-0005");
-    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
-    const [item] = o.plan!.items;
-    assert.equal(item.process, "sticker_print");
-    assert.equal(item.name, "A black-and-white sticker of your photo");
-    assert.match(item.why, /No colour printer is free/);
-    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
-    // The best available machine is offered even when another was asked for;
-    // the proposal says so, and a colour request is told its colours go.
-    for (const [text, key, colourNote] of [
-      ["print this photo in full colour", "create-key-0005b", true],
-      ["a photo print please", "create-key-0005c", false],
+    // Never switched on its own: a photo stays a photo print until the person chooses.
+    for (const [text, key] of [
+      ["", "create-key-0005"],
+      ["print this photo in full colour", "create-key-0005b"],
+      ["a photo print please", "create-key-0005c"],
     ] as const) {
-      const moved = await order(text, key);
-      assert.equal(moved.draft.stage, "proposed", text);
-      assert.equal(moved.plan!.items[0].process, "sticker_print");
-      assert.equal(
-        /colours become black and white/.test(moved.plan!.items[0].why),
-        colourNote,
+      const o = await order(text, key);
+      assert.equal(o.draft.stage, "unavailable", text);
+      assert.equal(o.plan, undefined, text);
+      assert.deepEqual(
+        o.suggestions.map((g) => [g.id, g.process, g.operation, g.label]),
+        [["alt_sticker_print", "sticker_print", "replace", "Use a black-and-white sticker instead"]],
         text,
       );
-      assert.equal(moved.plan!.assignments[0].machineId, "phomemo_01");
+      assert.match(o.suggestions[0].note, /colours become black and white/, text);
     }
+    const o = await order("", "create-key-0005d");
+    const pressed = await f.orchestrator.selectAlternative(requester, o.id, "alt_sticker_print", {
+      expectedPlanVersion: null,
+      operation: "replace",
+    });
+    await f.orchestrator.settle(pressed.id);
+    const made = await f.orchestrator.view(requester, o.id);
+    assert.equal(made.draft.stage, "proposed", made.draft.reason ?? "");
+    const [item] = made.plan!.items;
+    assert.equal(item.process, "sticker_print");
+    assert.equal(item.name, "A black-and-white sticker");
+    assert.match(item.why, /colours become black and white/);
+    assert.equal(item.design.kind, "photos");
+    assert.equal(made.plan!.assignments[0].machineId, "phomemo_01");
   } finally {
     f.close();
   }
 });
 
-test("with no real sticker printer free, a sticker prints for real on the photo printer, named as a photo print", async () => {
+test("with only a pretend sticker printer, a sticker stays a sticker and the real photo printer is offered as a button", async () => {
   const f = fixture({ allowed: ["hardware", "simulation"] });
   try {
     await f.ready(["phomemo_01"], "simulation"); // only a pretend sticker printer
@@ -623,10 +630,20 @@ test("with no real sticker printer free, a sticker prints for real on the photo 
     await f.orchestrator.settle(order.id);
     o = await f.orchestrator.view(requester, order.id);
     assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
-    const [item] = o.plan!.items;
-    assert.equal(item.process, "photo_print");
-    assert.equal(item.name, "A photo print of your design");
-    assert.match(item.why, /No sticker printer is free/);
+    assert.equal(o.plan!.items[0].process, "sticker_print");
+    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+    assert.equal(o.plan!.assignments[0].executionMode, "simulation");
+    const offer = o.suggestions.find((g) => g.id === "alt_photo_print")!;
+    assert.deepEqual([offer.operation, offer.label], ["replace", "Use a photo print instead"]);
+    await f.orchestrator.selectAlternative(requester, order.id, offer.id, {
+      expectedPlanVersion: o.plan!.version,
+      operation: "replace",
+    });
+    await f.orchestrator.settle(order.id);
+    o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    assert.equal(o.plan!.items[0].process, "photo_print");
+    assert.equal(o.plan!.items[0].name, "A photo print");
     assert.equal(o.plan!.assignments[0].machineId, "instax_01");
     assert.equal(o.plan!.assignments[0].executionMode, "hardware");
   } finally {
@@ -634,35 +651,30 @@ test("with no real sticker printer free, a sticker prints for real on the photo 
   }
 });
 
-test("a colour photo prints for real as a black-and-white sticker rather than on a simulated photo printer", async () => {
+test("a colour photo stays a photo print on a pretend photo printer, and the real sticker printer is offered with its colours going", async () => {
   const f = fixture({ allowed: ["hardware", "simulation"] });
   try {
     await f.ready(["instax_01"], "simulation"); // only a pretend photo printer
     await f.ready(["phomemo_01"], "hardware"); // a real sticker printer
     const photo = await f.photo(requester.id);
-    const order = async (requestText: string, key: string) => {
+    for (const [text, key] of [
+      ["", "real-first-1"],
+      ["a photo print please", "real-first-2"],
+    ] as const) {
       const { order } = await f.orchestrator.createOrder(
         requester,
-        { requestText, photoAssetIds: [photo] },
+        { requestText: text, photoAssetIds: [photo] },
         key,
       );
       await f.orchestrator.settle(order.id);
-      return f.orchestrator.view(requester, order.id);
-    };
-    const o = await order("", "real-first-1");
-    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
-    assert.equal(o.plan!.items[0].process, "sticker_print");
-    assert.equal(
-      o.plan!.items[0].name,
-      "A black-and-white sticker of your photo",
-    );
-    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
-    assert.equal(o.plan!.assignments[0].executionMode, "hardware");
-    // Asked for a photo print: the real sticker printer still beats a pretend
-    // photo printer, and the proposal names the change.
-    const asked = await order("a photo print please", "real-first-2");
-    assert.equal(asked.plan!.items[0].process, "sticker_print");
-    assert.equal(asked.plan!.assignments[0].executionMode, "hardware");
+      const o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+      assert.equal(o.plan!.items[0].process, "photo_print", text);
+      assert.equal(o.plan!.assignments[0].machineId, "instax_01", text);
+      const offer = o.suggestions.find((g) => g.id === "alt_sticker_print")!;
+      assert.equal(offer.label, "Use a black-and-white sticker instead", text);
+      assert.match(offer.note, /colours become black and white/, text);
+    }
   } finally {
     f.close();
   }
@@ -690,12 +702,12 @@ test("an explicit sticker request keeps the thermal printer even when Claude cal
       },
     ],
   });
-  // Colour in words makes it a colour print; with no colour printer free the
-  // existing fallback makes it a named black-and-white sticker instead.
+  // Colour in words makes it a colour print; with no colour printer free it
+  // waits, and the black-and-white sticker is a button (tested below).
   for (const [requestText, machines, machine, name] of [
     ["i want a sticker", ["phomemo_01"], "phomemo_01", /^A sticker of your photo$/],
     ["i want a sticker in full colour", ["phomemo_01", "instax_01"], "instax_01", /^A print of your photo$/],
-    ["i want a sticker in full colour", ["phomemo_01"], "phomemo_01", /black-and-white sticker/],
+    ["i want a sticker in full colour", ["phomemo_01"], null, null],
   ] as const) {
     let photo = "";
     const f = fixture({ understand: async (i) => brief(i.requestText, photo) });
@@ -709,6 +721,11 @@ test("an explicit sticker request keeps the thermal printer even when Claude cal
       );
       await f.orchestrator.settle(order.id);
       const o = await f.orchestrator.view(requester, order.id);
+      if (!machine) {
+        assert.equal(o.draft.stage, "unavailable", requestText);
+        assert.deepEqual(o.suggestions.map((g) => g.id), ["alt_sticker_print"]);
+        continue;
+      }
       assert.equal(o.draft.stage, "proposed", requestText);
       assert.equal(o.plan!.assignments[0].machineId, machine, requestText);
       assert.match(o.plan!.items[0].name, name, requestText);
@@ -2190,14 +2207,20 @@ test("printers on the hub are checked while drafts are drawn, and one that does 
     assert.equal(o.draft.stage, "awaiting_design_choice");
     assert.deepEqual([...checked].sort(), ["instax_01", "phomemo_01"]);
 
-    // A photo meant for the Instax: the Instax is asleep, so the real sticker
-    // printer makes it, named as such.
+    // A photo meant for the Instax: the Instax is asleep, so the order says so
+    // and offers the real sticker printer as a button.
     const photo = await f.photo(requester.id);
     const asleep = await f.orchestrator.createOrder(
       requester,
       { requestText: "", photoAssetIds: [photo] },
       "create-key-check-2",
     );
+    await f.orchestrator.settle(asleep.order.id);
+    o = await f.orchestrator.view(requester, asleep.order.id);
+    assert.equal(o.draft.stage, "unavailable");
+    assert.match(o.draft.reason!, /did not answer: it may be off/);
+    assert.deepEqual(o.suggestions.map((g) => g.id), ["alt_sticker_print"]);
+    await f.orchestrator.selectAlternative(requester, asleep.order.id, "alt_sticker_print", { operation: "replace" });
     await f.orchestrator.settle(asleep.order.id);
     o = await f.orchestrator.view(requester, asleep.order.id);
     assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
@@ -2234,10 +2257,12 @@ test("when no printer answers its check, the order says which one to turn on", a
     await f.orchestrator.settle(order.id);
     const o = await f.orchestrator.view(requester, order.id);
     assert.equal(o.draft.stage, "unavailable");
+    // it names the printer the photo needs; the asleep sticker printer is no button either
     assert.match(
       o.draft.reason!,
-      /did not answer: they may be off.*Turn them on, close their phone apps/,
+      /^Photo counter did not answer: it may be off.*Turn it on, close its phone app/,
     );
+    assert.deepEqual(o.suggestions, []);
     assert.deepEqual(o.draft.photoAssetIds, [photo], "the photo is kept");
   } finally {
     f.close();
@@ -2638,6 +2663,68 @@ test("colour asked in words is a colour print drafted in colour, on Claude's pat
       }
     } finally {
       console.warn = warn;
+      f.close();
+    }
+  }
+});
+
+test("a busy machine of the asked kind is never swapped on its own: the order says when it frees up and offers the other printer as a button", async () => {
+  for (const [busy, request, swap, made] of [
+    ["instax_01", { requestText: "", photo: true }, "alt_sticker_print", "sticker_print"],
+    ["phomemo_01", { requestText: "a sticker of my photo", photo: true }, "alt_photo_print", "photo_print"],
+  ] as const) {
+    const f = fixture();
+    try {
+      await f.ready(["phomemo_01", "instax_01"]);
+      const photo = await f.photo(requester.id);
+      // the machine is running another order that should take ten minutes, two in
+      const started = new Date(clockMs - 2 * 60_000).toISOString();
+      await mutate(f.store, (s) => {
+        s.machines[busy].activeJobId = "job_busy";
+        s.jobs.job_busy = {
+          id: "job_busy",
+          requesterId: "someone_else",
+          machineId: busy,
+          specVersion: 1,
+          spec: { outputType: busy === "instax_01" ? "instax" : "sticker", estimatedSeconds: 600 },
+          artifact: { id: "a", url: "/assets/x", sha256: "x" },
+          productionState: "running",
+          paymentState: "confirmed",
+          fulfillmentState: "unprepared",
+          history: [{ at: started, event: "dispatch_authorized", reason: "" }],
+          createdAt: started,
+          updatedAt: started,
+          version: 1,
+        } as any;
+      });
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText: request.requestText, photoAssetIds: [photo] },
+        `create-key-busy-${busy}`,
+      );
+      await f.orchestrator.settle(order.id);
+      let o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "unavailable", busy);
+      assert.equal(o.plan, undefined, "nothing was switched");
+      assert.match(o.draft.reason!, /finishing another order.*It should be free in about 8 min\./);
+      assert.equal(o.draft.freeAt, new Date(Date.parse(started) + 600_000).toISOString());
+      assert.deepEqual(o.suggestions.map((g) => g.id), [swap]);
+      if (swap === "alt_sticker_print") assert.match(o.suggestions[0].note, /colours become black and white/);
+      else assert.doesNotMatch(o.suggestions[0].note, /black and white/);
+      // pressing the button is the only way it changes
+      await f.orchestrator.selectAlternative(requester, order.id, swap, { expectedPlanVersion: null, operation: "replace" });
+      await f.orchestrator.settle(order.id);
+      o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+      assert.equal(o.draft.freeAt, undefined);
+      assert.equal(o.plan!.items[0].process, made);
+      assert.notEqual(o.plan!.assignments[0].machineId, busy);
+      // a stale press is refused
+      await assert.rejects(
+        f.orchestrator.selectAlternative(requester, order.id, swap, { expectedPlanVersion: null, operation: "replace" }),
+        /suggestion changed/,
+      );
+    } finally {
       f.close();
     }
   }

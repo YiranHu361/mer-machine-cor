@@ -268,6 +268,8 @@ export interface Order {
     stage: PreparationStage;
     reason?: string;
     question?: string | null;
+    /** When the busy machine an unavailable order waits for should be free (an estimate). */
+    freeAt?: string;
     headCount?: number;
     /** Fences a preparation worker: a stale worker never commits. */
     lease?: { id: string; expiresAt: string };

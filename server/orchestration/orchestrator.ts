@@ -176,29 +176,21 @@ function event(o: Order, type: string, data: Record<string, unknown> = {}) {
   if (o.events.length > EVENT_LIMIT)
     o.events.splice(0, o.events.length - EVENT_LIMIT);
 }
-/** The same design on the other flat printer, named for what it becomes. */
-function otherFlatPrint(
-  item: IntentItem,
-  colourAsked: boolean,
-): IntentItem | null {
-  const what = item.photoAssetIds.length ? "your photo" : "your design";
-  if (item.process === "photo_print")
-    return {
-      ...item,
-      process: "sticker_print",
-      colorImportant: false,
-      name: `A black-and-white sticker of ${what}`,
-      why: `No colour printer is free right now, so ${what} is made as a black-and-white sticker${colourAsked ? " and its colours become black and white" : ""}. Check the preview.`,
-    };
-  if (item.process === "sticker_print")
-    return {
-      ...item,
-      process: "photo_print",
-      name: `A photo print of ${what}`,
-      why: `No sticker printer is free right now, so ${what} is printed on photo film instead. Check the preview.`,
-    };
-  return null;
+/** When a busy machine should be free: its running job's estimate, or its reservation's end. */
+function freeAt(s: State, machineId: string, at: number): string | undefined {
+  const m = ownValue(s.machines, machineId);
+  if (!m) return undefined;
+  const job = m.activeJobId ? ownValue(s.jobs, m.activeJobId) : undefined;
+  const started = job?.history.find((h) => /dispatch|execution/.test(h.event));
+  const seconds = job?.spec.estimatedSeconds;
+  const end = started && seconds
+    ? Date.parse(started.at) + seconds * 1000
+    : !job && m.reservation
+      ? Date.parse(m.reservation.expiresAt)
+      : NaN;
+  return Number.isFinite(end) && end > at ? new Date(end).toISOString() : undefined;
 }
+const plainSuggestion = ({ real: _real, ...g }: FormatSuggestion & { real?: boolean }): FormatSuggestion => g;
 const label = (p: Process) =>
   ({
     sticker_print: "Sticker",
@@ -1719,6 +1711,8 @@ export class Orchestrator {
     const allowed = (m: ExecutionMode) => this.service.modeAllowed(m);
     const unavailable: string[] = [];
     let missingRequested = false;
+    const freeAts: string[] = [];
+    let alternative: (FormatSuggestion & { real?: boolean }) | undefined;
     for (const [index, intended] of o.intent!.items.entries()) {
       const itemId = `it_${index + 1}`;
       if (o.experience === "relief") {
@@ -1736,34 +1730,31 @@ export class Orchestrator {
       );
       const real = (list: typeof candidates) =>
         list.filter((c) => c.mode === "hardware");
-      // The best available machine: when no real machine of the planned kind
-      // is free, the other flat printer makes it if a real one is free there,
-      // rather than a simulated machine that makes nothing physical. The
-      // proposal names what it becomes, so the person sees it before paying.
-      // Several requested things keep their own kinds, one machine each.
-      const other =
-        !real(candidates).length &&
-        o.experience === "best_single" &&
-        this.requestedCount(o) === 1
-          ? otherFlatPrint(item, asksForColour(o.draft.requestText))
-          : null;
-      if (other) {
-        checked = await this.afterChecks(checked, other.process, silent);
-        const fallback = eligibleRegistryMachines(checked, other, allowed);
-        if (
-          real(fallback.candidates).length ||
-          (!candidates.length && fallback.candidates.length)
-        )
-          (({ candidates, rejected } = fallback), (item = other));
-      }
+      // The item keeps the process it was asked for: the other flat printer is
+      // only ever offered as a choice the person presses (alternativeFor).
       // Real machines first: a simulated one is used only when no real one can make it.
       candidates = [
         ...real(candidates),
         ...candidates.filter((c) => c.mode !== "hardware"),
       ];
       const chosen = candidates[0];
+      // Only a one-item order is offered the other flat printer, and only by a button.
+      const swappable =
+        o.experience === "best_single" &&
+        this.requestedCount(o) === 1 &&
+        index === 0;
       if (!chosen) {
         if (index < this.requestedCount(o)) missingRequested = true;
+        // when the busy machine of this kind should be free, if its job says
+        const free = rejected
+          .filter((r) => r.reason === BUSY_REASON)
+          .map((r) => freeAt(checked, r.machineId, this.clock()))
+          .filter((t): t is string => !!t)
+          .sort()[0];
+        if (free) freeAts.push(free);
+        const minutes = free
+          ? Math.max(1, Math.ceil((Date.parse(free) - this.clock()) / 60_000))
+          : 0;
         unavailable.push(
           silent.size
             ? silent.size > 1
@@ -1773,10 +1764,18 @@ export class Orchestrator {
                 rejected.some((r) => r.reason.includes("colour"))
               ? "No available machine can keep these colours right now."
               : rejected.some((r) => r.reason === BUSY_REASON)
-                ? `The machine for "${item.name}" is finishing another order; the owner frees it after checking that print. Try again in a moment.`
+                ? `The machine for "${item.name}" is finishing another order; the owner frees it after checking that print. ${minutes ? `It should be free in about ${minutes} min.` : "Try again in a moment."}`
                 : `No available machine can make "${item.name}" right now.`,
         );
+        if (swappable)
+          alternative = await this.alternativeFor(o, item, itemId, () => checked, (next) => (checked = next), silent);
         continue;
+      }
+      // A simulated machine makes nothing physical: when a real one of the
+      // other flat kind is free, the person may choose it.
+      if (swappable && chosen.mode !== "hardware") {
+        const offer = await this.alternativeFor(o, item, itemId, () => checked, (next) => (checked = next), silent);
+        if (offer?.real) alternative = offer;
       }
       const design = this.designFor(o, s, item, index, item.process);
       const receipt = await this.receipt(o.requesterId, {
@@ -1855,15 +1854,24 @@ export class Orchestrator {
       ) {
         stage(x, "unavailable", unavailable.join(" "));
         x.status = "preparing";
+        // the latest a busy machine should be free; the order waits for all of them
+        if (freeAts.length) x.draft.freeAt = freeAts.sort()[freeAts.length - 1];
+        else delete x.draft.freeAt;
+        // the other flat printer, as a button; a plain stale list never lingers
+        x.suggestions = alternative ? [plainSuggestion(alternative)] : [];
         event(x, "plan.needs_action", { reasons: unavailable });
         return;
       }
+      delete x.draft.freeAt;
       const plan = this.revisePlan(x, state, {
         items,
         assignments,
         changes: x.plan ? ["Prepared again."] : ["First proposal."],
       });
-      x.suggestions = this.suggestions(x, state, plan);
+      const offered = this.suggestions(x, state, plan);
+      x.suggestions = alternative
+        ? [plainSuggestion(alternative), ...offered.filter((g) => g.process !== alternative!.process)].slice(0, 2)
+        : offered;
       stage(x, "proposed");
       event(x, "plan.proposed", {
         version: plan.version,
@@ -2079,6 +2087,56 @@ export class Orchestrator {
     }
     return out.slice(0, 2);
   }
+  /**
+   * The other flat printer for a one-item order, as a replace suggestion the
+   * person presses: a photo or colour item becomes a sticker only this way, and
+   * its note says the colours become black and white.
+   */
+  private async alternativeFor(
+    o: Order,
+    item: IntentItem,
+    itemId: string,
+    get: () => State,
+    set: (s: State) => void,
+    silent: Map<string, Machine>,
+  ): Promise<(FormatSuggestion & { real: boolean }) | undefined> {
+    const swap: Process | null =
+      item.process === "photo_print"
+        ? "sticker_print"
+        : item.process === "sticker_print"
+          ? "photo_print"
+          : null;
+    if (!swap) return undefined;
+    // the check of the other printer is its own: a silent one is not reported for this item
+    const quiet = new Map(silent);
+    set(await this.afterChecks(get(), swap, quiet));
+    const { candidates } = eligibleRegistryMachines(
+      get(),
+      { ...item, process: swap, colorImportant: false },
+      (m: ExecutionMode) => this.service.modeAllowed(m),
+    );
+    const best =
+      candidates.find((c) => c.mode === "hardware") ?? candidates[0];
+    if (!best) return undefined;
+    const what = item.photoAssetIds.length ? "your photo" : "your design";
+    const colour = item.colorImportant || item.process === "photo_print";
+    return {
+      id: `alt_${swap}`,
+      process: swap,
+      label:
+        swap === "sticker_print"
+          ? "Use a black-and-white sticker instead"
+          : "Use a photo print instead",
+      operation: "replace",
+      itemId,
+      estimateCents: best.estimateCents,
+      note:
+        swap === "sticker_print"
+          ? `Made as a sticker of ${what} on ${best.machine.name}${colour ? "; its colours become black and white" : ""}.`
+          : `Printed on photo film on ${best.machine.name}.`,
+      real: best.mode === "hardware",
+    };
+  }
   async selectAlternative(
     actor: Actor,
     orderId: string,
@@ -2095,7 +2153,7 @@ export class Orchestrator {
     const suggestion = o.suggestions.find((x) => x.id === suggestionId);
     requireThat(
       suggestion &&
-        body?.expectedPlanVersion === o.plan?.version &&
+        (body?.expectedPlanVersion ?? null) === (o.plan?.version ?? null) &&
         body?.operation === suggestion.operation,
       "STALE_SUGGESTION",
       "This suggestion changed. Refresh first.",
@@ -3406,6 +3464,7 @@ function orderView(o: Order, s: State, actor: Actor) {
       photoAssetIds: o.draft.photoAssetIds,
       stage: o.draft.stage,
       reason: o.draft.reason,
+      freeAt: o.draft.freeAt,
       headCount: o.draft.headCount,
     },
     intent: o.intent
