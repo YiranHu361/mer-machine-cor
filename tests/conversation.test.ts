@@ -21,6 +21,7 @@ import {
 } from "../server/orchestration/conversation.ts";
 import { productAvailability } from "../server/orchestration/products.ts";
 import {
+  ClaudeProvider,
   parseConversationReply,
   type ConversationInput,
   type ConversationReply,
@@ -374,6 +375,40 @@ test("the model's output is bounded: unknown products are dropped and long memor
   assert.ok("problem" in checkOption({ product: "drawn_sticker", subject: "cat", caption: "日本" }, 0));
   assert.ok("problem" in checkOption({ product: "photo_print" }, 0));
   assert.ok("option" in checkOption({ product: "photo_print" }, 1));
+});
+
+test("the Claude request asks for a schema-shaped reply, never forced tool use, and reports the API's reason", async () => {
+  const sent: any[] = [];
+  const reply = { message: "Hi", action: "answer", memory: { recipient: null, occasion: null, interests: [], notes: [] }, options: [], select: [] };
+  const ok = (async (_url: unknown, init: any) => {
+    sent.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify(reply) }], stop_reason: "end_turn" }), { status: 200 });
+  }) as typeof fetch;
+  const input: ConversationInput = {
+    turns: [{ role: "user", text: "hello" }, { role: "assistant", text: "Hi!" }],
+    message: "What can you make?",
+    products: [],
+    productIds: ["name_tag"],
+    memory: { recipient: null, occasion: null, interests: [], notes: [] },
+    offered: [],
+    chosen: [],
+    order: null,
+    photos: 0,
+  };
+  const answer = await new ClaudeProvider({ apiKey: "test-key", fetch: ok }).converse(input);
+  assert.equal(answer.message, "Hi");
+  const [body] = sent;
+  assert.equal(body.tool_choice, undefined);
+  assert.equal(body.tools, undefined);
+  assert.equal(body.output_config.format.type, "json_schema");
+  // structured outputs need every object closed
+  const closed = (s: any): boolean =>
+    !s || typeof s !== "object" || ((s.type !== "object" || s.additionalProperties === false) && Object.values(s.properties ?? {}).every(closed) && closed(s.items));
+  assert.ok(closed(body.output_config.format.schema));
+  assert.deepEqual(body.messages.map((m: any) => m.role), ["user", "assistant", "user"]);
+  const refused = (async () =>
+    new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "tool_choice: not supported" } }), { status: 400 })) as unknown as typeof fetch;
+  await assert.rejects(new ClaudeProvider({ apiKey: "test-key", fetch: refused }).converse(input), /HTTP 400 \(tool_choice: not supported\)/);
 });
 
 test("a printer that goes offline after the offer is checked again before anything is made", async () => {

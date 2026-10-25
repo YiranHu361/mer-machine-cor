@@ -617,7 +617,8 @@ export class ConversationAgent {
         });
         return this.fromModel(c, reply);
       } catch (e) {
-        const why = /^[A-Z_]+(?:: HTTP \d{3})?/.exec(String((e as Error)?.message ?? ""))?.[0];
+        // the error code and the API's own reason, never the request
+        const why = /^[A-Z_]+(?:: HTTP \d{3}(?: \([^)]{0,200}\))?)?/.exec(String((e as Error)?.message ?? ""))?.[0];
         console.warn(`[fabyn] the conversation model could not answer ${c.id} (${why ?? (e as Error)?.name ?? "error"}); using the local rules.`);
       }
     }
