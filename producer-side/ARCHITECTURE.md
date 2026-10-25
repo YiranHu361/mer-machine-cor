@@ -71,7 +71,7 @@ producer-side/
 1. **Load** `node/machines/<id>.json` and build the adapter from its `adapter.type`.
 2. **Connect** to `ws(s)://<hub>/ws/node` and send `hello` with the public manifest. Wait up to 10 s for `welcome`.
 3. **Run three tasks per connection:**
-   - **Reader:** handles `job.offer` and `job.cancel`.
+   - **Reader:** handles `job.offer`, `job.cancel` and `machine.check`.
    - **Writer:** drains the outbox.
    - **Heartbeat:** sends one every 5 s.
 4. **On `job.offer`:**
@@ -117,6 +117,8 @@ Every message in both directions uses the same envelope as `/ws/events`: `{"type
 | node → hub | `job.progress` | `{job_id, state: running\|verifying, progress: 0–1, eta_s, message}` |
 | node → hub | `job.result` | `{job_id, ok, photo_url, verification: {pass: true\|false\|null, reason}, error?}` |
 | hub → node | `job.cancel` | `{job_id}` |
+| hub → node | `machine.check` | `{check_id}`: connect to the machine once and print nothing (`adapter.probe()`), never during a job |
+| node → hub | `machine.checked` | `{check_id, ok, detail}`. A failed check is an answer about the printer, not an error state for the node |
 
 Timing: the gateway marks a node offline after 15 s without any message.
 
@@ -252,6 +254,7 @@ Frames are saved to `frames_dir` and returned as `/frames/<name>`. The hub must 
 | `GET /machines` | Live manifests |
 | `POST /dev/offer` | `{machine_id, asset_url?, quantity?, params?}` builds a job and offers it. The default asset is a generated 48×30 mm test sticker |
 | `POST /dev/cancel`, `POST /dev/approve` | `{machine_id, job_id}` |
+| `POST /dev/check` | `{machine_id}` → `{machine_id, ok, detail}` after the node tries its machine (up to 90 s). The consumer calls it while drafts are drawn, so a printer that has gone to sleep is not offered |
 | `GET /dev/events?limit=` | Recent gateway events |
 | `/assets/*`, `/frames/*` | Static files |
 

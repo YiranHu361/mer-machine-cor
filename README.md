@@ -48,7 +48,8 @@ Each computer keeps its own `.env` (never committed). For the MVP it needs:
 | `FABRARY_ALLOWED_MODES` | `hardware` | Orders go to real machines only (`npm run mvp` uses this when unset) |
 | `FABRARY_PRODUCER_HUB_URL` | `http://127.0.0.1:8000` | The producer side's hub (the default) |
 | `FABRARY_AUTO_ACCEPT_PRINTS` | `1` | A finished hub print completes the order and frees the printer (`npm run mvp` sets it); `0` keeps the owner's check |
-| `ANTHROPIC_API_KEY` | optional | Reads requests and draws designs; without it, photos still work by local rules and words-only requests cannot be drawn |
+| `ANTHROPIC_API_KEY` | optional | Reads requests (and draws line-art designs when there is no Gemini key); without it, photos still work by local rules |
+| `OPENAI_API_KEY` or `GEMINI_API_KEY` | optional | OpenAI (first) or Nano Banana draws the design drafts as pictures: black-and-white for stickers, colour for photo prints, three per round. Both need billing on that account. Without one of these or the Claude key, words-only requests cannot be drawn |
 | `CONVEX_URL`, `FABRARY_PUBLISH_SECRET` | optional | The live view (below); any long random secret |
 
 **Convex on your own computer, no account:** run `npm run convex:local` in its own terminal and keep it running (the first run downloads Convex's local backend). Once, store the same secret there with `npx convex env set FABRARY_PUBLISH_SECRET <the value from .env>`, and set `CONVEX_URL=http://127.0.0.1:3210` in `.env`. Its data stays in the ignored `.convex/` folder.

@@ -19,6 +19,7 @@ import {
   type State,
 } from "../model.ts";
 import type { Service } from "../service.ts";
+import type { ProducerHubNode } from "../producer-hub.ts";
 import {
   createClaudeProvider,
   type DesignDraft,
@@ -26,6 +27,12 @@ import {
   type RequestBrief,
   type RequestInput,
 } from "../../integrations/src/claude.ts";
+import { createNanoBananaProvider } from "../../integrations/src/nano-banana.ts";
+import { createOpenAIImageProvider } from "../../integrations/src/openai-images.ts";
+import type {
+  ImageDraft,
+  ImageDraftInput,
+} from "../../integrations/src/picture-drafts.ts";
 import { localAnalysis, type ImageAnalysis } from "../recommendations.ts";
 import {
   PROCESS_SHEETS,
@@ -100,19 +107,35 @@ const DRAFTS_PER_ROUND = 3;
 const EVENT_LIMIT = 300;
 const PROMPT_VERSION = "drafts/1";
 const COMPILER = "producer-prepare/1";
+/** A printer check younger than this is reused; an older one is asked again. */
+const CHECK_FRESH_MS = 60_000;
+/** A check older than this no longer says anything about the printer. */
+const CHECK_VALID_MS = 10 * 60_000;
+type PrinterCheck = { ok: boolean; detail: string };
+/** Pause reasons that only mean the printer could not be reached: nothing was printed. */
+const UNREACHED =
+  /not found|could not connect|did not answer|is not connected to the producer side's hub|is offline at the producer side's hub/i;
+/** How often paused, unreachable printers are checked again. */
+const RECOVERY_SCAN_MS = 60_000;
 
 export interface OrchestratorDeps {
   producer?: ProducerRunner;
   understand?: (input: RequestInput) => Promise<RequestBrief>;
   draft?: (input: DraftInput) => Promise<DesignDraft[]>;
-  /** claude draws new art, fixture uses labelled stand-ins for tests, none disables it. */
-  designProvider?: "claude" | "fixture" | "none";
+  imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
+  /** openai and nano-banana draw pictures, claude draws SVG line art, fixture uses labelled stand-ins for tests, none disables it. */
+  designProvider?: DesignProvider;
   analyze?: (assets: Asset[]) => Promise<ImageAnalysis>;
+  /** Connects to a real printer on the producer side's hub once, printing nothing. */
+  checkPrinter?: (machine: Machine) => Promise<PrinterCheck>;
   offerMs?: number;
   reliefSeed?: number;
   clock?: () => number;
 }
 type Actor = { id: string; role: string };
+type DesignProvider = "openai" | "nano-banana" | "claude" | "fixture" | "none";
+/** A drawing comes back as SVG, a picture as image bytes. */
+type Draft = { title: string; svg?: string; image?: ImageDraft["image"] };
 
 const stage = (o: Order, value: PreparationStage, reason?: string) => {
   o.draft.stage = value;
@@ -131,6 +154,29 @@ function event(o: Order, type: string, data: Record<string, unknown> = {}) {
   if (o.events.length > EVENT_LIMIT)
     o.events.splice(0, o.events.length - EVENT_LIMIT);
 }
+/** The same design on the other flat printer, named for what it becomes. */
+function otherFlatPrint(
+  item: IntentItem,
+  colourAsked: boolean,
+): IntentItem | null {
+  const what = item.photoAssetIds.length ? "your photo" : "your design";
+  if (item.process === "photo_print")
+    return {
+      ...item,
+      process: "sticker_print",
+      colorImportant: false,
+      name: `A black-and-white sticker of ${what}`,
+      why: `No colour printer is free right now, so ${what} is made as a black-and-white sticker${colourAsked ? " and its colours become black and white" : ""}. Check the preview.`,
+    };
+  if (item.process === "sticker_print")
+    return {
+      ...item,
+      process: "photo_print",
+      name: `A photo print of ${what}`,
+      why: `No sticker printer is free right now, so ${what} is printed on photo film instead. Check the preview.`,
+    };
+  return null;
+}
 const label = (p: Process) =>
   ({
     sticker_print: "Sticker",
@@ -140,6 +186,17 @@ const label = (p: Process) =>
 
 export class Orchestrator {
   private inflight = new Map<string, Promise<unknown>>();
+  private lastRecoveryScan = 0;
+  /** The latest check of each real printer on the hub, kept in memory only. */
+  private printerChecks = new Map<
+    string,
+    {
+      at: number;
+      result: Promise<PrinterCheck>;
+      /** Set once the printer answered (or did not). */
+      answer?: PrinterCheck & { at: number };
+    }
+  >();
   private producer: ProducerRunner;
   constructor(
     public service: Service,
@@ -150,10 +207,19 @@ export class Orchestrator {
   private get clock() {
     return this.deps.clock ?? Date.now;
   }
-  get designProvider(): "claude" | "fixture" | "none" {
+  get designProvider(): DesignProvider {
     if (this.deps.designProvider) return this.deps.designProvider;
     const env = process.env.FABRARY_DESIGN_PROVIDER;
-    if (env === "fixture" || env === "none" || env === "claude") return env;
+    if (
+      env === "openai" ||
+      env === "nano-banana" ||
+      env === "fixture" ||
+      env === "none" ||
+      env === "claude"
+    )
+      return env;
+    if (process.env.OPENAI_API_KEY) return "openai";
+    if (process.env.GEMINI_API_KEY) return "nano-banana";
     return process.env.ANTHROPIC_API_KEY ? "claude" : "none";
   }
   private get dataDir() {
@@ -445,6 +511,9 @@ export class Orchestrator {
         if (!ok) return;
         ({ o, s } = await this.load(orderId));
       }
+      // Wake the printers this order may use while its drafts are drawn; the
+      // plan waits for the answers.
+      this.checkPrinters(s, o);
       const drawItem = o.intent!.items.findIndex(
         (i) =>
           i.creation === "generate" &&
@@ -469,6 +538,167 @@ export class Orchestrator {
         });
       });
     }
+  }
+  /**
+   * Checks, in the background, every real printer on the producer side's hub
+   * that a flat print could use, its own kind or the fallback. A node online
+   * is not proof its printer is awake: Bluetooth printers sleep when idle.
+   */
+  private checkPrinters(s: State, o: Order) {
+    if (
+      !o.intent?.items.some(
+        (i) => i.process === "sticker_print" || i.process === "photo_print",
+      )
+    )
+      return;
+    for (const m of Object.values(s.machines))
+      if (
+        m.producerHub &&
+        m.mode === "hardware" &&
+        (m.outputType === "sticker" || m.outputType === "instax")
+      )
+        this.startCheck(m);
+  }
+  /** One check per printer at a time; a printer that answers is returned to service if it was only unreachable. */
+  private startCheck(m: Machine) {
+    const last = this.printerChecks.get(m.id);
+    if (last && this.clock() - last.at < CHECK_FRESH_MS) return;
+    const entry: {
+      at: number;
+      result: Promise<PrinterCheck>;
+      answer?: PrinterCheck & { at: number };
+    } = {
+      at: this.clock(),
+      result: Promise.resolve({ ok: false, detail: "" }),
+    };
+    entry.result = this.checkPrinter(m)
+      .catch((e) => ({
+        ok: false,
+        detail: (e as Error).message.slice(0, 200),
+      }))
+      .then(async (answer) => {
+        if (answer.ok) await this.recoverPrinter(m.id).catch(() => undefined);
+        // Keep the last answer through the next check, so the status never blanks.
+        entry.answer = { ...answer, at: this.clock() };
+        return answer;
+      });
+    if (last?.answer) entry.answer = last.answer;
+    this.printerChecks.set(m.id, entry);
+  }
+  /**
+   * What the site shows for each real printer: whether it answered its
+   * latest check, is printing, is being checked, or waits for the owner.
+   */
+  async printerStatus() {
+    const s = await this.service.read();
+    return Object.values(s.machines)
+      .filter(
+        (m) =>
+          m.producerHub &&
+          m.mode === "hardware" &&
+          (m.outputType === "sticker" || m.outputType === "instax"),
+      )
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((m) => {
+        const check = this.printerChecks.get(m.id);
+        const answer = check?.answer;
+        // A paused printer still holding an order is waiting, not printing.
+        const status =
+          m.activeJobId && !m.paused
+            ? "busy"
+            : answer && !answer.ok
+              ? "not_answering"
+              : m.paused && !UNREACHED.test(m.reason ?? "")
+                ? "paused"
+                : answer?.ok && this.clock() - answer.at < 3 * CHECK_FRESH_MS
+                  ? "connected"
+                  : "checking";
+        return {
+          id: m.id,
+          name: m.name,
+          model: m.model,
+          makes: m.outputType === "instax" ? "Photo prints" : "Stickers",
+          status,
+          detail:
+            status === "not_answering"
+              ? answer!.detail
+              : status === "paused"
+                ? (m.reason ?? "")
+                : "",
+          checkedAt: answer ? new Date(answer.at).toISOString() : null,
+        };
+      });
+  }
+  /**
+   * A printer paused only because it could not be reached comes back on its
+   * own once a check reaches it: the failed print never got to the printer,
+   * so there is nothing to inspect. Any other pause (no film, a print that
+   * may have come out) still waits for the owner.
+   */
+  private async recoverPrinter(machineId: string) {
+    const s = await this.service.read();
+    const m = s.machines[machineId];
+    if (!m?.producerHub || !m.paused || !UNREACHED.test(m.reason ?? "")) return;
+    const job = m.activeJobId ? s.jobs[m.activeJobId] : undefined;
+    if (job && job.productionState !== "failed") return;
+    if (job)
+      await this.service.clearFailed(job.id, {
+        inspected: true,
+        cleared: true,
+        reason:
+          "The printer could not be reached, so nothing was printed; it answered a later check.",
+      });
+    await mutate(this.service.store, (state) => {
+      const x = state.machines[machineId];
+      if (!x?.producerHub || x.activeJobId || x.reservation) return;
+      x.paused = false;
+      x.ready = true;
+      x.reason = `Prints through the producer side's hub as ${x.producerHub.machineId}. It answered a check after being unreachable.`;
+    });
+  }
+  private checkPrinter(m: Machine): Promise<PrinterCheck> {
+    if (this.deps.checkPrinter) return this.deps.checkPrinter(m);
+    const hub = (this.service.node as { hub?: ProducerHubNode }).hub;
+    return hub
+      ? hub.check(m.producerHub!.machineId)
+      : Promise.resolve({ ok: true, detail: "No hub to check through." });
+  }
+  /**
+   * The machines as a plan sees them: a printer of this kind whose recent
+   * check went unanswered is not ready for this plan. Only checks of the kind
+   * about to be used are awaited. Nothing is saved; the next check decides again.
+   */
+  private async afterChecks(
+    s: State,
+    process: Process,
+    silent: Map<string, Machine>,
+  ): Promise<State> {
+    const output = PROCESS_OUTPUT[process];
+    const machines = { ...s.machines };
+    for (const [machineId, check] of this.printerChecks) {
+      const m = machines[machineId];
+      if (
+        !m ||
+        m.outputType !== output ||
+        this.clock() - check.at > CHECK_VALID_MS
+      )
+        continue;
+      const answer = await check.result;
+      if (answer.ok) {
+        // It may have just been returned to service: plan with its saved state.
+        if (m.paused)
+          machines[machineId] =
+            (await this.service.read()).machines[machineId] ?? m;
+        continue;
+      }
+      silent.set(m.id, m);
+      machines[machineId] = {
+        ...m,
+        ready: false,
+        reason: `It did not answer a check: ${answer.detail}`,
+      };
+    }
+    return { ...s, machines };
   }
   private async understand(o: Order, s: State): Promise<IntentBrief> {
     const assets = o.draft.photoAssetIds.map((a) => s.assets[a]);
@@ -527,21 +757,35 @@ export class Orchestrator {
           outcome: brief.outcome,
           question: brief.question,
           reason: brief.reason,
-          items: brief.items.map((i) => ({
-            process: i.process as Process,
-            name: i.name,
-            why: i.why,
-            quantity: i.quantity,
-            creation: i.creation,
-            photoAssetIds: i.photoAssetIds,
-            ...(i.subject ? { subject: i.subject } : {}),
-            ...(i.process === "fdm_print" ? { text: tagText(i.text) } : {}),
-            colorImportant:
-              i.colorImportant && (i.process !== asked || colourAsked),
-            ...(Object.keys(i.subjectBoxes).length
-              ? { subjectBoxes: i.subjectBoxes }
-              : {}),
-          })),
+          items: brief.items.map((i) => {
+            // A sticker printer prints only black. When colour matters and no
+            // sticker was named, the item is a colour print, so its drafts are
+            // drawn in colour and a colour printer can take it.
+            const toColour =
+              experience === "best_single" &&
+              i.process === "sticker_print" &&
+              asked !== "sticker_print" &&
+              (i.colorImportant || colourAsked);
+            const process = toColour ? "photo_print" : (i.process as Process);
+            return {
+              process,
+              name: toColour
+                ? i.name.replace(/\bsticker\b/gi, "print")
+                : i.name,
+              why: i.why,
+              quantity: i.quantity,
+              creation: i.creation,
+              photoAssetIds: i.photoAssetIds,
+              ...(i.subject ? { subject: i.subject } : {}),
+              ...(process === "fdm_print" ? { text: tagText(i.text) } : {}),
+              colorImportant:
+                toColour ||
+                (i.colorImportant && (i.process !== asked || colourAsked)),
+              ...(Object.keys(i.subjectBoxes).length
+                ? { subjectBoxes: i.subjectBoxes }
+                : {}),
+            };
+          }),
         };
       } catch {
         // Fall through to the labelled local rules; the order stays usable.
@@ -581,7 +825,7 @@ export class Orchestrator {
 
   // ---------- Drafts ----------
 
-  private async drafts(input: DraftInput) {
+  private async drafts(input: DraftInput, colour: boolean): Promise<Draft[]> {
     const provider = this.designProvider;
     if (provider === "fixture")
       return fixtureDrafts(
@@ -594,11 +838,76 @@ export class Orchestrator {
         this.deps.draft ??
         ((i: DraftInput) => createClaudeProvider().draftDesigns(i))
       )(input);
+    if (provider === "openai" || provider === "nano-banana")
+      return (
+        this.deps.imageDraft ??
+        ((i: ImageDraftInput) =>
+          (provider === "openai"
+            ? createOpenAIImageProvider()
+            : createNanoBananaProvider()
+          ).draftImages(i))
+      )({
+        subject: input.subject,
+        count: input.count,
+        previousTitles: input.previousTitles,
+        colour,
+      });
     throw new Problem(
       "DESIGN_UNAVAILABLE",
       "Drawing new artwork is not available here.",
       503,
     );
+  }
+  /** Saves a draft's files: a drawing gets a rendered preview, a picture is its own preview. */
+  private async storeDraft(requesterId: string, draft: Draft) {
+    const save = async (kind: string, bytes: Buffer | string, mime: string) => {
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const assetId = ownedAssetId(kind, requesterId, sha256);
+      const path = join(this.dataDir, "assets", assetId);
+      await writeFile(path, bytes);
+      return { id: assetId, path, mime, sha256 };
+    };
+    if (draft.image) {
+      const image = await save(
+        "design_image",
+        Buffer.from(draft.image.bytes),
+        draft.image.mediaType,
+      );
+      return {
+        assets: [image],
+        previewAssetId: image.id,
+        design: { imageAssetId: image.id, imageSha256: image.sha256 },
+      };
+    }
+    if (!draft.svg) return null;
+    const rendered = await this.producer({
+      operation: "render_design_preview",
+      svg: draft.svg,
+      size_px: 512,
+      output_dir: join(this.dataDir, "producer"),
+    }).catch(() => null);
+    if (!rendered || rendered.status !== "ready") return null;
+    const preview = await importOutput(
+      this.dataDir,
+      rendered.path,
+      "design_preview",
+      rendered.sha256,
+      requesterId,
+    );
+    const svg = await save("design_svg", draft.svg, "image/svg+xml");
+    return {
+      assets: [
+        svg,
+        {
+          id: preview.assetId,
+          path: preview.path,
+          mime: "image/png",
+          sha256: preview.sha256,
+        },
+      ],
+      previewAssetId: preview.assetId,
+      design: { svgAssetId: svg.id, svgSha256: svg.sha256 },
+    };
   }
   private async generateRound(
     orderId: string,
@@ -649,15 +958,22 @@ export class Orchestrator {
       event(x, "design.round_started", { round });
     });
     if (!ok) return;
-    let drafts: { title: string; svg: string }[] = [];
+    let drafts: Draft[] = [];
     try {
-      drafts = await this.drafts({
-        subject,
-        requestText: o.draft.requestText,
-        count: DRAFTS_PER_ROUND,
-        previousTitles: (o.candidates?.candidates ?? []).map((c) => c.title),
-      });
+      drafts = await this.drafts(
+        {
+          subject,
+          requestText: o.draft.requestText,
+          count: DRAFTS_PER_ROUND,
+          previousTitles: (o.candidates?.candidates ?? []).map((c) => c.title),
+        },
+        item.process === "photo_print",
+      );
     } catch (e) {
+      // The requester sees a plain message; the operator sees why.
+      console.warn(
+        `Drawing failed for ${orderId} (${this.designProvider}): ${(e as Error).message.slice(0, 300)}`,
+      );
       await this.commit(orderId, revision, null, (x) => {
         x.candidates!.status = "failed";
         x.candidates!.reason =
@@ -673,40 +989,22 @@ export class Orchestrator {
       return;
     }
     let valid = 0;
+    const provider = this.designProvider as DesignCandidate["provider"];
+    await mkdir(join(this.dataDir, "assets"), { recursive: true });
     for (const [index, draft] of drafts.entries()) {
-      const rendered = await this.producer({
-        operation: "render_design_preview",
-        svg: draft.svg,
-        size_px: 512,
-        output_dir: join(this.dataDir, "producer"),
-      }).catch(() => null);
-      if (!rendered || rendered.status !== "ready") continue;
-      const preview = await importOutput(
-        this.dataDir,
-        rendered.path,
-        "design_preview",
-        rendered.sha256,
-        o.requesterId,
-      );
-      const svgSha = createHash("sha256").update(draft.svg).digest("hex");
-      const svgAssetId = ownedAssetId("design_svg", o.requesterId, svgSha);
-      const svgPath = join(this.dataDir, "assets", svgAssetId);
-      await mkdir(join(this.dataDir, "assets"), { recursive: true });
-      await writeFile(svgPath, draft.svg);
+      const files = await this.storeDraft(o.requesterId, draft);
+      if (!files) continue;
       const stored = await this.commit(orderId, revision, null, (x, s) => {
         if (x.candidates?.id !== setId) return;
         const at = now();
-        for (const [assetId, path, mime, sha] of [
-          [svgAssetId, svgPath, "image/svg+xml", svgSha],
-          [preview.assetId, preview.path, "image/png", preview.sha256],
-        ] as const)
-          s.assets[assetId] ??= {
-            id: assetId,
+        for (const file of files.assets)
+          s.assets[file.id] ??= {
+            id: file.id,
             ownerId: x.requesterId,
-            path,
-            url: `/assets/${assetId}`,
-            sha256: sha,
-            mime,
+            path: file.path,
+            url: `/assets/${file.id}`,
+            sha256: file.sha256,
+            mime: file.mime,
             width: 0,
             height: 0,
             createdAt: at,
@@ -716,11 +1014,10 @@ export class Orchestrator {
           round,
           index: x.candidates.candidates.length,
           title: draft.title,
-          svgAssetId,
-          svgSha256: svgSha,
-          previewAssetId: preview.assetId,
-          previewUrl: `/assets/${preview.assetId}`,
-          provider: this.designProvider === "fixture" ? "fixture" : "claude",
+          ...files.design,
+          previewAssetId: files.previewAssetId,
+          previewUrl: `/assets/${files.previewAssetId}`,
+          provider,
           promptVersion: PROMPT_VERSION,
           createdAt: at,
         };
@@ -982,7 +1279,22 @@ export class Orchestrator {
         : undefined;
     if (candidate || (item.creation === "generate" && !photos.length)) {
       requireThat(candidate, "DESIGN_REQUIRED", "Choose a design first.", 409);
-      const svg = s.assets[candidate.svgAssetId];
+      // A generated picture is prepared like a photo: dithered for a sticker,
+      // fitted to the film for a photo print.
+      if (candidate.imageAssetId) {
+        const image = s.assets[candidate.imageAssetId];
+        return {
+          kind: "photos" as const,
+          design: {
+            kind: "photos",
+            photos: [
+              { path: image.path, sha256: image.sha256, subject_box: null },
+            ],
+          },
+          candidateId: candidate.id,
+        };
+      }
+      const svg = s.assets[candidate.svgAssetId!];
       return {
         kind: "svg" as const,
         design: { kind: "svg", svg: svgText(svg) },
@@ -1059,6 +1371,11 @@ export class Orchestrator {
     );
     if (!ok) return;
     const { o, s } = await this.load(orderId);
+    // Use the printer checks started with the drafts (or start them now), so a
+    // printer that has gone to sleep is not offered.
+    this.checkPrinters(s, o);
+    const silent = new Map<string, Machine>();
+    let checked = s;
     const items: PlanItem[] = [];
     const assignments: Assignment[] = [];
     const allowed = (m: ExecutionMode) => this.service.modeAllowed(m);
@@ -1072,34 +1389,30 @@ export class Orchestrator {
         continue;
       }
       let item = intended;
-      let { candidates, rejected } = eligibleRegistryMachines(s, item, allowed);
+      checked = await this.afterChecks(checked, item.process, silent);
+      let { candidates, rejected } = eligibleRegistryMachines(
+        checked,
+        item,
+        allowed,
+      );
       const real = (list: typeof candidates) =>
         list.filter((c) => c.mode === "hardware");
-      // No real colour printer for a single photo, but a real sticker printer
-      // is free: make a black-and-white sticker, named as such in the
-      // proposal, rather than a simulated print that makes nothing physical.
-      // A request that asks for colour or a photo print is never changed.
-      if (
-        !real(candidates).length &&
-        o.experience === "best_single" &&
-        item.process === "photo_print" &&
-        item.photoAssetIds.length &&
-        !asksForColour(o.draft.requestText) &&
-        requestedProcess(o.draft.requestText) !== "photo_print"
-      ) {
-        const sticker: IntentItem = {
-          ...item,
-          process: "sticker_print",
-          colorImportant: false,
-          name: "A black-and-white sticker of your photo",
-          why: "No colour printer is free right now, so your photo is made as a black-and-white sticker. Check the preview.",
-        };
-        const fallback = eligibleRegistryMachines(s, sticker, allowed);
+      // The best available machine: when no real machine of the planned kind
+      // is free, the other flat printer makes it if a real one is free there,
+      // rather than a simulated machine that makes nothing physical. The
+      // proposal names what it becomes, so the person sees it before paying.
+      const other =
+        !real(candidates).length && o.experience === "best_single"
+          ? otherFlatPrint(item, asksForColour(o.draft.requestText))
+          : null;
+      if (other) {
+        checked = await this.afterChecks(checked, other.process, silent);
+        const fallback = eligibleRegistryMachines(checked, other, allowed);
         if (
           real(fallback.candidates).length ||
           (!candidates.length && fallback.candidates.length)
         )
-          (({ candidates, rejected } = fallback), (item = sticker));
+          (({ candidates, rejected } = fallback), (item = other));
       }
       // Real machines first: a simulated one is used only when no real one can make it.
       candidates = [
@@ -1109,12 +1422,16 @@ export class Orchestrator {
       const chosen = candidates[0];
       if (!chosen) {
         unavailable.push(
-          item.colorImportant &&
-            rejected.some((r) => r.reason.includes("colour"))
-            ? "No available machine can keep these colours right now."
-            : rejected.some((r) => r.reason === BUSY_REASON)
-              ? `The machine for "${item.name}" is finishing another order; the owner frees it after checking that print. Try again in a moment.`
-              : `No available machine can make "${item.name}" right now.`,
+          silent.size
+            ? silent.size > 1
+              ? `${[...silent.values()].map((m) => m.name).join(" and ")} did not answer: they may be off or asleep. Turn them on, close their phone apps, then try again.`
+              : `${[...silent.values()][0].name} did not answer: it may be off or asleep. Turn it on, close its phone app, then try again.`
+            : item.colorImportant &&
+                rejected.some((r) => r.reason.includes("colour"))
+              ? "No available machine can keep these colours right now."
+              : rejected.some((r) => r.reason === BUSY_REASON)
+                ? `The machine for "${item.name}" is finishing another order; the owner frees it after checking that print. Try again in a moment.`
+                : `No available machine can make "${item.name}" right now.`,
         );
         continue;
       }
@@ -2090,6 +2407,20 @@ export class Orchestrator {
 
   async tick() {
     const s = await this.service.read();
+    // Ask every real printer about once a minute: the site shows whether each
+    // one answers, and one paused only because it could not be reached comes
+    // back on its own once it is on again.
+    if (this.clock() - this.lastRecoveryScan >= RECOVERY_SCAN_MS) {
+      this.lastRecoveryScan = this.clock();
+      for (const m of Object.values(s.machines))
+        if (
+          m.producerHub &&
+          m.mode === "hardware" &&
+          (m.outputType === "sticker" || m.outputType === "instax") &&
+          (!m.paused || UNREACHED.test(m.reason ?? ""))
+        )
+          this.startCheck(m);
+    }
     if (s.relief && Object.keys(s.relief.engine.jobs).length)
       await mutate(this.service.store, (state) => {
         const events = advance(

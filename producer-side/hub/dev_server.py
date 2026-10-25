@@ -65,6 +65,10 @@ class ApproveIn(JobRef):
     reason: str | None = None
 
 
+class MachineRef(BaseModel):
+    machine_id: str
+
+
 def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
     gw = Gateway(frames_dir=frames_dir)
     events: deque[dict[str, Any]] = deque(maxlen=500)
@@ -137,6 +141,18 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
     async def cancel(body: JobRef) -> dict[str, str]:
         await gw.cancel_job(body.machine_id, body.job_id)
         return {"ok": "sent"}
+
+    @app.post("/dev/check")
+    async def check(body: MachineRef) -> dict[str, Any]:
+        """The node connects to its machine once, printing nothing: {machine_id, ok, detail}."""
+        if body.machine_id not in gw.nodes:
+            raise HTTPException(404, f"{body.machine_id} never connected")
+        try:
+            return await gw.check_machine(body.machine_id)
+        except LookupError as e:
+            raise HTTPException(409, str(e))
+        except asyncio.TimeoutError:
+            return {"machine_id": body.machine_id, "ok": False, "detail": "the node did not answer in time"}
 
     @app.post("/dev/approve")
     async def approve(body: ApproveIn) -> dict[str, Any]:

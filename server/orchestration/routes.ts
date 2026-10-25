@@ -20,6 +20,11 @@ export function registerOrchestrationRoutes(
   },
 ) {
   const param = (req: Request, name: string) => String(req.params[name]);
+  // Whether each real printer answered its latest check: the site's indicator.
+  app.get("/api/printers", async (req, res) => {
+    await actor(req);
+    res.json({ printers: await orchestrator.printerStatus() });
+  });
   app.post("/api/orders", async (req, res) => {
     const a = await actor(req);
     const { order, created } = await orchestrator.createOrder(

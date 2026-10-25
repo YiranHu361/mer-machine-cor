@@ -328,8 +328,9 @@ test("malformed or injected vision output never selects a fabricated machine or 
     );
     assert.equal(injected.provider, "claude");
     assert.equal(injected.machine!.id, "phomemo_01");
-    assert.equal(injected.spec!.widthMm, 53);
-    assert.equal(injected.spec!.heightMm, 53);
+    // The invented size falls back to the M02 Pro's printable width, not the roll.
+    assert.equal(injected.spec!.widthMm, 48);
+    assert.equal(injected.spec!.heightMm, 48);
     assert.equal(injected.spec!.quantity, 1);
     assert.equal(injected.spec!.material, "thermal-paper");
     assert.equal(injected.spec!.permission, "unclear");
@@ -659,6 +660,84 @@ test("recommended device identity survives actual create/approval and quote neve
       .set("Idempotency-Key", "recommended-image-create")
       .send(changed)
       .expect(409);
+  } finally {
+    f.close();
+  }
+});
+
+test("with real machines allowed, the picture page recommends the real printer at its own width and its order runs in hardware mode", async () => {
+  const f = await fixture();
+  try {
+    // As npm run mvp sets it up: real machines only, the sticker printer on the hub.
+    f.service.config.allowedModes = ["hardware"];
+    await mutate(f.store, (s) => {
+      Object.assign(s.machines.phomemo_01, {
+        mode: "hardware",
+        producerHub: { machineId: "m_sticker_01", since: now() },
+      });
+      // A cheaper simulated sticker machine must not win once both modes are allowed.
+      s.machines.cheaper = {
+        ...structuredClone(s.machines.phomemo_01),
+        id: "cheaper",
+        mode: "simulation",
+        priceCard: { consumables: 0, machine: 0, handling: 0, platform: 0 },
+      };
+      delete s.machines.cheaper.producerHub;
+    });
+    const sticker = await recommendImages(
+      f.service,
+      "requester",
+      { assetIds: ["graphic"] },
+      { ...local, analyze: graphicAnalysis },
+    );
+    assert.equal(sticker.status, "recommended");
+    assert.equal(sticker.spec!.recommendedMachineId, "phomemo_01");
+    assert.equal(sticker.spec!.widthMm, 48, "the M02 Pro prints 48 mm");
+    assert.doesNotMatch(sticker.notice!, /simulation/);
+    // The simulated photo printer is not offered when only real machines are allowed.
+    const photoPrint = await recommendImages(
+      f.service,
+      "requester",
+      { assetIds: ["photo"] },
+      local,
+    );
+    assert.equal(photoPrint.status, "unavailable");
+
+    f.service.config.allowedModes = ["hardware", "simulation"];
+    const app = createApp(f.service, undefined, {
+        recommendations: { ...local, analyze: graphicAnalysis },
+      }),
+      client = request.agent(app);
+    const login = await client
+      .post("/api/session")
+      .send({ role: "requester" })
+      .expect(200);
+    await mutate(f.store, (s) => {
+      s.assets.graphic.ownerId = login.body.id;
+    });
+    const recommendation = await client
+      .post("/api/recommendations")
+      .send({ assetIds: ["graphic"] })
+      .expect(200);
+    assert.equal(
+      recommendation.body.spec.recommendedMachineId,
+      "phomemo_01",
+      "real first, even when a simulated machine is cheaper",
+    );
+    const creation = await client
+      .post("/api/jobs")
+      .set("Idempotency-Key", "real-printer-create")
+      .send({ ...recommendation.body.spec, permission: "authorized" })
+      .expect(201);
+    const j = creation.body.job;
+    assert.equal((await f.service.job(j.id)).executionMode, "hardware");
+    await f.service.approve(j.id, {
+      specVersion: j.specVersion,
+      artifactSha256: j.artifact.sha256,
+    });
+    const quoted = await f.service.quote(j.id);
+    assert.equal(quoted.machineId, "phomemo_01");
+    assert.equal(f.sideEffects(), 0, "nothing was paid for or printed");
   } finally {
     f.close();
   }

@@ -797,6 +797,7 @@ export class Service {
           403,
         );
       const timestamp = now();
+      const executionMode = this.recommendedMode(s, spec);
       const job: Job = {
         id: id("job"),
         requesterId,
@@ -806,6 +807,7 @@ export class Service {
               creationSpecHash: request.specHash,
             }
           : {}),
+        ...(executionMode ? { executionMode } : {}),
         machineId: null,
         specVersion: 1,
         spec,
@@ -829,6 +831,16 @@ export class Service {
       s.jobs[job.id] = job;
       return { job, created: true };
     });
+  }
+  /**
+   * An order made for a recommended machine runs in that machine's mode, when
+   * this workshop allows it; otherwise the configured mode applies as before.
+   */
+  recommendedMode(s: State, spec: Spec): Job["executionMode"] {
+    const machine = spec.recommendedMachineId
+      ? ownValue(s.machines, spec.recommendedMachineId)
+      : undefined;
+    return machine && this.modeAllowed(machine.mode) ? machine.mode : undefined;
   }
   validateCatalog(spec: Spec, artifact: Job["artifact"]) {
     const model = this.config.catalog?.find(
@@ -893,6 +905,13 @@ export class Service {
       j.spec = spec;
       j.specVersion++;
       j.artifact = artifact;
+      // A /make order keeps its assignment's mode; an order from the picture
+      // page follows the machine its specification now names.
+      if (!j.orderId) {
+        const mode = this.recommendedMode(s, spec);
+        if (mode) j.executionMode = mode;
+        else delete j.executionMode;
+      }
       delete j.approvedSpecHash;
       delete j.quote;
       j.machineId = null;
