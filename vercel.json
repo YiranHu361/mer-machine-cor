@@ -5,6 +5,14 @@
   "buildCommand": "npm run build",
   "outputDirectory": "web/dist",
   "functions": { "api/index.ts": { "maxDuration": 300 } },
+  "redirects": [
+    { "source": "/", "destination": "/fabyn", "permanent": true },
+    { "source": "/index.html", "destination": "/fabyn", "permanent": true },
+    { "source": "/owner", "destination": "/fabyn/seller", "permanent": true },
+    { "source": "/make", "destination": "/fabyn/order", "permanent": true },
+    { "source": "/relief", "destination": "/fabyn", "permanent": true },
+    { "source": "/live", "destination": "/fabyn", "permanent": true }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/assets/:id", "destination": "/api/index" },

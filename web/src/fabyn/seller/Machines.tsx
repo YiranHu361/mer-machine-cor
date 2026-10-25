@@ -145,7 +145,7 @@ function MachineControls({ machine: m, busy, act }: { machine: OwnerMachine; bus
             </>
           ) : (
             <p className="sl-fine">
-              This machine is calibrated at the machine itself. Use the full <a href="/owner">workshop</a> for physical calibration.
+              Calibrate this machine at the machine itself, then use Connections to check its status.
             </p>
           )}
         </div>

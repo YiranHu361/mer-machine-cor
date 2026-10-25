@@ -1,6 +1,11 @@
-// The fabyn experience (/fabyn, /fabyn/order, /fabyn/seller) and the existing app load
-// separately, so neither one's global styles reach the other.
+import { renderFabyn } from "./fabyn/FabynApp";
+import { uiRedirect } from "../../shared/ui-routes";
+
+// Vercel and Express redirect before serving HTML. Also handle Vite development
+// and static hosts, which can fall back to index.html for these entry points.
+const destination = uiRedirect(location.pathname);
+if (destination)
+  history.replaceState(null, "", destination + location.search + location.hash);
+
 const root = document.getElementById("root")!;
-if (location.pathname.startsWith("/fabyn"))
-  import("./fabyn/FabynApp").then(({ renderFabyn }) => renderFabyn(root));
-else import("./legacy").then(({ renderLegacy }) => renderLegacy(root));
+renderFabyn(root);

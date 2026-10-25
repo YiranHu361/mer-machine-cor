@@ -1,12 +1,12 @@
 # Fabyn UI/UX branch: handoff
 
-Branch `UI/UX` (Henry's UI/web branch) holds the latest `origin/main` plus the new **fabyn** web app at `/fabyn`. The existing screens (`/make`, `/owner`, `/live`, `/relief`) are unchanged. This page covers what the branch adds, how to run it, and what is left.
+The **fabyn** web app is the only interface. Opening the site redirects to `/fabyn`; the consumer and seller pages live at `/fabyn/order` and `/fabyn/seller`. The old screens have been removed, and their URLs redirect to the current interface. This page records the UI work, how to run it, and what is left.
 
 ## What the branch adds
 
 | Area | Where | Status |
 |---|---|---|
-| App shell | `web/src/main.tsx` loads `web/src/fabyn/FabynApp.tsx` for `/fabyn*` and the legacy app for everything else. `server/app.ts` serves `/fabyn`, `/fabyn/order` and `/fabyn/seller`. | Done |
+| App shell | `web/src/main.tsx` loads only `web/src/fabyn/FabynApp.tsx`. `/` and `/index.html` redirect to `/fabyn`; `/owner` redirects to `/fabyn/seller`, `/make` to `/fabyn/order`, and retired `/relief` and `/live` pages to `/fabyn`. Vercel and the local server share these destinations. Legacy screens and styles have been removed. | Done |
 | Home `/fabyn` | `web/src/fabyn/home/`: a React and three.js port of the approved hero (the HENRY keychain, the YIRAN sticker, the fabyn logo photo, the SF map). START DEMO opens the consumer / seller chooser. | Done |
 | Consumer `/fabyn/order` | `web/src/fabyn/consumer/`: "tell us what you want to build", the agent understands, it matches a machine type, an SF map of makers, the Palace of Fine Arts machine (owner, current job, queue), a preview before ordering (picture drafts, the real OpenSCAD keychain render, photo), add to queue, checkout (x402 test wallet), printing tiles, delivery or pickup on the map, and my orders. | v2 verified end to end on desktop for name, cat and photo, each with a real wallet payment, a BaseScan receipt and a pickup code. On phone, photo passed; name was blocked by a held A1 and cat was not run. |
 | Seller `/fabyn/seller` | `web/src/fabyn/seller/`: owner sign-in, then the Overview, Machines (3D models, status lights, printer check, A1 plate approval), Map, Orders (tagged by source, including ASI:One), Delivery (call a courier or pickup code), Income (owner ledger and x402 receipts) and Supplies (耗材 refill) tabs. | v2 verified with real clicks on desktop and phone, every tab. The A1 plate approval has not been clicked on a fresh paid print yet. |

@@ -7,6 +7,7 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
+import { UI_ROUTES, UI_REDIRECTS } from "../shared/ui-routes.ts";
 import multer from "multer";
 import {
   createHash,
@@ -1617,8 +1618,16 @@ export function createApp(
       },
     }),
   );
+  for (const [source, destination] of Object.entries(UI_REDIRECTS))
+    app.get(source, (req, res) => {
+      const query = req.originalUrl.indexOf("?");
+      res.redirect(
+        308,
+        destination + (query < 0 ? "" : req.originalUrl.slice(query)),
+      );
+    });
   app.use(express.static(webDirectory, { index: "index.html" }));
-  for (const page of ["/owner", "/make", "/relief", "/live", "/fabyn", "/fabyn/order", "/fabyn/seller"])
+  for (const page of Object.values(UI_ROUTES))
     app.get(page, (req, res) =>
       res.sendFile("index.html", { root: webDirectory }),
     );

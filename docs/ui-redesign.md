@@ -1,6 +1,6 @@
 # Interface redesign: minimal
 
-Oct 23, 2026. Requester and provider screens, implemented in `web/src/App.tsx`, `web/src/styles.css` (tokens and shared components), `web/src/requester-minimal.css` and `web/src/provider-minimal.css`.
+Historical design notes from Oct 23, 2026. The requester and provider screens described here have been removed. The current interface lives in `web/src/fabyn/`; the site opens at `/fabyn`.
 
 ## Direction
 

@@ -22,8 +22,8 @@ This plan is implemented end to end **in simulation with mock payments**. No har
 | Eligibility and pricing | [matching](../server/orchestration/matching.ts), [pricing](../server/orchestration/pricing.ts) | Intended result before price (a colour photo never goes to the thermal printer); `price-card-v1` in integer cents with a 10% fee rounded half up |
 | Producer preparation | [`fabyn-producer`](../node/fabyn_node/producer.py), [contract](node-integration.md#production-preparation-fabyn-producer) | Pure CLI: canonical design in; exact artifact, preview, hashes and estimates out. Sticker 1-bit PNG at 300 dpi, Instax 600×800, simulation-only text-tag 3MF, simulated catalog items |
 | Per-assignment modes and children | [service](../server/service.ts) | Each child job carries its own immutable mode; simulated children are estimate-only, never charged and end without a pickup code; evidence must match the mode |
-| Relief | [relief](../server/relief/), [coordinator page](../web/src/ReliefApp.tsx) | Team machines first, then a seeded 150-machine simulated network (min-heap split, time-scaled engine); outage or new-machine replanning moves only never-started simulated work, within 125% of the simulated estimate |
-| Requester and coordinator pages | [`/make`](../web/src/MakeApp.tsx), `/relief` | Request, drafts, exact preview, extras, one confirm, progress; relief plan, confirm, outage, restore, add machine, time scale |
+| Relief | [relief](../server/relief/), historical coordinator page (removed) | Team machines first, then a seeded 150-machine simulated network (min-heap split, time-scaled engine); outage or new-machine replanning moves only never-started simulated work, within 125% of the simulated estimate |
+| Requester and coordinator pages | `/fabyn/order` (formerly `/make`); the legacy `/relief` page has been removed | Request, drafts, exact preview, extras, one confirm, progress; relief plan, confirm, outage, restore, add machine, time scale |
 
 Differences from the specification:
 

@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
     "test:browser": "playwright test",
+    "test:routing": "playwright test --config playwright.routing.config.ts",
     "format": "prettier --write src tests unit vite.config.ts playwright.config.ts",
     "test:unit": "node --test unit/*.test.ts"
   },

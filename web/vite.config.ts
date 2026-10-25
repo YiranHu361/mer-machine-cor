@@ -27,5 +27,8 @@ export default defineConfig(({ mode }) => {
         "/assets": "http://127.0.0.1:4318",
       },
     },
+    // Preview serves the production /assets bundles itself. Inheriting the dev
+    // asset proxy sends those scripts to the API server and leaves a blank page.
+    preview: { proxy: { "/api": "http://127.0.0.1:4318" } },
   };
 });

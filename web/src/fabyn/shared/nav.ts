@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const ROUTES = {
-  home: "/fabyn",
-  order: "/fabyn/order",
-  seller: "/fabyn/seller",
-} as const;
+export { UI_ROUTES as ROUTES } from "../../../../shared/ui-routes";
 
 const EVENT = "fabyn:navigate";
 
