@@ -56,6 +56,26 @@ Each computer keeps its own `.env` (never committed). For the MVP it needs:
 
 Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. There is no camera check yet, so `npm run mvp` sets `FABRARY_AUTO_ACCEPT_PRINTS=1`: as soon as the printer reports a print finished, the order gets its pickup code and the printer takes the next order. The print is recorded as accepted without inspection, never as a camera pass; a failed or declined print still pauses the printer for the owner. Set `FABRARY_AUTO_ACCEPT_PRINTS=0` to check each print yourself in **Owner workshop** ("Printed fine · approve and free the printer").
 
+## Fetch.ai agent: order from ASI:One
+
+| | |
+| --- | --- |
+| Agent name | **Fabrary** |
+| Agent address | `agent1qtntl30zudzgdsjgke4jyjdknkrerr92n4ncl9askhn6mu788exhswdc4vy` |
+| Protocol | Agent Chat Protocol 0.3.0 (manifest published to Agentverse) |
+| Code | [integrations/fetch/order_agent.py](integrations/fetch/order_agent.py), listing text in [AGENT_README.md](integrations/fetch/AGENT_README.md) |
+
+Chat with it in ASI:One: "a cute cat sticker" gets three drafts (OpenAI image generation), **1**/**2**/**3** picks one and shows the exact offer (Claude reads the request; the best free real printer is chosen), **yes** makes it on the sticker printer or the Instax and returns the pickup code. Payment is a mock; each person is limited to five requests a day.
+
+It runs beside the app and reaches Agentverse through its mailbox, so the agent itself needs no public address:
+
+```sh
+npm run mvp -- --photo                     # the app, hub and printers
+npm run agent                              # the agent; FABRARY_AGENT_SEED in .env keeps its address
+```
+
+Connect it once: open the "Agent inspector" link the agent prints, sign in to Agentverse, and choose **Connect → Mailbox**. Draft previews are private links to this app; for people chatting from elsewhere, publish the app (for example `cloudflared tunnel --url http://127.0.0.1:4318`) and start the agent with `FABRARY_PUBLIC_ORIGIN` set to that address. Preview links are signed and last ten minutes.
+
 ## Convex live state
 
 Convex is the live read model every screen watches ([design doc](https://claude.ai/artifact/XCDCcTZ2uSeRnRRYSHj4mT), "Convex live state"). Each hub has one `publish(type, data)` that sends §5 events to the `publish:batch` mutation: this app mirrors its saved machines, plans and jobs ([server/convex-publish.ts](server/convex-publish.ts)), and the producer gateway forwards node status and job progress ([producer-side/hub/publish.py](producer-side/hub/publish.py)). The local store and the gateway stay authoritative, so a Convex outage never stops an order or a print. Browsers only read: `/make` shows the printer's live progress after confirmation, and `/live` lists every machine and the event feed.

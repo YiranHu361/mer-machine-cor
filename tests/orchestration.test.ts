@@ -1861,3 +1861,41 @@ test("the printer indicator shows which real printers answered their latest chec
     f.close();
   }
 });
+
+test("a requester can get a 10-minute link to their own draft preview, for the chat agent", async () => {
+  const f = fixture();
+  try {
+    await f.ready(["phomemo_01", "instax_01", "bambu_01"]);
+    const app = createApp(f.service, undefined, {
+      orchestrator: f.orchestrator,
+    });
+    const owner = request.agent(app);
+    await owner.post("/api/session").send({ role: "requester" }).expect(200);
+    const created = await owner
+      .post("/api/orders")
+      .set("Idempotency-Key", "link-create-01")
+      .send({ requestText: "I want a cat sticker" })
+      .expect(202);
+    await f.orchestrator.settle(created.body.order.id);
+    const order = (
+      await owner.get(`/api/orders/${created.body.order.id}`).expect(200)
+    ).body.order;
+    const assetId = order.candidates.candidates[0].previewUrl.split("/").pop();
+    const { url } = (
+      await owner.post(`/api/assets/${assetId}/link`).expect(200)
+    ).body;
+    assert.match(
+      url,
+      new RegExp(`^/assets/${assetId}\\?expires=\\d+&sig=[0-9a-f]{64}$`),
+    );
+    // The link opens with no session at all; the plain path does not.
+    await request(app).get(url).expect(200);
+    await request(app).get(`/assets/${assetId}`).expect(401);
+    // Someone else cannot get a link to it.
+    const stranger = request.agent(app);
+    await stranger.post("/api/session").send({ role: "requester" }).expect(200);
+    await stranger.post(`/api/assets/${assetId}/link`).expect(403);
+  } finally {
+    f.close();
+  }
+});

@@ -1605,8 +1605,9 @@ export class Service {
       await this.transfer(j.id, "refund");
     return this.job(jobId);
   }
-  assetUrl(assetId: string) {
-    const expires = Math.floor(Date.now() / 1000) + 300;
+  /** A link that works without a session; /assets accepts at most 10 minutes. */
+  assetUrl(assetId: string, ttlSeconds = 300) {
+    const expires = Math.floor(Date.now() / 1000) + Math.min(ttlSeconds, 600);
     const sig = createHmac("sha256", this.config.secret)
       .update(`${assetId}:${expires}`)
       .digest("hex");
