@@ -27,6 +27,7 @@
     "mvp": "node scripts/mvp.mjs",
     "convex:push": "node scripts/convex-push.mjs",
     "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev",
+    "vercel:link": "node scripts/vercel-link.mjs",
     "agent": "integrations/fetch/.venv/bin/python integrations/fetch/order_agent.py"
   },
   "dependencies": {

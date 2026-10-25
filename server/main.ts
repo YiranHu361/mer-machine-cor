@@ -74,6 +74,10 @@ const config: Config = {
     "mock") as Config["paymentMode"],
   storeMode,
   assetOrigin: `http://127.0.0.1:${port}/assets`,
+  // An invalid address stops startup here instead of rejecting every browser action later.
+  publicOrigin: process.env.FABYN_PUBLIC_ORIGIN
+    ? new URL(process.env.FABYN_PUBLIC_ORIGIN).origin
+    : undefined,
   secret: process.env.FABYN_TOKEN_SECRET,
   quoteMs: 120000,
   pickupMs: 86400000,

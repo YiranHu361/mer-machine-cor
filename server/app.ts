@@ -177,9 +177,10 @@ export function createApp(
         const port = (url: URL) =>
           Number(url.port || (url.protocol === "https:" ? 443 : 80));
         requireThat(
-          ["http:", "https:"].includes(origin.protocol) &&
-            ["127.0.0.1", "localhost"].includes(origin.hostname) &&
-            [4317, port(configured)].includes(port(origin)),
+          origin.origin === service.config.publicOrigin ||
+            (["http:", "https:"].includes(origin.protocol) &&
+              ["127.0.0.1", "localhost"].includes(origin.hostname) &&
+              [4317, port(configured)].includes(port(origin))),
           "ORIGIN_REJECTED",
           "This local application only accepts requests from its own interface.",
           403,
