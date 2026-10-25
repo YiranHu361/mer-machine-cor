@@ -32,6 +32,7 @@ SIMULATION_ONLY = {"laser_cut", "cnc_route", "vinyl_cut", "large_format_print", 
 PROCESSES = REAL_PROCESSES | SIMULATION_ONLY
 KINDS = {"svg", "photos", "text_tag", "catalog_model", "sim_catalog_item"}
 STICKER_WIDTHS_MM = {15, 25, 48, 53}  # 48: the M02 Pro's printable width on the 53 mm roll
+CAPTION_BAND_MM = 10  # the strip under a sticker's picture that holds its lettering
 SHA256 = re.compile(r"[0-9a-f]{64}")
 PROFILE_NUMBERS = {  # key: (minimum, maximum, minimum is exclusive)
     "dpi": (0, 4800, True), "printable_width_mm": (0, 10_000, True), "safe_margin_mm": (0, 1000, False),
@@ -415,6 +416,8 @@ def _sticker(job: Job) -> dict:
     dpi = profile["dpi"]
     margin = round(profile["safe_margin_mm"] / 25.4 * dpi)
     kind = job.design["kind"]
+    caption = _caption(job.design.get("caption"))
+    band = CAPTION_BAND_MM if caption else 0
     drawing = _drawing(job.design.get("svg")) if kind == "svg" else None
     photo, box = _photo(job) if kind == "photos" else (None, None)
     if params["fit"] == "content" and kind in ("svg", "photos"):
@@ -427,11 +430,14 @@ def _sticker(job: Job) -> dict:
             aspect = photo.height / photo.width
         inner_w = round(width / 25.4 * dpi) - 2 * margin
         wanted = (inner_w * aspect + 2 * margin) / dpi * 25.4
-        height = min(150, max(5, round(wanted)))
-        if wanted > 150.5:
+        height = min(150 - band, max(5, round(wanted))) + band
+        if wanted > 150.5 - band:
             job.warnings.append("The design is taller than the longest label, so it is printed 150 mm long and narrower")
         params = {**params, "height_mm": height}
-    size = (round(width / 25.4 * dpi), round(height / 25.4 * dpi))
+    if height - band < 5:
+        raise Outcome("dimensions_unsupported", "The sticker is too short to hold both its picture and its lettering")
+    # The picture fills the label above the lettering band; the band is added after.
+    size = (round(width / 25.4 * dpi), round((height - band) / 25.4 * dpi))
     if min(size) - 2 * margin < 8:
         raise Outcome("dimensions_unsupported", "The safe margin leaves no printable area")
     if kind == "svg":
@@ -450,6 +456,9 @@ def _sticker(job: Job) -> dict:
         bitmap.paste(fitted.convert("1", dither=Image.Dither.FLOYDSTEINBERG), (margin, margin))
     else:
         raise Outcome("design_unsupported", f"Stickers are prepared from an SVG or one photo, not {kind}")
+    if caption:
+        bitmap = _with_caption(bitmap, caption, round(band / 25.4 * dpi), margin)
+        size = bitmap.size
     printable = bitmap.crop((margin, margin, size[0] - margin, size[1] - margin))
     ink = printable.histogram()[0] / (printable.width * printable.height)
     if ink <= 0.003:
@@ -458,9 +467,38 @@ def _sticker(job: Job) -> dict:
         raise Outcome("preflight_solid", "The prepared sticker is (almost) solid black")
     artifact = _emit(job.out, f"{job.prep_id}_sticker.png", _png(bitmap), "image/png")
     return {"artifact": artifact, "recipe": None, "preview": _preview(artifact, size, "mono"),
-            "parameters": {**params, "dpi": dpi, "raster_px": list(size), "safe_margin_mm": profile["safe_margin_mm"]},
+            "parameters": {**params, "dpi": dpi, "raster_px": list(size), "safe_margin_mm": profile["safe_margin_mm"],
+                           **({"caption": caption} if caption else {})},
             "estimates": _estimates(params["quantity"], "label", profile["seconds_per_unit"], profile["setup_seconds"], "estimated"),
             "handling": ["Thermal label: tear against the cutter edge; keep away from heat and direct sunlight"]}
+
+
+def _caption(value: object) -> str | None:
+    """Sticker lettering: the name tag's characters, or nothing."""
+    if value is None:
+        return None
+    try:
+        return nametag.validate(value)
+    except nametag.TemplateError as exc:
+        raise _invalid(f"design.caption: {exc}") from exc
+
+
+def _with_caption(art: Image.Image, caption: str, band_px: int, margin: int) -> Image.Image:
+    """The picture with its lettering set under it in type: bold, centred, as wide as fits."""
+    label = Image.new("1", (art.width, art.height + band_px), 1)
+    label.paste(art, (0, 0))
+    room_w, room_h = art.width - 2 * margin, band_px - margin
+    size = max(8, round(room_h * 0.8))
+    while True:
+        font, stroke = _font(size), max(1, size // 16)
+        left, top, right, bottom = ImageDraw.Draw(label).textbbox((0, 0), caption, font=font, stroke_width=stroke)
+        if (right - left <= room_w and bottom - top <= room_h) or size <= 8:
+            break
+        size -= 2
+    x = margin + (room_w - (right - left)) / 2 - left
+    y = art.height + (room_h - (bottom - top)) / 2 - top
+    ImageDraw.Draw(label).text((x, y), caption, fill=0, font=font, stroke_width=stroke, stroke_fill=0)
+    return label
 
 
 def _photo_print(job: Job) -> dict:

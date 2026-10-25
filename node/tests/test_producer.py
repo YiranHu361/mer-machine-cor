@@ -113,6 +113,32 @@ def test_sticker_from_photo_dithers_inside_safe_margin(tmp_path):
         assert image.getpixel((313, 295)) == 0 and image.getpixel((5, 5)) == 255
 
 
+def test_sticker_caption_is_set_in_type_under_the_picture(tmp_path):
+    entry = photo(tmp_path, size=(400, 400), square=(100, 100, 300, 300), color="black", box=False)
+    design = {"kind": "photos", "photos": [entry], "caption": "Yiran Hu"}
+    params = {"width_mm": 48, "fit": "content"}
+    result = assert_deterministic(tmp_path, lambda out: request(tmp_path, "sticker_print", design, STICKER, mode="hardware", params=params, out=out))
+    plain = producer.prepare(request(tmp_path, "sticker_print", {"kind": "photos", "photos": [entry]}, STICKER, mode="hardware", params=params, out="plain"))
+    assert result["parameters"]["caption"] == "Yiran Hu" and "caption" not in plain["parameters"]
+    # the band adds exactly its height; the picture above it is unchanged
+    assert result["parameters"]["height_mm"] == plain["parameters"]["height_mm"] + producer.CAPTION_BAND_MM
+    with Image.open(result["artifact"]["path"]) as image, Image.open(plain["artifact"]["path"]) as art:
+        assert image.mode == "1" and image.width == art.width
+        assert image.crop((0, 0, art.width, art.height)).tobytes() == art.tobytes()
+        band = image.crop((0, art.height, image.width, image.height))
+        assert band.getextrema() == (0, 255)  # lettering is inked
+        margin = round(1.5 / 25.4 * 300)
+        assert image.crop((0, art.height, margin, image.height)).getextrema() == (255, 255)
+        assert image.crop((0, image.height - margin, image.width, image.height)).getextrema() == (255, 255)
+
+
+@pytest.mark.parametrize("caption", ["", "far too long for a sticker", "a#b", "  Yiran", "...", 7])
+def test_sticker_caption_takes_only_name_tag_lettering(tmp_path, caption):
+    entry = photo(tmp_path, size=(400, 400), square=(100, 100, 300, 300), color="black", box=False)
+    result = producer.prepare(request(tmp_path, "sticker_print", {"kind": "photos", "photos": [entry], "caption": caption}, STICKER, mode="hardware"))
+    assert result["status"] == "rejected" and "design.caption" in result["reason"]
+
+
 def test_photo_print_is_deterministic_color(tmp_path):
     entry = photo(tmp_path)
     result = assert_deterministic(tmp_path, lambda out: request(tmp_path, "photo_print", {"kind": "photos", "photos": [entry]}, PHOTO,
