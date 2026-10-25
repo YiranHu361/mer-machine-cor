@@ -103,17 +103,17 @@ export function PreviewStep(props: ScreenProps) {
             <li key={a.id} className="cs-prev">
               <figure className="cs-prev-file">
                 {a.previewUrl ? (
-                  <img src={a.previewUrl} alt={`Rendered print file for ${item ? itemTitle(item) : "your item"}`} />
+                  <img src={a.previewUrl} alt={`Rendered print file for ${item ? itemTitle(item, order) : "your item"}`} />
                 ) : (
                   <p className="cs-note">No rendered preview for this one.</p>
                 )}
                 <figcaption>the print file{size ? ` · ${size}` : ""}</figcaption>
               </figure>
               <div className="cs-prev-stage">
-                <Stage3D machine={kind} item={assignmentItem(order, a)} progress={null} focus label={`${item ? itemTitle(item) : "your item"} on the ${machineLabel(a.machineId, a.machineName)}`} />
+                <Stage3D machine={kind} item={assignmentItem(order, a)} progress={null} focus label={`${item ? itemTitle(item, order) : "your item"} on the ${machineLabel(a.machineId, a.machineName)}`} />
               </div>
               <div className="cs-prev-body">
-                {!single && item && <p className="cs-item-name">{itemTitle(item)}</p>}
+                {!single && item && <p className="cs-item-name">{itemTitle(item, order)}</p>}
                 {item?.why && <p className="cs-item-why">{item.why}</p>}
                 <p className="cs-item-machine">
                   <span>{machineLabel(a.machineId, a.machineName)}</span>
@@ -176,7 +176,7 @@ export function QueueStep({ order, machines, go, run, busy, error }: ScreenProps
   const plan = order.plan!;
   const { left, expired } = useOfferClock(order);
   const m = matchedMachine(order, machines);
-  const mine = plan.items.length === 1 ? itemTitle(plan.items[0]) : `${plan.items.length} items`;
+  const mine = plan.items.length === 1 ? itemTitle(plan.items[0], order) : `${plan.items.length} items`;
   const ahead = m?.queue?.length ?? 0;
   const position = ahead + 1;
   const startMin = Math.round((plan.assignments[0]?.schedule?.startSeconds ?? 0) / 60);
@@ -324,7 +324,7 @@ export function CheckoutStep({ order, setOrder, reload, run, busy, error, go }: 
               (a.price?.terms ?? []).map((t, i) => (
                 <li key={`${a.id}-${i}`}>
                   <span>
-                    {plan.assignments.length > 1 && i === 0 ? `${itemTitle(plan.items.find((x) => x.id === a.itemId)!)} · ` : ""}
+                    {plan.assignments.length > 1 && i === 0 ? `${itemTitle(plan.items.find((x) => x.id === a.itemId)!, order)} · ` : ""}
                     {t.label}
                   </span>
                   <span>{usd(t.cents)}</span>

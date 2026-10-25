@@ -282,11 +282,11 @@ export function JobTiles({ order, now, owner = "Lucas" }: { order: OrderView; no
                 item={assignmentItem(order, a)}
                 progress={p.state === "queued" ? 0 : p.percent / 100}
                 focus
-                label={`${item ? itemTitle(item) : "item"} on ${machine}, ${p.percent} percent`}
+                label={`${item ? itemTitle(item, order) : "item"} on ${machine}, ${p.percent} percent`}
               />
             </div>
             <div className="cs-tile-body">
-              <p className="cs-tile-name">{item ? itemTitle(item) : LABEL_OF_PROCESS.sticker_print}</p>
+              <p className="cs-tile-name">{item ? itemTitle(item, order) : LABEL_OF_PROCESS.sticker_print}</p>
               <p className="cs-tile-machine">
                 {machine} · {owner} · {PLACE_SHORT}
               </p>
@@ -300,7 +300,7 @@ export function JobTiles({ order, now, owner = "Lucas" }: { order: OrderView; no
               <div
                 className="cs-bar"
                 role="progressbar"
-                aria-label={`${item ? itemTitle(item) : "item"} progress`}
+                aria-label={`${item ? itemTitle(item, order) : "item"} progress`}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={p.percent}

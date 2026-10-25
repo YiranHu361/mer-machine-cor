@@ -93,7 +93,7 @@ export function preparedSize(a: Assignment | undefined): string {
       : "";
   return [
     size && `${size} mm`,
-    p.material?.toUpperCase(),
+    p.material && (p.material.length <= 4 ? p.material.toUpperCase() : p.material.replace(/[-_]/g, " ")),
     p.color_mode === "mono" && !p.model_size_mm ? "black and white" : p.model_size_mm ? "one colour" : "",
   ]
     .filter(Boolean)
@@ -203,16 +203,19 @@ export function assignmentsFor(o: OrderView, itemId: string): Assignment[] {
   return (o.plan?.assignments ?? []).filter((a) => a.itemId === itemId);
 }
 
-/** What the person calls the item: a name keychain reads as the name. */
-export function itemTitle(item: OrderItem): string {
+/** What the person calls the item: a name keychain reads as the name, a picked draft by its title. */
+export function itemTitle(item: OrderItem, o?: OrderView): string {
   const text = item.process === "fdm_print" ? item.design.text : undefined;
-  return text ? `${text} keychain` : item.name;
+  if (text) return `${text} keychain`;
+  const picked = item.design.candidateId && o?.candidates?.candidates.find((c) => c.id === item.design.candidateId);
+  if (picked) return `${picked.title.replace(/\s*\(fixture\)\s*$/i, "")} ${LABEL_OF_PROCESS[item.process]}`;
+  return item.name;
 }
 
 export function orderTitle(o: OrderView): string {
   const plan = o.plan;
   const only = plan?.items.length === 1 ? plan.items[0] : null;
-  if (only) return itemTitle(only);
+  if (only) return itemTitle(only, o);
   if (plan && plan.items.length > 1) return `${plan.items.length} things, made in parallel`;
   return o.intent?.outcome || o.draft.requestText || "Your order";
 }

@@ -105,3 +105,6 @@ export function rideProgress(startedAt: number | null, now: number): { t: number
   const t = clamp(elapsed / RIDE_SECONDS, 0, 1);
   return { t, etaSeconds: t >= 1 ? 0 : Math.ceil(RIDE_SECONDS - elapsed), arrived: t >= 1 };
 }
+
+/** Walking time for a distance, at about 5 km/h. */
+export const walkMinutes = (km: number) => Math.max(1, Math.round((km / 5) * 60));

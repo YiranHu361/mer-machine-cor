@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Actions, ErrorLine, JobTiles, TitleBlock, type ScreenProps } from "./Screens";
-import { estimateJob, makingStartedAt, rideProgress, COURIER, RIDE_SECONDS, mmss } from "./estimate";
+import { estimateJob, makingStartedAt, rideProgress, walkMinutes, COURIER, RIDE_SECONDS, mmss } from "./estimate";
 import { orderTitle, phaseOf } from "./phase";
 import { stopWork } from "./orders";
 import { PLACE, PLACE_SHORT } from "./model";
 import { receiptUrl } from "./checkout";
 import { readHandoff, saveHandoff, type Handoff } from "./profile";
-import { SFMap, BOUNDS, HOME, PALACE, ROUTE_PALACE_TO_HOME, pathLengthKm, formatKm, type MapPin } from "../shared/map";
+import { SFMap, BOUNDS, HOME, PALACE, ROUTE_PALACE_TO_HOME, distanceKm, pathLengthKm, formatKm, type MapPin } from "../shared/map";
 
 /* Steps 7–8: printing on the machine, then delivery or pickup. The progress
    and the courier ride are estimates (estimate.ts); the job states, the
@@ -56,8 +56,8 @@ function Receipt({ order }: { order: ScreenProps["order"] }) {
   return null;
 }
 
-const homePins = (extra: MapPin[] = []): MapPin[] => [
-  { id: "palace", at: PALACE, label: `Lucas · ${PALACE.short}`, tone: "place", showLabel: true, labelAt: "right" },
+const homePins = (extra: MapPin[] = [], highlight = false): MapPin[] => [
+  { id: "palace", at: PALACE, label: `Lucas · ${PALACE.short}`, tone: highlight ? "match" : "place", showLabel: true, labelAt: "right" },
   { id: "home", at: HOME, label: `you · ${HOME.short}`, tone: "home", showLabel: true, labelAt: "left" },
   ...extra,
 ];
@@ -152,11 +152,11 @@ export function HandoffStep({ order, now, onNew, onOrders, go }: ScreenProps) {
       <TitleBlock id="cs-ready-title" kicker={delivery ? "get it · delivery" : "get it · pickup"} title={title} sub={`${orderTitle(order)} · ${delivery ? `${PALACE.short} → ${HOME.label}` : PLACE}`} />
       <div className="cs-handoff-grid">
         <SFMap
-          pins={homePins()}
+          pins={homePins([], !delivery)}
           route={delivery ? ROUTE_PALACE_TO_HOME : undefined}
           progress={delivery ? ride.t : undefined}
           markerLabel={delivery ? `${COURIER.name.split(" ")[0]} · ${COURIER.vehicle}` : undefined}
-          bounds={delivery ? BOUNDS.north : BOUNDS.palace}
+          bounds={BOUNDS.north}
           hoods
           label={delivery ? `Route from the ${PALACE.short} to ${HOME.label}` : `Map around the ${PALACE.short}`}
         />
@@ -190,7 +190,24 @@ export function HandoffStep({ order, now, onNew, onOrders, go }: ScreenProps) {
                 </dd>
               </div>
             </dl>
-          ) : null}
+          ) : (
+            <dl className="cs-facts cs-facts-tight">
+              <div>
+                <dt>where</dt>
+                <dd>{PALACE.short} · 3601 Lyon St</dd>
+              </div>
+              <div>
+                <dt>who</dt>
+                <dd>Lucas, at the machines</dd>
+              </div>
+              <div>
+                <dt>from you</dt>
+                <dd>
+                  {formatKm(distanceKm(HOME, PALACE))} · about {walkMinutes(distanceKm(HOME, PALACE))} min on foot
+                </dd>
+              </div>
+            </dl>
+          )}
           <div className="cs-code" aria-live="polite">
             {codes.length ? (
               <p>
