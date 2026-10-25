@@ -125,7 +125,7 @@ const CHECK_VALID_MS = 10 * 60_000;
 type PrinterCheck = { ok: boolean; detail: string };
 /** Pause reasons that only mean the printer could not be reached: nothing was printed. */
 const UNREACHED =
-  /not found|could not connect|did not answer|is not connected to the producer side's hub|is offline at the producer side's hub/i;
+  /not found|could not connect|did not answer|is not connected to the producer side's hub|is offline at the producer side's hub|^Local producer is offline\.$/i;
 /** Where a machine with no saved location stands: the Palace of Fine Arts. */
 const SITE = {
   lat: Number(process.env.FABYN_SITE_LAT ?? 37.8029),

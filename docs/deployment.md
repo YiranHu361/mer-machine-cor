@@ -100,6 +100,9 @@ auto handling follows `FABYN_AUTO_PREPARE_PRINTS` as before.
 The seller header reports Vercel access and the local producer separately.
 Producer status expires 20 seconds after its last heartbeat. Each printer shows
 its last observed check and whether it has been enabled for orders.
+A fresh idle heartbeat automatically clears a linked, inspected printer's
+"Local producer is offline" pause. Owner pauses, device errors, active jobs,
+live reservations, and printers not enabled for orders remain blocked.
 
 ## Migrate existing local state
 

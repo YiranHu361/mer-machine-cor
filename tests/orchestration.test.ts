@@ -2583,6 +2583,37 @@ test("without any order, a paused unreachable printer is checked again and retur
   }
 });
 
+test("a cloud-offline pause is checked and recovered without a new order", async () => {
+  let checks = 0;
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async () => { checks++; return { ok: true, detail: "idle" }; },
+  });
+  try {
+    await f.ready(["phomemo_01"], "hardware");
+    await mutate(f.store, s => {
+      Object.assign(s.machines.phomemo_01, {
+        producerHub: { machineId: "m_sticker_01", since: now() },
+        paused: true,
+        ready: false,
+        reason: "Local producer is offline.",
+      });
+    });
+    await f.orchestrator.tick();
+    for (let i = 0; i < 50; i++) {
+      if (!(await f.service.read()).machines.phomemo_01.paused) break;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    const m = (await f.service.read()).machines.phomemo_01;
+    assert.equal(checks, 1);
+    assert.equal(m.paused, false);
+    assert.equal(m.ready, true);
+    assert.equal(f.device.runs.length, 0);
+  } finally {
+    f.close();
+  }
+});
+
 test("the printer indicator shows which real printers answered their latest check", async () => {
   const f = fixture({
     allowed: ["hardware"],

@@ -347,6 +347,24 @@ export class CloudProducer extends ProducerHubNode {
             422,
           );
           p.machines[m.machine_id] = { ...m, lastSeen: at };
+          // A missed heartbeat is a temporary connectivity loss, not an owner
+          // hold. A fresh idle report restores only that specific pause.
+          for (const linked of Object.values(s.machines)) {
+            if (
+              linked.producerHub?.machineId !== m.machine_id ||
+              linked.mode !== "hardware" ||
+              m.simulated === true ||
+              m.status !== "idle" ||
+              !linked.paired || !linked.configured || !linked.calibrated ||
+              !linked.listed || linked.policyReconciliationRequired ||
+              linked.activeJobId ||
+              (linked.reservation && Date.parse(linked.reservation.expiresAt) > at) ||
+              !linked.paused || linked.reason !== "Local producer is offline."
+            ) continue;
+            linked.ready = true;
+            linked.paused = false;
+            linked.reason = "Local producer reconnected and reports the printer idle.";
+          }
         }
         for (const r of body.results) {
           const t = p.tasks[r.id];

@@ -11,9 +11,62 @@ import { CloudProducer } from "../server/cloud-producer.ts";
 import { digest, type FileStorage } from "../server/cloud-files.ts";
 import { initialState } from "../server/model.ts";
 import { SqliteStore, mutate } from "../server/store.ts";
+import { eligibleRegistryMachines } from "../server/orchestration/matching.ts";
+import { productAvailability } from "../server/orchestration/products.ts";
 
 const key = "test-producer-key-0123456789-abcdef";
 const pause = (ms = 100) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test("fresh idle heartbeats restore cloud-offline pauses without overriding owner holds or active work", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fabyn-cloud-reconnect-"));
+  const store = new SqliteStore(join(directory, "state.sqlite"), initialState());
+  const files = {} as FileStorage; // These heartbeats neither transfer files nor queue work.
+  const at = Date.now();
+  const cloud = new CloudProducer(store, files, key, directory, () => at);
+  const app = express();
+  app.use(express.json());
+  cloud.register(app, () => "unused", async () => {});
+  const baseline = {
+    ...initialState().machines.phomemo_01,
+    mode: "hardware" as const,
+    paired: true, configured: true, calibrated: true, listed: true,
+    ready: false, paused: true, reason: "Local producer is offline.",
+    producerHub: { machineId: "m_sticker_01", since: new Date(at).toISOString() },
+  };
+  try {
+    const cases = [
+      { name: "reconnected", change: {}, report: {}, restored: true },
+      { name: "owner pause", change: { reason: "Owner paused for inspection." }, report: {}, restored: false },
+      { name: "active job", change: { activeJobId: "job_active" }, report: {}, restored: false },
+      { name: "reservation", change: { reservation: { jobId: "job_reserved", expiresAt: new Date(at + 60_000).toISOString() } }, report: {}, restored: false },
+      { name: "unlisted", change: { listed: false }, report: {}, restored: false },
+      { name: "uncalibrated", change: { calibrated: false }, report: {}, restored: false },
+      { name: "policy hold", change: { policyReconciliationRequired: true }, report: {}, restored: false },
+      { name: "device error", change: {}, report: { status: "error" }, restored: false },
+      { name: "busy device", change: {}, report: { status: "busy" }, restored: false },
+      { name: "simulated producer", change: {}, report: { simulated: true }, restored: false },
+    ];
+    for (const c of cases) {
+      await mutate(store, s => {
+        s.machines.phomemo_01 = { ...structuredClone(baseline), ...c.change };
+      });
+      await request(app).post("/api/producer/poll")
+        .set("Authorization", `Bearer ${key}`)
+        .send({ machines: [{ machine_id: "m_sticker_01", process: "sticker_print", status: "idle", simulated: false, ...c.report }] })
+        .expect(200);
+      const s = (await store.read()).data;
+      assert.equal(s.machines.phomemo_01.paused, !c.restored, c.name);
+      assert.equal(s.machines.phomemo_01.ready, c.restored, c.name);
+      const eligible = eligibleRegistryMachines(s, { process: "sticker_print", quantity: 1, colorImportant: false }, m => m === "hardware", at);
+      assert.equal(eligible.candidates.length, c.restored ? 1 : 0, c.name);
+      const availability = productAvailability(s, { allowed: m => m === "hardware", at, drawing: true, photos: 0 });
+      assert.equal(availability.drawn_sticker.available, c.restored, c.name);
+    }
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("cloud queue authenticates, deduplicates dispatch, expires unreceived work, and records ambiguous delivery", async () => {
   const directory = await mkdtemp(join(tmpdir(), "fabyn-cloud-queue-"));
