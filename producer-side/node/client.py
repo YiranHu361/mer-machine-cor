@@ -26,6 +26,7 @@ from pydantic import ValidationError
 from websockets.asyncio.client import ClientConnection, connect
 
 from . import policy, verify
+from .env import load_dotenv
 from .adapters import AdapterError, make_adapter
 from .protocol import (
     HEARTBEAT,
@@ -39,6 +40,7 @@ from .protocol import (
     JOB_RESULT,
     MACHINE_CHECK,
     MACHINE_CHECKED,
+    PLATE_CLEARED,
     WELCOME,
     Job,
     envelope,
@@ -83,6 +85,7 @@ class NodeClient:
     async def public_manifest(self) -> dict[str, Any]:
         m = {k: v for k, v in self.manifest.items() if k not in LOCAL_KEYS}
         m["status"] = await self._status()
+        m["detail"] = (await self.adapter.status()).get("detail")
         return m
 
     async def _status(self) -> str:
@@ -108,18 +111,21 @@ class NodeClient:
             self._outbox_ready.clear()
             await self._outbox_ready.wait()
 
+    async def _heartbeat_data(self) -> dict[str, Any]:
+        st = await self.adapter.status()
+        return {
+            "machine_id": self.machine_id,
+            "status": await self._status(),
+            "media_loaded": self.manifest.get("media_loaded"),
+            "queue": self.queue.qsize(),
+            "current_job": self.current.job_id if self.current else None,
+            "detail": st.get("detail"),
+            "battery_pct": st.get("battery_pct"),
+        }
+
     async def _heartbeat(self, ws: ClientConnection) -> None:
         while True:
-            st = await self.adapter.status()
-            await self._send_now(ws, HEARTBEAT, {
-                "machine_id": self.machine_id,
-                "status": await self._status(),
-                "media_loaded": self.manifest.get("media_loaded"),
-                "queue": self.queue.qsize(),
-                "current_job": self.current.job_id if self.current else None,
-                "detail": st.get("detail"),
-                "battery_pct": st.get("battery_pct"),
-            })
+            await self._send_now(ws, HEARTBEAT, await self._heartbeat_data())
             await asyncio.sleep(HEARTBEAT_INTERVAL_S)
 
     # ---- receiving ---------------------------------------------------------
@@ -141,6 +147,8 @@ class NodeClient:
                 task = asyncio.create_task(self._on_check(data))
                 self._checks.add(task)
                 task.add_done_callback(self._checks.discard)
+            elif type_ == PLATE_CLEARED:
+                await self._on_plate_cleared()
             elif type_ == WELCOME:
                 pass
             else:
@@ -205,6 +213,15 @@ class NodeClient:
             await self.adapter.cancel(job_id)
         else:
             log.info("cancelled queued job %s", job_id)
+
+    async def _on_plate_cleared(self) -> None:
+        cleared = getattr(self.adapter, "plate_cleared", None)
+        if cleared is None:
+            return
+        cleared()
+        log.info("plate cleared; ready for the next job")
+        # Report right away so the hub (and the app polling it) never sees the old error.
+        self.send(HEARTBEAT, await self._heartbeat_data())
 
     # ---- doing the work ----------------------------------------------------
 
@@ -318,14 +335,19 @@ def main() -> None:
     ap.add_argument("--transport", choices=["ble", "serial", "lan", "file"],
                     help="override adapter.transport (file = dry run, no printer)")
     ap.add_argument("--probe", action="store_true", help="connect to the machine once before going online")
+    ap.add_argument("--plate-cleared", action="store_true",
+                    help="the build plate is empty now, even if the printer says its last print finished")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
+    load_dotenv()  # e.g. BAMBU_ACCESS_CODE for the A1 mini
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname).1s %(name)s: %(message)s", datefmt="%H:%M:%S")
     manifest = load_manifest(args.machine)
     if args.transport:
         manifest["adapter"]["transport"] = args.transport
+    if args.plate_cleared:
+        manifest["adapter"]["plate_clear_at_start"] = True
     client = NodeClient(manifest, args.hub, args.work_dir, args.max_queue)
 
     async def go() -> None:

@@ -26,6 +26,8 @@ export interface HubMachine {
   simulated?: boolean;
   limits?: { max_size_mm?: number[]; max_job_minutes?: number };
   media_loaded?: { remaining_est?: number };
+  /** The node's own words for its state, e.g. "plate_not_cleared: …". */
+  detail?: string | null;
 }
 interface HubJob {
   job_id: string;
@@ -94,6 +96,14 @@ export class ProducerHubNode {
   async machines(): Promise<HubMachine[]> {
     return this.hub("/machines");
   }
+  /** Someone took the last print off the machine (a 3D print stays on the plate until then). */
+  private async plateCleared(theirs: string) {
+    try {
+      await this.hub("/dev/plate-cleared", { machine_id: theirs });
+    } catch {
+      // Best effort: an offline node starts fresh, and the owner can resume again.
+    }
+  }
   /** The newest state the hub reported for one of our attempts, if any. */
   private async find(attemptId: string): Promise<HubJob | undefined> {
     const events = (await this.hub("/dev/events?limit=500")) as {
@@ -131,7 +141,7 @@ export class ProducerHubNode {
         reason: !found
           ? `${theirs} is not connected to the producer side's hub.`
           : online
-            ? `Producer side: ${found.status}.`
+            ? `Producer side: ${found.status}${found.detail ? ` (${found.detail})` : ""}.`
             : `${theirs} is offline at the producer side's hub.`,
       };
     }
@@ -192,6 +202,9 @@ export class ProducerHubNode {
             reason: input.reason,
           });
       } catch {}
+      // A passed print is off the printer: 3D prints are only ever passed by
+      // the owner, after taking them off the plate. Sticker nodes ignore this.
+      if (input.result === "completed") await this.plateCleared(theirs);
       return {
         execution_status: input.result === "completed" ? "completed" : "failed",
         completion_credible: false,
@@ -204,9 +217,13 @@ export class ProducerHubNode {
         "The producer side has no camera yet; the owner checks the print.",
         503,
       );
-    if (tool.startsWith("/machines/") && tool.endsWith("/policy"))
+    if (tool.startsWith("/machines/") && tool.endsWith("/policy")) {
       // The producer side enforces its own owner rules; ours stay in our registry.
+      // Resuming after inspecting and clearing the machine also clears its plate.
+      if (input.paused === false && input.cleared === true)
+        await this.plateCleared(theirs);
       return { accepted: true, ...input };
+    }
     throw new Problem(
       "UNSUPPORTED_ON_PRODUCER_HUB",
       `${tool} is not available for machines on the producer side's hub.`,

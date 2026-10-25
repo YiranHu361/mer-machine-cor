@@ -37,6 +37,7 @@ from node.protocol import (
     MACHINE_CHECK,
     MACHINE_CHECKED,
     OFFLINE_AFTER_S,
+    PLATE_CLEARED,
     WELCOME,
     envelope,
 )
@@ -87,6 +88,14 @@ class Gateway:
                 m["status"] = "offline"
             out.append(m)
         return out
+
+    async def plate_cleared(self, machine_id: str) -> None:
+        """Someone took the last print off this machine; its node may take the next job."""
+        conn = self.nodes.get(machine_id)
+        if not conn or not conn.online or conn.ws is None:
+            raise LookupError(f"machine {machine_id} is offline")
+        await conn.ws.send_json(envelope(PLATE_CLEARED, {"machine_id": machine_id}))
+        await self._emit("machine.plate_cleared", {"machine_id": machine_id})
 
     async def offer_job(self, job: dict[str, Any]) -> None:
         conn = self.nodes.get(job["machine_id"])
@@ -197,9 +206,11 @@ class Gateway:
         mid = conn.manifest["machine_id"]
         if type_ == HEARTBEAT:
             changed = (d.get("status") != conn.manifest.get("status")
-                       or d.get("media_loaded") != conn.manifest.get("media_loaded"))
+                       or d.get("media_loaded") != conn.manifest.get("media_loaded")
+                       or d.get("detail") != conn.manifest.get("detail"))
             conn.manifest["status"] = d.get("status", conn.manifest.get("status"))
             conn.manifest["media_loaded"] = d.get("media_loaded", conn.manifest.get("media_loaded"))
+            conn.manifest["detail"] = d.get("detail")
             if not conn.online:
                 conn.online = True
                 await self._emit("machine.online", conn.manifest)

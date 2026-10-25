@@ -1,6 +1,8 @@
 """Bambu Lab A1 mini (process fdm_print), over the LAN.
 
-prepare: a sliced .gcode (wrapped into a .gcode.3mf) or a .gcode.3mf (checked, passed through).
+prepare: a sliced .gcode (wrapped into a .gcode.3mf) or a .gcode.3mf (checked, passed through);
+         an unsliced .3mf or .stl model is sliced first with Bambu Studio (slicer.py). Asset links
+         carry no file extension, so the type is read from the file's first bytes.
          Reads printer model, nozzle, filament type, weight and time from the slicer's header.
 run:     connect (MQTT), check the printer can safely take this file, upload it (FTPS),
          start it (project_file), follow MQTT progress until FINISH.
@@ -14,6 +16,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
+import struct
 import time
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -22,6 +26,7 @@ from ...protocol import Job
 from ..base import Adapter, AdapterError, Progress
 from .gcode import (GcodeInfo, build_gcode_3mf, inspect_gcode, normalize_material, plates_in_3mf,
                     read_3mf_gcode)
+from .slicer import slice_model
 from .transport import Transport, make_transport, project_file_cmd, stop_cmd
 
 log = logging.getLogger(__name__)
@@ -91,6 +96,24 @@ def preflight(info: GcodeInfo, report: dict[str, Any], manifest: dict[str, Any],
     return problems
 
 
+def file_kind(path: Path) -> str:
+    """'3mf', 'gcode', 'stl' or 'unknown', from the name or, failing that, the first bytes."""
+    name = path.name.lower()
+    for suffix, kind in ((".3mf", "3mf"), (".gcode", "gcode"), (".stl", "stl")):
+        if name.endswith(suffix):
+            return kind
+    with path.open("rb") as f:
+        head = f.read(84)
+    size = path.stat().st_size
+    if head.startswith(b"PK\x03\x04"):
+        return "3mf"
+    if head.lstrip().startswith(b";"):
+        return "gcode"
+    if head.lstrip().startswith(b"solid") or (len(head) == 84 and size == 84 + 50 * struct.unpack("<I", head[80:84])[0]):
+        return "stl"
+    return "unknown"
+
+
 def remote_name_for(job: Job) -> str:
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", f"{job.job_id}")[:48]
     return f"fabrary_{safe}.gcode.3mf"
@@ -123,22 +146,31 @@ class BambuA1Mini(Adapter):
 
     async def prepare(self, job: Job, asset_path: Path) -> Path:
         def work() -> tuple[Path, GcodeInfo]:
-            name = asset_path.name.lower()
-            if name.endswith(".3mf"):
+            kind = file_kind(asset_path)
+            gcode = None
+            if kind == "3mf":
                 plates = plates_in_3mf(asset_path)
-                if self.plate not in plates:
-                    raise AdapterError(f"{asset_path.name} has no sliced plate {self.plate} "
-                                       f"(plates: {plates or 'none; export with File > Export plate sliced file'})")
-                info = inspect_gcode(read_3mf_gcode(asset_path, self.plate).decode("utf-8", "replace"))
-                return asset_path, info
-            if name.endswith(".gcode"):
-                raw = asset_path.read_bytes()
-                info = inspect_gcode(raw.decode("utf-8", "replace"))
-                native = asset_path.with_name(f"{job.job_id}.gcode.3mf")
-                native.write_bytes(build_gcode_3mf(raw, info, self.plate))
-                return native, info
-            raise AdapterError(f"{asset_path.name}: send a sliced .gcode or .gcode.3mf "
-                               "(slicing STLs on the node is not built yet)")
+                if self.plate in plates:
+                    info = inspect_gcode(read_3mf_gcode(asset_path, self.plate).decode("utf-8", "replace"))
+                    return asset_path, info
+                if plates:
+                    raise AdapterError(f"{asset_path.name} has no sliced plate {self.plate} (plates: {plates})")
+            if kind in ("3mf", "stl"):
+                # An unsliced model: slice it here with the printer's own profile.
+                model = asset_path.with_name(f"{job.job_id}_model.{kind}")
+                if model != asset_path:
+                    shutil.copyfile(asset_path, model)
+                gcode = slice_model(model, asset_path.with_name(f"{job.job_id}_slice"), self.config)
+                log.info("sliced %s with Bambu Studio -> %s", job.job_id, gcode)
+            elif kind == "gcode":
+                gcode = asset_path
+            if gcode is None:
+                raise AdapterError(f"{asset_path.name}: send a .gcode, .gcode.3mf, or a .3mf/.stl model to slice")
+            raw = gcode.read_bytes()
+            info = inspect_gcode(raw.decode("utf-8", "replace"))
+            native = asset_path.with_name(f"{job.job_id}.gcode.3mf")
+            native.write_bytes(build_gcode_3mf(raw, info, self.plate))
+            return native, info
 
         native, info = await asyncio.to_thread(work)
         self._info[native] = info
@@ -278,6 +310,12 @@ class BambuA1Mini(Adapter):
             self._last_report = await transport.refresh()
         finally:
             await transport.close()
+        # A part from an earlier print may still be on the plate: say so before any job arrives.
+        state = str(self._last_report.get("gcode_state") or "").upper()
+        if state in LEFT_SOMETHING_ON_PLATE and self._plate_clear is not True:
+            self._state = "error"
+            self._detail = (f"plate_not_cleared: the printer's last print ended {state}; remove it, "
+                            "then mark the plate cleared")
 
     def plate_cleared(self) -> None:
         """A person removed the last print."""

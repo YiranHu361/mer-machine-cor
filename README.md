@@ -31,7 +31,7 @@ npm run demo
 
 This session has the installed SpacetimeDB 2.13.0 runtime and persistent data under ignored `.data/spacetime-runtime/`, and a private `.env` connected to `fabrary-app`. A fresh checkout needs local database publication and a publishing-identity token; see [the runbook](docs/demo-runbook.md). SQLite is available only as an explicitly selected isolated development mode.
 
-## Sticker MVP: "i want a sticker" and a picture
+## MVP: a sticker from a picture, a name tag from a name
 
 One command starts the producer side's hub, the Phomemo M02 Pro node and this app, then moves the **Sticker counter** onto the hub:
 
@@ -55,6 +55,14 @@ Each computer keeps its own `.env` (never committed). For the MVP it needs:
 **Convex on your own computer, no account:** run `npm run convex:local` in its own terminal and keep it running (the first run downloads Convex's local backend). Once, store the same secret there with `npx convex env set FABRARY_PUBLISH_SECRET <the value from .env>`, and set `CONVEX_URL=http://127.0.0.1:3210` in `.env`. Its data stays in the ignored `.convex/` folder.
 
 Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. There is no camera check yet, so `npm run mvp` sets `FABRARY_AUTO_ACCEPT_PRINTS=1`: as soon as the printer reports a print finished, the order gets its pickup code and the printer takes the next order. The print is recorded as accepted without inspection, never as a camera pass; a failed or declined print still pauses the printer for the owner. Set `FABRARY_AUTO_ACCEPT_PRINTS=0` to check each print yourself in **Owner workshop** ("Printed fine · approve and free the printer").
+
+### Name tags on the Bambu Lab A1 mini
+
+`npm run mvp` also starts the A1 mini's node and moves the **Model counter** onto the hub (`-- --no-3d` leaves it out). On `/make`, type a name under **Or make a name tag** (up to 16 letters, digits, spaces and `. , ' & ! ? + -`) and press **Make a name tag**; typing "a name tag that says Maya" in the main box works too. OpenSCAD engraves the name into a 20 mm plate with a keyring hole ([nametag.scad](node/fabrary_node/nametag.scad)), the requester sees the preview and price, and after **Pay & make** the A1 mini's node slices the model with Bambu Studio's standard A1 mini settings (white Bambu PLA Basic, Textured PEI Plate) and prints it: about 13 min for a short name, 19 min for 16 characters.
+
+- Once: `brew install --cask openscad@snapshot`; Bambu Studio in `/Applications`; the printer set up as in [the adapter README](producer-side/node/adapters/bambu/README.md) (LAN Only and Developer Mode, `BAMBU_ACCESS_CODE` in `producer-side/.env`, PLA on the external spool, microSD card). On the printer's iPhone hotspot, switch the Mac's network Location first ([MAC_NETWORK_SETUP.md](producer-side/MAC_NETWORK_SETUP.md)).
+- The node checks the printer at start; with the plate empty but the printer still showing its last print as finished, start with `npm run mvp -- --plate-cleared`.
+- A 3D print stays on the plate, so it never completes by itself: take it off, then press **Printed fine · approve and free the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
 
 ## Convex live state
 

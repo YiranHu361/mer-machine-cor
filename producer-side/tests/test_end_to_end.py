@@ -125,3 +125,65 @@ def test_check_connects_to_the_machine_and_reports_back(tmp_path):
         await asyncio.gather(node_task, server_task, return_exceptions=True)
 
     asyncio.run(go())
+
+
+def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
+    """Stub hub + real NodeClient + A1 mini adapter on the dry-run transport, with a sliced file."""
+    from tests.test_bambu import GCODE
+
+    async def go():
+        port = free_port()
+        app = create_app(frames_dir=tmp_path / "frames")
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        server_task = asyncio.create_task(server.serve())
+        await wait_for(lambda: asyncio.sleep(0, server.started))
+
+        manifest = json.loads((ROOT / "node/machines/m_fdm_01.json").read_text())
+        manifest["adapter"].update(transport="file", out_dir=str(tmp_path / "sd"), dry_run_step_s=0)
+        part = tmp_path / "asset_part"  # no extension, like the app's signed asset links
+        part.write_text(GCODE)
+        hub = f"http://127.0.0.1:{port}"
+        node = NodeClient(manifest, hub, tmp_path / "work")
+        node_task = asyncio.create_task(node.run())
+
+        async with httpx.AsyncClient(base_url=hub) as http:
+            async def machine():
+                ms = (await http.get("/machines")).json()
+                return ms[0] if ms and ms[0]["status"] != "offline" else None
+
+            async def offer() -> str:
+                r = await http.post("/dev/offer", json={"machine_id": "m_fdm_01", "asset_url": f"file://{part}"})
+                return r.json()["job_id"]
+
+            async def state_of(job_id, want):
+                async def check():
+                    evs = (await http.get("/dev/events", params={"limit": 500})).json()
+                    return any(e["data"].get("job_id") == job_id and e["data"].get("state") == want for e in evs)
+                await wait_for(check)
+
+            await wait_for(machine)
+            first = await offer()
+            await state_of(first, "verifying")
+            await wait_for(lambda: _status(machine, "error"))
+            assert (await machine())["detail"].startswith("plate_not_cleared")
+
+            second = await offer()
+            await state_of(second, "rejected")  # nothing goes onto an occupied plate
+
+            assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_fdm_01"})).status_code == 200
+            await wait_for(lambda: _status(machine, "idle"), timeout=2)  # reported at once, not at the next heartbeat
+            third = await offer()
+            await state_of(third, "verifying")
+            assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_nope"})).status_code == 409
+
+        assert len(list((tmp_path / "sd").glob("fabrary_*.gcode.3mf"))) == 2
+        node_task.cancel()
+        server.should_exit = True
+        await asyncio.gather(node_task, server_task, return_exceptions=True)
+
+    asyncio.run(go())
+
+
+async def _status(machine, want):
+    m = await machine()
+    return m and m["status"] == want

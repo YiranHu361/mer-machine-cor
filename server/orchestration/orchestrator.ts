@@ -58,6 +58,7 @@ import { fixtureDrafts } from "./fixture-designs.ts";
 import {
   asksForColour,
   localIntent,
+  nameFromRequest,
   NEUTRAL_TAG_TEXT,
   requestedProcess,
   tagText,
@@ -703,6 +704,14 @@ export class Orchestrator {
   private async understand(o: Order, s: State): Promise<IntentBrief> {
     const assets = o.draft.photoAssetIds.map((a) => s.assets[a]);
     const experience = o.experience as "best_single" | "gift";
+    // A name tag whose name is stated needs no reading: the local rules are exact.
+    if (
+      experience === "best_single" &&
+      !assets.length &&
+      requestedProcess(o.draft.requestText) === "fdm_print" &&
+      nameFromRequest(o.draft.requestText)
+    )
+      return localIntent(experience, o.draft.requestText, []);
     let facts: {
       assetId: string;
       colorful: boolean;

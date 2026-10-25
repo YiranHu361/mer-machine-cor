@@ -25,6 +25,7 @@ WELCOME = "welcome"
 JOB_OFFER = "job.offer"
 JOB_CANCEL = "job.cancel"
 MACHINE_CHECK = "machine.check"  # check_id: connect to the machine once, print nothing
+PLATE_CLEARED = "plate.cleared"  # a person took the last print off the machine
 
 HEARTBEAT_INTERVAL_S = 5
 OFFLINE_AFTER_S = 15
