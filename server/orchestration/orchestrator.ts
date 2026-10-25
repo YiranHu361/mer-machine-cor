@@ -115,7 +115,7 @@ import type {
 const MAX_ROUNDS = 3;
 const DRAFTS_PER_ROUND = 3;
 const EVENT_LIMIT = 300;
-const PROMPT_VERSION = "drafts/1";
+const PROMPT_VERSION = "drafts/2";
 const COMPILER = "producer-prepare/1";
 /** A printer check younger than this is reused; an older one is asked again. */
 const CHECK_FRESH_MS = 60_000;
@@ -147,7 +147,7 @@ export interface OrchestratorDeps {
   understand?: (input: RequestInput) => Promise<RequestBrief>;
   draft?: (input: DraftInput) => Promise<DesignDraft[]>;
   imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
-  /** openai and nano-banana draw pictures, claude draws SVG line art, fixture uses labelled stand-ins for tests, none disables it. */
+  /** Picture providers, labelled test fixtures, or none. Local library scripts can inject saved SVG drafts. */
   designProvider?: DesignProvider;
   analyze?: (assets: Asset[]) => Promise<ImageAnalysis>;
   /** Connects to a real printer on the producer side's hub once, printing nothing. */
@@ -245,13 +245,16 @@ export class Orchestrator {
       env === "openai" ||
       env === "nano-banana" ||
       env === "fixture" ||
-      env === "none" ||
-      env === "claude"
+      env === "none"
     )
       return env;
+    // Migrate the old SVG setting to the same Image API used for photo art.
+    // An Anthropic key still enables request understanding, never artwork.
+    if (env === "claude")
+      return process.env.OPENAI_API_KEY ? "openai" : "none";
     if (process.env.OPENAI_API_KEY) return "openai";
     if (process.env.GEMINI_API_KEY) return "nano-banana";
-    return process.env.ANTHROPIC_API_KEY ? "claude" : "none";
+    return "none";
   }
   private get dataDir() {
     return this.service.config.dataDir;
@@ -1159,19 +1162,19 @@ export class Orchestrator {
 
   // ---------- Drafts ----------
 
-  private async drafts(input: DraftInput, colour: boolean): Promise<Draft[]> {
-    const provider = this.designProvider;
+  private async drafts(
+    input: ImageDraftInput & { requestText: string },
+    provider: DesignProvider,
+  ): Promise<Draft[]> {
     if (provider === "fixture")
       return fixtureDrafts(
         input.subject,
         input.previousTitles.length,
         input.count,
       );
-    if (provider === "claude")
-      return (
-        this.deps.draft ??
-        ((i: DraftInput) => createClaudeProvider().draftDesigns(i))
-      )(input);
+    // Preserve the local artwork-library scripts without calling Claude to draw.
+    if (provider === "claude" && this.deps.draft)
+      return this.deps.draft(input);
     if (provider === "openai" || provider === "nano-banana")
       return (
         this.deps.imageDraft ??
@@ -1184,7 +1187,8 @@ export class Orchestrator {
         subject: input.subject,
         count: input.count,
         previousTitles: input.previousTitles,
-        colour,
+        colour: input.colour,
+        stickerPrinter: input.stickerPrinter,
       });
     throw new Problem(
       "DESIGN_UNAVAILABLE",
@@ -1249,11 +1253,12 @@ export class Orchestrator {
     lease: string | null,
     itemIndex: number,
   ) {
-    const { o } = await this.load(orderId);
+    const { o, s } = await this.load(orderId);
     const item = o.intent!.items[itemIndex];
+    const provider = this.designProvider;
     const subject =
       (item.subject ?? o.draft.requestText).slice(0, 40) || "design";
-    if (this.designProvider === "none") {
+    if (provider === "none") {
       await this.commit(orderId, revision, null, (x) => {
         stage(
           x,
@@ -1294,19 +1299,42 @@ export class Orchestrator {
     if (!ok) return;
     let drafts: Draft[] = [];
     try {
+      // Match preparation's hardware-first preference. This guides the artwork;
+      // preparation still checks the final assignment and converts the image.
+      const { candidates } = eligibleRegistryMachines(
+        s,
+        item,
+        (mode) => this.service.modeAllowed(mode),
+        this.clock(),
+      );
+      const profile = (
+        candidates.find((c) => c.mode === "hardware") ?? candidates[0]
+      )?.profile;
       drafts = await this.drafts(
         {
           subject,
           requestText: o.draft.requestText,
           count: DRAFTS_PER_ROUND,
           previousTitles: (o.candidates?.candidates ?? []).map((c) => c.title),
+          colour: item.process === "photo_print",
+          ...(item.process === "sticker_print" && profile
+            ? {
+                stickerPrinter: {
+                  model: profile.model,
+                  printableWidthMm: profile.fields.printableWidthMm.value,
+                  dpi: profile.fields.dpi.value,
+                  safeMarginMm: profile.fields.safeMarginMm,
+                  minLineMm: profile.fields.minLineMm,
+                },
+              }
+            : {}),
         },
-        item.process === "photo_print",
+        provider,
       );
     } catch (e) {
       // The requester sees a plain message; the operator sees why.
       console.warn(
-        `Drawing failed for ${orderId} (${this.designProvider}): ${(e as Error).message.slice(0, 300)}`,
+        `Drawing failed for ${orderId} (${provider}): ${(e as Error).message.slice(0, 300)}`,
       );
       await this.commit(orderId, revision, null, (x) => {
         x.candidates!.status = "failed";
@@ -1323,7 +1351,6 @@ export class Orchestrator {
       return;
     }
     let valid = 0;
-    const provider = this.designProvider as DesignCandidate["provider"];
     await mkdir(join(this.dataDir, "assets"), { recursive: true });
     for (const [index, draft] of drafts.entries()) {
       const files = await this.storeDraft(o.requesterId, draft);

@@ -43,7 +43,7 @@ import type { RequestBrief, RequestInput } from "../integrations/src/claude.ts";
 import type {
   ImageDraft,
   ImageDraftInput,
-} from "../integrations/src/nano-banana.ts";
+} from "../integrations/src/picture-drafts.ts";
 import {
   localIntent,
   drawableSubject,
@@ -389,6 +389,14 @@ for (const provider of ["openai", "nano-banana"] as const)
         false,
         "a sticker asks for black and white",
       );
+      const profile = PUBLISHED_PROFILES["Phomemo M02Pro"];
+      assert.deepEqual(asked[0].stickerPrinter, {
+        model: profile.model,
+        printableWidthMm: 48,
+        dpi: 300,
+        safeMarginMm: profile.fields.safeMarginMm,
+        minLineMm: profile.fields.minLineMm,
+      });
       const chosen = o.candidates!.candidates[2];
       assert.equal(chosen.provider, provider);
       assert.equal(chosen.previewUrl, `/assets/${chosen.imageAssetId}`);
@@ -408,6 +416,12 @@ for (const provider of ["openai", "nano-banana"] as const)
       assert.equal(o.draft.stage, "proposed");
       const prep = f.producer.calls.find((c) => c.operation === "prepare");
       assert.equal(prep.process, "sticker_print");
+      assert.equal(
+        prep.profile.printable_width_mm,
+        asked[0].stickerPrinter!.printableWidthMm,
+      );
+      assert.equal(prep.profile.dpi, asked[0].stickerPrinter!.dpi);
+      assert.equal(prep.params.color_mode, "mono");
       assert.equal(prep.design.kind, "photos");
       assert.equal(prep.design.photos[0].sha256, sha(pictures[2]));
       assert.deepEqual(readFileSync(prep.design.photos[0].path), pictures[2]);
@@ -415,6 +429,116 @@ for (const provider of ["openai", "nano-banana"] as const)
       f.close();
     }
   });
+
+test("configured sticker artwork migrates the legacy Claude setting to OpenAI PNGs", async (t) => {
+  const keys = [
+    "FABYN_DESIGN_PROVIDER",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+  ] as const;
+  const saved = keys.map((key) => process.env[key]);
+  const f = fixture();
+  try {
+    process.env.FABYN_DESIGN_PROVIDER = "claude";
+    process.env.OPENAI_API_KEY = "unit-test-only";
+    process.env.ANTHROPIC_API_KEY = "";
+    process.env.GEMINI_API_KEY = "";
+    const picture = gradientPng(48, 48);
+    const calls: { url: string; body: any }[] = [];
+    t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify({
+        data: [{ b64_json: picture.toString("base64") }],
+      }));
+    });
+    const orchestrator = new Orchestrator(f.service, {
+      producer: f.producer.runner,
+    });
+    await f.ready(["phomemo_01"]);
+    const { order } = await orchestrator.createOrder(
+      requester,
+      { requestText: "I want a nugget sticker" },
+      "create-key-legacy-openai",
+    );
+    await orchestrator.settle(order.id);
+    let o = await orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "awaiting_design_choice", o.draft.reason ?? "");
+    assert.equal(orchestrator.designProvider, "openai");
+    assert.equal(calls.length, 3);
+    for (const call of calls) {
+      assert.equal(call.url, "https://api.openai.com/v1/images/generations");
+      assert.match(call.body.prompt, /Printable width: 48 mm/);
+      assert.match(call.body.prompt, /Resolution: 300 DPI/);
+    }
+    for (const candidate of o.candidates!.candidates) {
+      assert.equal(candidate.provider, "openai");
+      assert.ok(candidate.imageAssetId);
+      assert.equal(candidate.svgAssetId, undefined);
+    }
+    await orchestrator.chooseDesign(requester, order.id, {
+      expectedRevision: o.draft.revision,
+      candidateSetId: o.candidates!.id,
+      candidateId: o.candidates!.candidates[0].id,
+    });
+    await orchestrator.settle(order.id);
+    o = await orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    const prep = f.producer.calls.find((c) => c.operation === "prepare");
+    assert.equal(prep.design.kind, "photos");
+    assert.equal(prep.design.photos[0].sha256, sha(picture));
+    assert.equal(prep.params.color_mode, "mono");
+    assert.ok(
+      !f.producer.calls.some((c) => c.operation === "render_design_preview"),
+    );
+  } finally {
+    keys.forEach((key, i) => {
+      if (saved[i] === undefined) delete process.env[key];
+      else process.env[key] = saved[i];
+    });
+    f.close();
+  }
+});
+
+test("artwork configuration never falls back to Claude with only an Anthropic key", () => {
+  const keys = [
+    "FABYN_DESIGN_PROVIDER",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+  ] as const;
+  const saved = keys.map((key) => process.env[key]);
+  const f = fixture();
+  try {
+    const orchestrator = new Orchestrator(f.service);
+    process.env.FABYN_DESIGN_PROVIDER = "";
+    process.env.OPENAI_API_KEY = "";
+    process.env.GEMINI_API_KEY = "";
+    process.env.ANTHROPIC_API_KEY = "unit-test-only";
+    assert.equal(orchestrator.designProvider, "none");
+    process.env.FABYN_DESIGN_PROVIDER = "claude";
+    assert.equal(orchestrator.designProvider, "none");
+    process.env.OPENAI_API_KEY = "unit-test-only";
+    assert.equal(orchestrator.designProvider, "openai");
+    process.env.FABYN_DESIGN_PROVIDER = "";
+    process.env.GEMINI_API_KEY = "unit-test-only";
+    assert.equal(
+      orchestrator.designProvider,
+      "openai",
+      "OpenAI takes priority when both picture keys exist",
+    );
+    for (const explicit of ["fixture", "none", "nano-banana", "openai"]) {
+      process.env.FABYN_DESIGN_PROVIDER = explicit;
+      assert.equal(orchestrator.designProvider, explicit);
+    }
+  } finally {
+    keys.forEach((key, i) => {
+      if (saved[i] === undefined) delete process.env[key];
+      else process.env[key] = saved[i];
+    });
+    f.close();
+  }
+});
 
 test("one confirmation authorizes simulated work without payment and dispatches the exact prepared file", async () => {
   const f = fixture();
@@ -785,6 +909,7 @@ test("a colourful drawing with no sticker named becomes a colour print, drafted 
     let o = await f.orchestrator.view(requester, order.id);
     assert.equal(o.draft.stage, "awaiting_design_choice");
     assert.equal(asked[0].colour, true, "the drafts are drawn in colour");
+    assert.equal(asked[0].stickerPrinter, undefined);
     o = await f.orchestrator.chooseDesign(requester, order.id, {
       expectedRevision: 1,
       candidateSetId: o.candidates!.id,
@@ -1454,6 +1579,55 @@ const noProducer = existsSync(
 )
   ? false
   : "the node project environment is not installed (uv sync in node/)";
+
+test(
+  "real producer: OpenAI image drafts become preflighted 1-bit 48 mm stickers",
+  { skip: noProducer, timeout: 120_000 },
+  async () => {
+    const picture = gradientPng(80, 80);
+    const f = fixture({
+      producer: "cli",
+      design: "openai",
+      imageDraft: async () => [
+        {
+          title: "nugget · Bold outline",
+          image: { bytes: picture, mediaType: "image/png" },
+        },
+      ],
+    });
+    try {
+      await f.ready(["phomemo_01"]);
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText: "I want a nugget sticker" },
+        "real-key-openai-sticker",
+      );
+      await f.orchestrator.settle(order.id);
+      let o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "awaiting_design_choice", o.draft.reason ?? "");
+      await f.orchestrator.chooseDesign(requester, order.id, {
+        expectedRevision: o.draft.revision,
+        candidateSetId: o.candidates!.id,
+        candidateId: o.candidates!.candidates[0].id,
+      });
+      await f.orchestrator.settle(order.id);
+      o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+      const [assignment] = o.plan!.assignments;
+      const s = await f.service.read();
+      const receipt = s.preparations![assignment.preparationId];
+      const label = readFileSync(s.assets[receipt.artifact!.assetId].path);
+      assert.equal(pngSize(label).width, Math.round((48 / 25.4) * 300));
+      assert.equal(pngSize(label).bitDepth, 1);
+      assert.equal(pngSize(label).colorType, 0);
+      assert.equal(receipt.preview.color, "mono");
+      assert.equal(sha(label), assignment.artifactSha256);
+      assert.equal(f.device.runs.length, 0);
+    } finally {
+      f.close();
+    }
+  },
+);
 
 test(
   "real producer: drafts render, the chosen cat becomes a 1-bit 48 mm label and the node receives that exact file",

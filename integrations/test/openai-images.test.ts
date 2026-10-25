@@ -26,3 +26,24 @@ test('a missing or fake picture is refused, and errors never carry the key',asyn
  await assert.rejects(denied.draftImages({subject:'cat',count:1,previousTitles:[],colour:false}),(e:Error)=>/HTTP 403: Your organization must be verified/.test(e.message)&&!e.message.includes('sk-secret-value'));
  assert.throws(()=>new OpenAIImageProvider({apiKey:''}),/OPENAI_API_KEY/);
 });
+
+test('sticker prompts use the supplied printer profile and label assumptions; photo prompts stay in colour',async()=>{
+ const prompts:string[]=[];
+ const provider=new OpenAIImageProvider({apiKey:'unit-test-only',fetch:(async(_url,init)=>{prompts.push(JSON.parse(String(init?.body)).prompt);return ok(png.toString('base64'));}) as typeof fetch});
+ // Deliberately different from the Phomemo profile: constraints must not be hard-coded.
+ const stickerPrinter={model:'Test thermal printer',printableWidthMm:25,dpi:203,safeMarginMm:{value:1.5,basis:'assumption'},minLineMm:{value:0.3,basis:'assumption'}};
+ await provider.draftImages({subject:'nugget',count:3,previousTitles:[],colour:false,stickerPrinter});
+ for(const prompt of prompts){
+  assert.match(prompt,/Target printer: Test thermal printer/);
+  assert.match(prompt,/Printable width: 25 mm/);
+  assert.match(prompt,/Resolution: 203 DPI/);
+  assert.match(prompt,/at least 1\.5 mm from every edge \(unverified profile assumption\)/);
+  assert.match(prompt,/Minimum line width: 0\.3 mm at print size \(unverified profile assumption\)/);
+  assert.match(prompt,/pure black on a pure white background/);
+  assert.match(prompt,/Flat printable artwork only, fully visible and uncropped/);
+  assert.match(prompt,/No mockup, printer, hands, shadows or surrounding scene/);
+ }
+ await provider.draftImages({subject:'nugget',count:1,previousTitles:[],colour:true,stickerPrinter});
+ assert.match(prompts[3],/photo print: a flat-colour illustration/);
+ assert.doesNotMatch(prompts[3],/thermal|DPI|Minimum line width|no colour/);
+});

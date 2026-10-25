@@ -36,6 +36,20 @@ The old static-site tunnel forwarder has been replaced. Do not run
 `npm run vercel:link` for this deployment. `FABYN_BACKEND_ORIGIN` and
 `FABYN_PRODUCER_HUB_URL` are not used by the cloud runtime.
 
+Set `FABYN_DESIGN_PROVIDER=openai` and add `OPENAI_API_KEY` as a Vercel secret
+for both sticker and photo artwork. The root `.env` is not inherited by Vercel.
+The optional `FABYN_OPENAI_IMAGE_MODEL` defaults to `gpt-image-2.5-flare`.
+`ANTHROPIC_API_KEY` can still interpret requests, but no longer selects Claude
+SVG artwork; the legacy `claude` provider setting now uses OpenAI or reports
+artwork unavailable when its key is missing. `/api/health` reports the effective
+artwork provider under `integrations.design`.
+
+Sticker prompts use the matched printer's profile: the Phomemo M02Pro currently
+uses 48 mm printable width and 300 DPI. Its 1.5 mm margin and 0.3 mm minimum line
+width are unverified profile assumptions, included as design targets. Generated
+PNGs still pass through deterministic monochrome conversion and producer
+preflight before an offer is made.
+
 ## Run the producer on this Mac
 
 Set up its Python environment if needed:

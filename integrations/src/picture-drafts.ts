@@ -1,6 +1,14 @@
 // Shared by the picture providers (OpenAI, Nano Banana): what a round asks for,
 // how each draft is prompted, and the check every returned file must pass.
-export interface ImageDraftInput { subject:string; count:number; previousTitles:string[]; colour:boolean }
+/** The matched sticker printer's profile, including the provenance of design targets. */
+export interface StickerPrinterProfile {
+  model:string;
+  printableWidthMm:number|null;
+  dpi:number|null;
+  safeMarginMm:{value:number|null;basis:string};
+  minLineMm:{value:number|null;basis:string};
+}
+export interface ImageDraftInput { subject:string; count:number; previousTitles:string[]; colour:boolean; stickerPrinter?:StickerPrinterProfile }
 export interface ImageDraft { title:string; image:{bytes:Uint8Array;mediaType:'image/png'|'image/jpeg'|'image/webp'} }
 export const MAX_IMAGE_BYTES=8*1024*1024;
 // Each draft in a round gets its own look, so the requester has a real choice.
@@ -24,10 +32,18 @@ export function checkedImage(encoded:unknown,provider:string):ImageDraft['image'
   if(!mediaType||bytes.length>MAX_IMAGE_BYTES)throw new Error(`${provider}_IMAGE_INVALID: not a PNG, JPEG or WebP up to 8 MiB`);
   return {bytes,mediaType};
 }
-export function draftPrompt(subject:string,look:string,colour:boolean):string {
+export function draftPrompt(subject:string,look:string,colour:boolean,printer?:StickerPrinterProfile):string {
+  const assumption=(basis:string)=>basis==='assumption'?' (unverified profile assumption)':'';
+  const constraints=printer?[
+    ` Target printer: ${printer.model}.`,
+    printer.printableWidthMm!==null?` Printable width: ${printer.printableWidthMm} mm.`:'',
+    printer.dpi!==null?` Resolution: ${printer.dpi} DPI.`:'',
+    printer.safeMarginMm.value!==null?` Keep artwork at least ${printer.safeMarginMm.value} mm from every edge${assumption(printer.safeMarginMm.basis)}.`:'',
+    printer.minLineMm.value!==null?` Minimum line width: ${printer.minLineMm.value} mm at print size${assumption(printer.minLineMm.basis)}.`:'',
+  ].join(''):'';
   return colour
     ? `Original artwork of ${JSON.stringify(subject)} for a small square photo print: ${look}, on a plain light background, centred with a margin. No text, letters, logos, brands, watermarks or known characters; draw an original design.`
-    : `Original sticker artwork of ${JSON.stringify(subject)} for a black-and-white thermal sticker printer: ${look}, pure black on a pure white background, high contrast, no grey, no shading, no colour, no tiny details, one closed shape centred with a white margin. No text, letters, logos, brands, watermarks or known characters; draw an original design.`;
+    : `Original sticker artwork of ${JSON.stringify(subject)} for a black-and-white thermal sticker printer: ${look}, pure black on a pure white background, high contrast, no grey, no shading, no colour, no tiny details, one closed shape centred with a white margin. Flat printable artwork only, fully visible and uncropped. No mockup, printer, hands, shadows or surrounding scene.${constraints} No text, letters, logos, brands, watermarks or known characters; draw an original design.`;
 }
 /** One picture per look, drawn in parallel; a round fails only when every picture fails. */
 export async function draftPictures(input:ImageDraftInput,draw:(prompt:string)=>Promise<ImageDraft['image']>,provider:string):Promise<ImageDraft[]> {
@@ -36,7 +52,7 @@ export async function draftPictures(input:ImageDraftInput,draw:(prompt:string)=>
   // A later round starts after the looks already offered, so drafts differ.
   const offset=input.previousTitles.length;
   const chosen=Array.from({length:input.count},(_,i)=>looks[(offset+i)%looks.length]);
-  const settled=await Promise.allSettled(chosen.map(([,look])=>draw(draftPrompt(input.subject,look,input.colour))));
+  const settled=await Promise.allSettled(chosen.map(([,look])=>draw(draftPrompt(input.subject,look,input.colour,input.stickerPrinter))));
   const drafts=settled.flatMap((r,i)=>r.status==='fulfilled'?[{title:`${input.subject} · ${chosen[i][0]}`.slice(0,60),image:r.value}]:[]);
   if(!drafts.length)throw (settled.find(r=>r.status==='rejected') as PromiseRejectedResult).reason;
   return drafts;
