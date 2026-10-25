@@ -138,6 +138,7 @@ export function Connections({ act, busy, now }: { act: Act; busy: string; now: n
                   Start hub
                 </button>
               )}
+              {!status.hub.running && !status.python.ready && <span className="sl-conn-why">Install Python first.</span>}
               {status.hub.running && status.hub.startedHere && (
                 <button className="sl-btn ghost sl-btn-sm" type="button" disabled={!can("stop-hub")} onClick={() => void step("stop-hub")}>
                   Stop hub
@@ -173,6 +174,10 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
   const startKey = `start-node:${m.theirs}`;
   const findKey = m.link === "lan" ? `find-device:${m.theirs}` : "find-device:ble";
   const testKey = `test-device:${m.theirs}`;
+  // Why a step's button is off: the piece before it is not ready yet.
+  const startWhy = !status.python.ready ? "Install Python first." : !status.hub.running ? "Start the hub first." : m.link === "lan" && !m.accessCode?.present ? "Save its access code first." : "";
+  const testWhy =
+    m.link === "ble" && !m.program.online ? "Start its program first; it checks the printer." : m.link === "lan" && !m.program.online && !m.accessCode?.present ? "Save its access code first." : "";
   const saveCode = async (e: FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
@@ -207,6 +212,7 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
               >
                 Start program
               </button>
+              {startWhy && <span className="sl-conn-why">{startWhy}</span>}
             </>
           )}
           {m.program.running && m.program.startedHere && (
@@ -227,6 +233,7 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
           >
             Test connection
           </button>
+          {testWhy && <span className="sl-conn-why">{testWhy}</span>}
         </ConnRow>
         {m.accessCode && (
           <ConnRow
@@ -276,6 +283,7 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
               <button className="sl-btn solid sl-btn-sm" type="button" disabled={!tested || !m.program.online || Boolean(shared.sending)} onClick={() => void useMachine()}>
                 Use this printer for orders
               </button>
+              {!m.program.online && <span className="sl-conn-why">Start its program first.</span>}
             </>
           )}
         </ConnRow>

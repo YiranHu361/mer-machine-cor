@@ -38,7 +38,8 @@ export function printerPairs(env: NodeJS.ProcessEnv = process.env): PrinterPair[
 }
 
 export function producerHubUrl(env: NodeJS.ProcessEnv = process.env) {
-  return (env.FABYN_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  // An empty value (a test or .env clearing it) means the default too.
+  return (env.FABYN_PRODUCER_HUB_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
 /** The hub, run from producer-side/ with its Python. Loopback only. */

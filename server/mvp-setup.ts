@@ -56,6 +56,8 @@ interface Exited {
   code: number | null;
   at: string;
   log: string[];
+  /** Stopped with this page's Stop button. */
+  onPurpose: boolean;
 }
 export interface Proc {
   pid?: number;
@@ -287,6 +289,7 @@ export function registerMvpSetupRoutes(
   const saveStarted = () =>
     writeFileSync(startedFile, JSON.stringify(started), { mode: 0o600 });
   const exited: Record<string, Exited> = {};
+  const stopping = new Set<string>();
   const actions: Record<string, ActionState> = {};
   let pythonCheck: (Row & { ready: boolean }) | null = null;
   let pythonChecking: Promise<void> | null = null;
@@ -462,8 +465,9 @@ export function registerMvpSetupRoutes(
         delete started[name];
         saveStarted();
       }
+      const onPurpose = stopping.delete(name);
       void tail(log).then((lines) => {
-        exited[name] = { code, at: iso(), log: lines };
+        exited[name] = { code, at: iso(), log: lines, onPurpose };
       });
     });
   };
@@ -503,6 +507,10 @@ export function registerMvpSetupRoutes(
     return (lanCache[theirs] = { at: deps.now(), open });
   };
 
+  const hubAddress = new URL(hub);
+  const hubPort = Number(hubAddress.port || 8000);
+  /** Something listens where the hub should be, but does not answer as the hub. */
+  const hubPortTaken = () => deps.reachable(hubAddress.hostname, hubPort, 800);
   const onlineCount = (list: any[]) => list.filter((m) => m.status !== "offline").length;
   async function status(req: Request) {
     const local = isLocalRequest(req);
@@ -511,6 +519,7 @@ export function registerMvpSetupRoutes(
     const [listed, state] = await Promise.all([hubMachines(), service.read()]);
     const hubRunning = listed !== null;
     const hubStartedHere = isRunning("hub");
+    const portTaken = !hubRunning && (await hubPortTaken());
     const realMachines = service.modeAllowed("hardware") && Boolean(hubUrl);
     const machines = await Promise.all(
       pairs.map(async (pair) => {
@@ -541,7 +550,9 @@ export function registerMvpSetupRoutes(
               }
             : {
                 light: "bad",
-                detail: gone
+                detail: gone?.onPurpose
+                  ? "Stopped from this page."
+                  : gone
                   ? `It stopped${gone.code === null ? "" : ` (exit ${gone.code})`}: ${gone.log.at(-1) ?? "no output"}`
                   : "Not running.",
                 checkedAt: at,
@@ -636,9 +647,13 @@ export function registerMvpSetupRoutes(
         light: (hubRunning ? "ok" : "bad") as Light,
         detail: hubRunning
           ? `Answers at ${hub} · ${onlineCount(listed!)} printer program${onlineCount(listed!) === 1 ? "" : "s"} connected.`
-          : exited.hub
+          : exited.hub?.onPurpose
+            ? "Stopped from this page."
+            : exited.hub
             ? `It stopped${exited.hub.code === null ? "" : ` (exit ${exited.hub.code})`}: ${exited.hub.log.at(-1) ?? "no output"}`
-            : `Nothing answers at ${hub}.`,
+            : portTaken
+              ? `Another program, not the hub, uses port ${hubPort}. Stop it, or set FABYN_PRODUCER_HUB_URL to a free port and restart the app.`
+              : `Nothing answers at ${hub}.`,
         checkedAt: at,
       },
       machines,
@@ -701,6 +716,12 @@ export function registerMvpSetupRoutes(
         idle("start-hub");
         requireThat(pythonCheck?.ready, "PYTHON_NOT_READY", "Install the printer programs' Python first.", 409);
         requireThat(!(await hubMachines()), "HUB_RUNNING", "The hub is already running.", 409);
+        requireThat(
+          !(await hubPortTaken()),
+          "HUB_PORT_TAKEN",
+          `Another program uses port ${hubPort}. Stop it, or set FABYN_PRODUCER_HUB_URL to a free port and restart the app.`,
+          409,
+        );
         requireThat(!isRunning("hub"), "HUB_STARTING", "The hub is already starting.", 409);
         const log = logPath("hub");
         track("hub", "hub.dev_server", deps.start(python, hubArgs(hub), { cwd: producerDir, log }), log);
@@ -714,6 +735,7 @@ export function registerMvpSetupRoutes(
       }
       case "stop-hub": {
         requireThat(isRunning("hub"), "NOT_STARTED_HERE", "This hub was not started from this page. Stop it where it was started.", 409);
+        stopping.add("hub");
         deps.stop(started.hub.pid);
         return reply(
           background("stop-hub", "Stopping the hub…", async () =>
@@ -762,6 +784,7 @@ export function registerMvpSetupRoutes(
       case "stop-node": {
         const pair = pairOf(body.machine);
         requireThat(isRunning(pair.theirs), "NOT_STARTED_HERE", "This program was not started from this page. Stop it where it was started.", 409);
+        stopping.add(pair.theirs);
         deps.stop(started[pair.theirs].pid);
         return reply(
           background(`stop-node:${pair.theirs}`, "Stopping its program…", async () =>
@@ -821,7 +844,9 @@ export function registerMvpSetupRoutes(
                   signal: AbortSignal.timeout(100_000),
                 });
                 const answer = (await r.json()) as { ok?: boolean; detail?: string };
-                result = { ok: answer.ok === true, detail: answer.ok === true ? `It answered${answer.detail ? `: ${answer.detail}` : "."}` : `No answer${answer.detail ? `: ${answer.detail}` : "."}` };
+                // The node's own words, unless they only repeat the verdict.
+                const said = answer.detail && !/^(answered|ok|no answer)\.?$/i.test(answer.detail.trim()) ? `: ${answer.detail}` : ".";
+                result = { ok: answer.ok === true, detail: `${answer.ok === true ? "It answered" : "No answer"}${said}` };
               } catch {
                 result = { ok: false, detail: "The hub did not pass the check on." };
               }

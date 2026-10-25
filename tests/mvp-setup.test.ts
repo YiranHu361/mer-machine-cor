@@ -11,7 +11,7 @@ import { MockPayment } from "../server/payments.ts";
 import { createApp } from "../server/app.ts";
 import { HttpNode } from "../server/node-client.ts";
 import { isLocalRequest, redact, type MvpDeps } from "../server/mvp-setup.ts";
-import { hubArgs, nodeArgs } from "../server/mvp-plan.ts";
+import { hubArgs, nodeArgs, producerHubUrl } from "../server/mvp-plan.ts";
 
 // Every probe and program is a stand-in: nothing here reaches a printer, the
 // network or Bluetooth.
@@ -37,6 +37,7 @@ function fixture() {
 
   const calls = { start: [] as { command: string; args: string[]; cwd: string }[], run: [] as { command: string; args: string[] }[], stopped: [] as number[] };
   const alive = new Set<number>();
+  const taken = new Set<number>();
   let hub: { machine_id: string; status: string }[] | null = null;
   let nextPid = 4000;
   const runOutput: Record<string, { code: number; output: string }> = {};
@@ -63,7 +64,7 @@ function fixture() {
       if (String(url).endsWith("/machines") && hub) return new Response(JSON.stringify(hub), { status: 200 });
       throw new Error("connection refused");
     }) as typeof fetch,
-    reachable: async () => false,
+    reachable: async (_host, port) => taken.has(port),
     alive: (pid) => alive.has(pid),
     stop(pid) {
       calls.stopped.push(pid);
@@ -93,6 +94,7 @@ function fixture() {
     calls,
     runOutput,
     setHub: (list: typeof hub) => (hub = list),
+    taken,
     async owner() {
       const a = request.agent(app);
       await a.post("/api/session").send({ role: "owner", accessCode: "test-owner-code" }).expect(200);
@@ -180,6 +182,13 @@ test("steps are a fixed list with fixed arguments", async () => {
     await a.get("/api/owner/mvp/status").expect(200);
     await a.post("/api/owner/mvp/steps/rm-rf").send({}).expect(404);
     await a.post("/api/owner/mvp/steps/start-node").send({ machine: "../../etc/passwd" }).expect(422);
+    // another program on the hub's port is named, and the hub is not started over it
+    f.taken.add(8000);
+    const busyPort = await a.get("/api/owner/mvp/status").expect(200);
+    assert.match(busyPort.body.hub.detail, /Another program, not the hub, uses port 8000/);
+    const refusedPort = await a.post("/api/owner/mvp/steps/start-hub").send({}).expect(409);
+    assert.equal(refusedPort.body.error.code, "HUB_PORT_TAKEN");
+    f.taken.delete(8000);
     // a printer program needs the hub first
     const noHub = await a.post("/api/owner/mvp/steps/start-node").send({ machine: "m_sticker_01" }).expect(409);
     assert.equal(noHub.body.error.code, "HUB_NOT_RUNNING");
@@ -264,6 +273,10 @@ test("a Bluetooth scan marks which printers are nearby", async () => {
   }
 });
 
+test("an empty hub address means the default one", () => {
+  assert.equal(producerHubUrl({ FABYN_PRODUCER_HUB_URL: "" }), "http://127.0.0.1:8000");
+  assert.equal(producerHubUrl({ FABYN_PRODUCER_HUB_URL: "http://127.0.0.1:8010/" }), "http://127.0.0.1:8010");
+});
 test("log lines lose colour codes and secret values", () => {
   assert.deepEqual(redact(["\x1b[31mtoken=abc123def\x1b[0m uses hunter22-secret"], ["hunter22-secret"]), ["token=••• uses •••"]);
 });
