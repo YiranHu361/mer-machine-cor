@@ -280,9 +280,32 @@ export interface Order {
   suggestions: FormatSuggestion[];
   offer?: Offer;
   makeIntent?: MakeIntent;
+  /** Pickup or delivery, set by the person; the courier is called by the owner. */
+  delivery?: Delivery;
   status: PlanStatus | "preparing";
   events: OrderEvent[];
   nextSeq: number;
+}
+export interface DeliveryCourier {
+  name: string;
+  vehicle: string;
+  /** A display number; nothing dials it. */
+  phone: string;
+  calledAt: string;
+  /** Estimates fixed when the courier is called. */
+  pickupAt: string;
+  arriveAt: string;
+}
+export interface Delivery {
+  mode: "pickup" | "delivery";
+  /** Delivery only: where the person is, rounded to 4 decimals. */
+  to?: { lat: number; lng: number; label: string; source: "gps" | "map" };
+  /** Street-route km when the person's page had one. */
+  km: number | null;
+  chosenAt: string;
+  courier?: DeliveryCourier;
+  /** A pickup the owner handed over without a pickup code. */
+  handedOverAt?: string;
 }
 export interface ReliefState {
   seed: number;

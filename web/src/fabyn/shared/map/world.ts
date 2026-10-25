@@ -16,7 +16,8 @@ export const PALACE: LatLng & { label: string; short: string } = {
   short: "Palace of Fine Arts",
 };
 
-/** Where the consumer (Henry) is: Cow Hollow, a short ride from the Palace. */
+/** A fixed stand-in buyer in Cow Hollow. Only the seller pages still use it; the consumer
+   side uses the person's real location (consumer/location.ts). */
 export const HOME: LatLng & { label: string; short: string; person: string } = {
   lat: 37.7979,
   lng: -122.4357,

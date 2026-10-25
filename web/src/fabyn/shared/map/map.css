@@ -154,3 +154,9 @@
 .fm-pin path {
   vector-effect: non-scaling-stroke;
 }
+.fm-edge {
+  fill: #f0f0ec;
+}
+.fm-map.is-picking {
+  cursor: crosshair;
+}

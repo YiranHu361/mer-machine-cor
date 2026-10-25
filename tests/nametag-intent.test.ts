@@ -37,3 +37,20 @@ test("a name tag request is a 3D print with the name engraved", () => {
   );
   assert.equal(localIntent("best_single", "a keychain", []).items[0].text, NEUTRAL_TAG_TEXT);
 });
+
+test("a request written over several chat messages follows the newest line that says it", () => {
+  const renamed = localIntent("best_single", 'A keychain that says "Henry"\nmake it say Lucas', []);
+  assert.deepEqual([renamed.items[0].process, renamed.items[0].text], ["fdm_print", "Lucas"]);
+  const named = localIntent("best_single", "a keychain\nchange the name to Zoë", []);
+  assert.equal(named.items[0].text, "Zoë");
+  // a refinement that names nothing new keeps the item and the subject
+  const hat = localIntent("best_single", "a cat sticker\nmake it wear a hat", []);
+  assert.deepEqual([hat.items[0].process, hat.items[0].subject, hat.items[0].name], ["sticker_print", "cat", "A cat sticker"]);
+  // a later item replaces an earlier one, whatever order the rules check them in
+  const swapped = localIntent("best_single", "a keychain\nactually, a dog sticker", []);
+  assert.deepEqual([swapped.items[0].process, swapped.items[0].subject], ["sticker_print", "dog"]);
+  assert.equal(localIntent("best_single", "a dog sticker\nno, a keychain", []).items[0].process, "fdm_print");
+  // one line reads as before
+  assert.equal(nameFromRequest("a keychain where it says Maya"), "Maya");
+  assert.equal(localIntent("best_single", 'A name tag that says "Maya"', []).items[0].text, "Maya");
+});

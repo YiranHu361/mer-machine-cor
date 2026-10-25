@@ -55,13 +55,14 @@ import {
   type SplitCandidate,
   type TimeScale,
 } from "../relief/index.ts";
+import { callCourier, parseChoice, sameChoice } from "./delivery.ts";
 import { fixtureDrafts } from "./fixture-designs.ts";
 import {
   asksForColour,
+  latestName,
+  latestProcess,
   localIntent,
-  nameFromRequest,
   NEUTRAL_TAG_TEXT,
-  requestedProcess,
   tagText,
 } from "./intent.ts";
 import {
@@ -474,6 +475,14 @@ export class Orchestrator {
       ? body.photoAssetIds
       : o.draft.photoAssetIds;
     requireThat(
+      photos.length <= 4 &&
+        photos.every((p) => typeof p === "string") &&
+        new Set(photos).size === photos.length,
+      "INVALID_PHOTOS",
+      "Add up to four different photos.",
+      422,
+    );
+    requireThat(
       requestText.length <= 2000 &&
         photos.length <= 4 &&
         (requestText || photos.length || o.experience === "relief"),
@@ -511,6 +520,139 @@ export class Orchestrator {
     });
     this.start(orderId, revision);
     return this.view(actor, orderId);
+  }
+
+  // ---------- Pickup or delivery ----------
+
+  /** Where the order leaves from: its first machine, or the Palace site. */
+  private handoffSite(o: Order, s: State) {
+    const machineId = o.plan?.assignments[0]?.machineId;
+    return (machineId && ownValue(s.machines, machineId)?.location) || SITE;
+  }
+  private orderJobs(s: State, orderId: string) {
+    return Object.values(s.jobs).filter((j) => j.orderId === orderId);
+  }
+  /** The person picks pickup or delivery; it can change until a courier is called or it is collected. */
+  async chooseDelivery(actor: Actor, orderId: string, body: any) {
+    const { o, s } = await this.load(orderId);
+    this.owned(o, actor);
+    const choice = parseChoice(body, this.handoffSite(o, s));
+    // a retried request writes nothing
+    if (sameChoice(o.delivery, choice)) return this.view(actor, orderId);
+    await mutate(this.service.store, (st) => {
+      const order = st.orders![orderId];
+      requireThat(
+        order.status !== "cancelled",
+        "ORDER_CLOSED",
+        "This order was stopped, so there is nothing to hand over.",
+      );
+      if (sameChoice(order.delivery, choice)) return;
+      requireThat(
+        !order.delivery?.courier,
+        "COURIER_CALLED",
+        "A courier is already on the way for this order. Ask the maker to change it.",
+      );
+      requireThat(
+        !order.delivery?.handedOverAt &&
+          !this.orderJobs(st, orderId).some(
+            (j) => j.fulfillmentState === "collected",
+          ),
+        "ALREADY_COLLECTED",
+        "This order was already handed over.",
+      );
+      order.delivery = { ...choice, chosenAt: now() };
+      event(order, "delivery.chosen", { mode: choice.mode });
+      order.version++;
+      order.updatedAt = now();
+    });
+    return this.view(actor, orderId);
+  }
+  /** The owner calls the courier for a made delivery order; calling again returns the same courier. */
+  async callCourier(orderId: string, body: any) {
+    const { o, s } = await this.load(orderId);
+    const cancel = body?.cancel === true;
+    // calling again, or cancelling no courier, writes nothing
+    if (cancel ? !o.delivery?.courier : o.delivery?.courier)
+      return { delivery: o.delivery ?? null };
+    const from = this.handoffSite(o, s);
+    const at = this.clock();
+    return mutate(this.service.store, (st) => {
+      const order = st.orders![orderId];
+      const delivery = order.delivery;
+      if (cancel) {
+        if (!delivery?.courier) return { delivery: delivery ?? null };
+        requireThat(
+          Date.parse(delivery.courier.pickupAt) > at,
+          "COURIER_PICKED_UP",
+          "The courier already has the order.",
+        );
+        delete delivery.courier;
+        event(order, "courier.cancelled");
+      } else {
+        requireThat(
+          delivery?.mode === "delivery",
+          "NOT_DELIVERY",
+          "The customer has not asked for delivery. Keep it at your table for pickup.",
+        );
+        if (delivery.courier) return { delivery };
+        const jobs = this.orderJobs(st, orderId).filter(
+          (j) => j.productionState !== "cancelled",
+        );
+        requireThat(
+          jobs.length > 0 && jobs.every((j) => j.productionState === "produced"),
+          "NOT_MADE",
+          "Call a courier once every item of the order is made.",
+        );
+        requireThat(
+          !jobs.some((j) => j.fulfillmentState === "collected"),
+          "ALREADY_COLLECTED",
+          "This order was already handed over.",
+        );
+        delivery.courier = callCourier(orderId, delivery, from, at);
+        event(order, "courier.called", { name: delivery.courier.name });
+      }
+      order.version++;
+      order.updatedAt = now();
+      return { delivery: order.delivery ?? null };
+    });
+  }
+  /** A pickup with no pickup code (nothing was charged): the owner records the hand-over. */
+  async handOver(orderId: string) {
+    const { o } = await this.load(orderId);
+    if (o.delivery?.handedOverAt) return { delivery: o.delivery };
+    return mutate(this.service.store, (st) => {
+      const order = st.orders![orderId];
+      if (order.delivery?.handedOverAt) return { delivery: order.delivery };
+      requireThat(
+        order.delivery?.mode !== "delivery",
+        "NOT_PICKUP",
+        "This order goes out with a courier.",
+      );
+      const jobs = this.orderJobs(st, orderId).filter(
+        (j) => j.productionState !== "cancelled",
+      );
+      requireThat(
+        jobs.length > 0 && jobs.every((j) => j.productionState === "produced"),
+        "NOT_MADE",
+        "Hand it over once every item of the order is made.",
+      );
+      requireThat(
+        !jobs.some((j) => j.pickup && !j.pickup.redeemedAt),
+        "USE_PICKUP_CODE",
+        "Enter the customer's pickup code to hand it over.",
+      );
+      const at = now();
+      order.delivery = {
+        mode: "pickup",
+        km: null,
+        chosenAt: order.delivery?.chosenAt ?? at,
+        handedOverAt: at,
+      };
+      event(order, "delivery.handed_over");
+      order.version++;
+      order.updatedAt = at;
+      return { delivery: order.delivery };
+    });
   }
 
   // ---------- Preparation pipeline ----------
@@ -845,8 +987,8 @@ export class Orchestrator {
     if (
       experience === "best_single" &&
       !assets.length &&
-      requestedProcess(o.draft.requestText) === "fdm_print" &&
-      nameFromRequest(o.draft.requestText)
+      latestProcess(o.draft.requestText) === "fdm_print" &&
+      latestName(o.draft.requestText)
     )
       return localIntent(experience, o.draft.requestText, []);
     let facts: {
@@ -895,7 +1037,7 @@ export class Orchestrator {
         // A process the person named is their choice of outcome: "i want a
         // sticker" of a colour photo is a black-and-white sticker, as in the
         // local rules, unless the request itself asks to keep the colour.
-        const asked = requestedProcess(o.draft.requestText);
+        const asked = latestProcess(o.draft.requestText);
         const colourAsked = asksForColour(o.draft.requestText);
         return {
           provider: "claude",
@@ -3217,6 +3359,7 @@ function orderView(o: Order, s: State, actor: Actor) {
     suggestions: o.suggestions,
     offer: o.offer,
     makeIntent: o.makeIntent ? makeIntent : undefined,
+    delivery: o.delivery,
     events: o.events.slice(-60),
     nextSeq: o.nextSeq,
     counters:

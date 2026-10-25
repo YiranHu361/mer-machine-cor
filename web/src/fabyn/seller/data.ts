@@ -101,6 +101,30 @@ export interface LedgerEntry {
   updatedAt: string;
 }
 
+/** The courier the owner called, with the times the server fixed then (estimates). */
+export interface DeliveryCourier {
+  name: string;
+  vehicle: string;
+  /** Shown as text only; nothing on the page dials it. */
+  phone: string;
+  calledAt: string;
+  pickupAt: string;
+  arriveAt: string;
+}
+
+/** Pickup or delivery for one order, as the customer chose it (POST /api/orders/:id/delivery). */
+export interface OrderDelivery {
+  mode: "pickup" | "delivery";
+  /** Delivery only: the customer's spot and its neighbourhood. */
+  to?: { lat: number; lng: number; label: string; source: "gps" | "map" };
+  /** The customer's street-route km, when their page had one. */
+  km: number | null;
+  chosenAt: string;
+  courier?: DeliveryCourier;
+  /** A pickup handed over without a pickup code. */
+  handedOverAt?: string;
+}
+
 export interface Dashboard {
   revision: number;
   machines: OwnerMachine[];
@@ -108,6 +132,8 @@ export interface Dashboard {
   ledger: LedgerEntry[];
   connectors: Connector[];
   setupCodes: SetupCodeView[];
+  /** By order id; only orders whose customer chose (or that were handed over). */
+  deliveries?: Record<string, OrderDelivery>;
 }
 
 export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;

@@ -2,30 +2,30 @@
 // Arts, where finished orders are headed, couriers out on delivery, and the
 // other makers around the city for context.
 import { useMemo, useState } from "react";
-import { BOUNDS, HOME, PALACE, PROCESS_LABEL, ROUTE_PALACE_TO_HOME, SFMap, WORLD_MACHINES, formatKm, pathLengthKm, pointAlong, type MapPin } from "../shared/map";
-import { courierEstimate, courierFor, PHASE_TEXT } from "./estimate";
+import { BOUNDS, PALACE, PROCESS_LABEL, SFMap, WORLD_MACHINES, formatKm, pointAlong, type MapPin } from "../shared/map";
+import { PHASE_TEXT } from "./estimate";
 import { groupOrders, shortId } from "./orderGroups";
 import { machineStatus, MACHINE_LABEL } from "./status";
-import type { Handoff } from "./deliveries";
+import { courierEstimate, frameAround, tripKm, useStreetRoute, type OrderDelivery } from "./deliveries";
 import type { Dashboard } from "./data";
 import { MAKER } from "./data";
 import type { LiveMachine } from "./live";
 
 const KIND_LABEL = { individual: "people", makerspace: "makerspaces", "small factory": "small factories", factory: "factories" } as const;
 
-export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: LiveMachine[]; handoffs: Record<string, Handoff>; now: number }) {
+export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: LiveMachine[]; handoffs: Record<string, OrderDelivery>; now: number }) {
   const [view, setView] = useState<"deliveries" | "city">("deliveries");
   const [selected, setSelected] = useState<string | null>(null);
-  const tripKm = pathLengthKm(ROUTE_PALACE_TO_HOME);
   const orders = useMemo(() => groupOrders(dash.jobs), [dash.jobs]);
-  const out = orders
-    .map((o) => ({ o, h: handoffs[o.key] }))
-    .filter((x): x is { o: (typeof orders)[number]; h: Extract<Handoff, { mode: "courier" }> } => x.h?.mode === "courier")
-    .map(({ o, h }) => ({ o, h, est: courierEstimate(h.at, tripKm, now), courier: courierFor(o.key) }))
-    .filter((x) => x.est.phase !== "delivered" || now - x.h.at < 3 * 3600000);
-  const moving = out.filter((x) => x.est.phase !== "delivered").sort((a, b) => b.h.at - a.h.at);
-  const lead = moving[0];
   const workshop = live.find((m) => m.location)?.location ?? { lat: PALACE.lat, lng: PALACE.lng, label: PALACE.label };
+  const out = orders
+    .map((o) => ({ o, d: handoffs[o.key] }))
+    .filter((x): x is { o: (typeof orders)[number]; d: OrderDelivery & { courier: NonNullable<OrderDelivery["courier"]>; to: NonNullable<OrderDelivery["to"]> } } => !!x.d?.courier && !!x.d.to)
+    .map(({ o, d }) => ({ o, d, est: courierEstimate(d.courier, now), courier: d.courier, calledAt: Date.parse(d.courier.calledAt) }))
+    .filter((x) => x.est.phase !== "delivered" || now - x.calledAt < 3 * 3600000);
+  const moving = out.filter((x) => x.est.phase !== "delivered").sort((a, b) => b.calledAt - a.calledAt);
+  const lead = moving[0];
+  const leadRoute = useStreetRoute(workshop, lead?.d.to);
   const statuses = dash.machines.map((m) => machineStatus(m, dash.connectors.find((c) => c.machineId === m.id), dash.jobs).key);
   const free = statuses.filter((k) => k === "available").length;
   const pins: MapPin[] = [
@@ -38,12 +38,18 @@ export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: L
       interactive: true,
       showLabel: true,
     },
-    ...(out.length
-      ? [{ id: "home", at: HOME, label: `${HOME.person} · ${HOME.short}`, sub: `${out.length} order${out.length === 1 ? "" : "s"} headed here`, tone: "home" as const, interactive: true, showLabel: true }]
-      : []),
+    ...out.map((x) => ({
+      id: `home-${x.o.key}`,
+      at: x.d.to,
+      label: `Customer · ${x.d.to.label}`,
+      sub: `#${shortId(x.o)} · ${PHASE_TEXT[x.est.phase]}`,
+      tone: "home" as const,
+      interactive: true,
+      showLabel: x === lead,
+    })),
     ...moving.slice(1).map((x) => ({
       id: `courier-${x.o.key}`,
-      at: x.est.phase === "on_the_way" ? pointAlong(ROUTE_PALACE_TO_HOME, x.est.routeFraction) : workshop,
+      at: x.est.phase === "on_the_way" ? pointAlong([workshop, x.d.to], x.est.routeFraction) : workshop,
       label: `${x.courier.name} · ${x.courier.vehicle}`,
       sub: `#${shortId(x.o)} · ${PHASE_TEXT[x.est.phase]}`,
       tone: "courier" as const,
@@ -82,10 +88,10 @@ export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: L
         <div className="sl-map-frame">
           <SFMap
             pins={pins}
-            route={lead ? ROUTE_PALACE_TO_HOME : undefined}
+            route={lead ? leadRoute : undefined}
             progress={lead ? lead.est.routeFraction : undefined}
             markerLabel={lead ? `${lead.courier.name} · ${lead.courier.vehicle}` : undefined}
-            bounds={view === "city" ? BOUNDS.city : BOUNDS.north}
+            bounds={view === "city" ? BOUNDS.city : out.length ? frameAround([workshop, ...out.map((x) => x.d.to)]) : BOUNDS.north}
             selectedId={selected}
             onSelect={(id) => setSelected((s) => (s === id ? null : id))}
             label={view === "city" ? "Map of San Francisco with Lucas's workshop and other makers" : "Map of deliveries from the Palace of Fine Arts"}
@@ -123,15 +129,13 @@ export function MapTab({ dash, live, handoffs, now }: { dash: Dashboard; live: L
                       {x.courier.name} · {x.courier.vehicle}
                     </b>
                     <span className="sl-fine">
-                      #{shortId(x.o)} {x.o.title} · {PHASE_TEXT[x.est.phase]} · drop-off in {x.est.dropoffMin} min
+                      #{shortId(x.o)} {x.o.title} · {PHASE_TEXT[x.est.phase]} · to {x.d.to.label}
+                      {tripKm(x.d, workshop) ? ` (${formatKm(tripKm(x.d, workshop)!)})` : ""} · drop-off in {x.est.dropoffMin} min
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-            <p className="sl-fine">
-              Trip from the Palace to {HOME.short}: {formatKm(tripKm)}.
-            </p>
           </div>
           {view === "city" && (
             <div className="sl-panel">

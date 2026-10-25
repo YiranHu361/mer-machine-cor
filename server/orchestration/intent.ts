@@ -29,7 +29,7 @@ export function tagText(raw: string | null | undefined) {
 export function nameFromRequest(text: string): string | null {
   const quoted = /["“]([^"“”]{1,16})["”]/.exec(text)?.[1];
   const said =
-    /\b(?:that says|saying|says|reads|named|called|with (?:the |my )?name|(?:my )?name is)\s*:?\s*(.+)$/i.exec(
+    /\b(?:that says|saying|says|(?:it|to) say\b|reads|named|called|with (?:the |my )?name|(?:my )?name is|name to)\s*:?\s*(.+)$/i.exec(
       text,
     )?.[1];
   for (const candidate of [quoted, said]) {
@@ -69,6 +69,25 @@ export function requestedProcess(text: string): Process | null {
     return "photo_print";
   return null;
 }
+/** A request written over several chat messages: one line per message, newest last. */
+export function requestLines(text: string) {
+  return text
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+/** What the newest line that says it says: a later message overrides an earlier one. */
+function latest<T>(text: string, read: (line: string) => T | null): T | null {
+  const lines = requestLines(text);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const found = read(lines[i]);
+    if (found !== null) return found;
+  }
+  return null;
+}
+export const latestProcess = (text: string) => latest(text, requestedProcess);
+export const latestName = (text: string) => latest(text, nameFromRequest);
+export const latestSubject = (text: string) => latest(text, drawableSubject);
 export interface PhotoFacts {
   assetId: string;
   colorful: boolean;
@@ -86,7 +105,8 @@ export function localIntent(
   const text = requestText.trim();
   const ids = photos.map((p) => p.assetId);
   const colorful = photos.some((p) => p.colorful || p.kind === "photo");
-  const subject = drawableSubject(text);
+  const subject = latestSubject(text);
+  const name = latestName(text);
   if (experience === "gift") {
     const items: IntentItem[] = [];
     if (ids.length)
@@ -130,7 +150,7 @@ export function localIntent(
       quantity: 1,
       creation: "generate",
       photoAssetIds: [],
-      text: tagText(nameFromRequest(text)),
+      text: tagText(name),
       colorImportant: false,
     });
     return {
@@ -141,7 +161,7 @@ export function localIntent(
       reason: "Local rules: one item per gift process.",
     };
   }
-  const asked = requestedProcess(text);
+  const asked = latestProcess(text);
   const process: Process =
     asked ??
     (ids.length
@@ -156,11 +176,11 @@ export function localIntent(
       ? {
           process,
           name: /\bname[ -]?tags?\b/i.test(text) ? "A name tag" : "A keychain",
-          why: `“${tagText(nameFromRequest(text))}” engraved in one colour, with a keyring hole.`,
+          why: `“${tagText(name)}” engraved in one colour, with a keyring hole.`,
           quantity: 1,
           creation: "generate",
           photoAssetIds: [],
-          text: tagText(nameFromRequest(text)),
+          text: tagText(name),
           colorImportant: false,
         }
       : {
@@ -185,7 +205,9 @@ export function localIntent(
           photoAssetIds: ids.length && !(generate && subject) ? ids : [],
           subject:
             subject ??
-            (ids.length ? undefined : text.slice(0, 40) || undefined),
+            (ids.length
+              ? undefined
+              : requestLines(text).join(", ").slice(0, 40) || undefined),
           colorImportant: process === "photo_print",
         };
   return {

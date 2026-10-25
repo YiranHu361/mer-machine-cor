@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import "./map.css";
 import {
   HOODS,
   OTHER_LAND,
+  PALACE,
   PARKS,
   SF_SHORE,
   STREETS,
@@ -55,6 +56,27 @@ export const BOUNDS: Record<"city" | "north" | "palace", Bounds> = {
   palace: { north: 37.8075, south: 37.796, west: -122.4575, east: -122.438 },
 };
 
+export const inBounds = (p: LatLng, b: Bounds) => p.lat <= b.north && p.lat >= b.south && p.lng >= b.west && p.lng <= b.east;
+
+/** Bounds that frame every point inside `within` (the city by default) with some margin, at
+   least `minKm` across and never a thin sliver. Points outside `within` are left out: the map
+   stays on San Francisco and SFMap draws them as edge markers pointing their way. */
+export function boundsAround(points: LatLng[], { minKm = 1.6, pad = 0.2, within = BOUNDS.city }: { minKm?: number; pad?: number; within?: Bounds } = {}): Bounds {
+  const inside = points.filter((p) => inBounds(p, within));
+  const pts = inside.length ? inside : [PALACE];
+  const lats = pts.map((p) => p.lat);
+  const lngs = pts.map((p) => p.lng);
+  const cLat = (Math.max(...lats) + Math.min(...lats)) / 2;
+  const cLng = (Math.max(...lngs) + Math.min(...lngs)) / 2;
+  const kmLat = 111.32;
+  const kmLng = 111.32 * Math.cos((cLat * Math.PI) / 180);
+  let w = Math.max((Math.max(...lngs) - Math.min(...lngs)) * kmLng * (1 + 2 * pad), minKm);
+  let h = Math.max((Math.max(...lats) - Math.min(...lats)) * kmLat * (1 + 2 * pad), minKm * 0.6);
+  if (h / w < 0.55) h = w * 0.55;
+  if (h / w > 0.9) w = h / 0.9;
+  return { north: cLat + h / 2 / kmLat, south: cLat - h / 2 / kmLat, west: cLng - w / 2 / kmLng, east: cLng + w / 2 / kmLng };
+}
+
 export interface SFMapProps {
   pins: MapPin[];
   /** a path drawn dashed, with the travelled part in orange */
@@ -71,6 +93,8 @@ export interface SFMapProps {
   className?: string;
   /** neighbourhood names; on by default for the city view */
   hoods?: boolean;
+  /** tap-to-set: a tap on the map (not on a pin) calls this with the spot's lat/lng */
+  onPick?: (at: LatLng) => void;
 }
 
 const W = 1000;
@@ -80,7 +104,8 @@ function projector(b: Bounds) {
   const k = W / ((b.east - b.west) * Math.cos(lat0));
   const H = (b.north - b.south) * k;
   const xy = (p: LatLng): [number, number] => [(p.lng - b.west) * Math.cos(lat0) * k, (b.north - p.lat) * k];
-  return { xy, H, k };
+  const latLng = (x: number, y: number): LatLng => ({ lat: b.north - y / k, lng: b.west + x / (Math.cos(lat0) * k) });
+  return { xy, latLng, H, k };
 }
 
 const d = (pts: [number, number][], close = false) =>
@@ -97,8 +122,14 @@ export function SFMap({
   label,
   className,
   hoods,
+  onPick,
 }: SFMapProps) {
-  const { xy, H } = useMemo(() => projector(bounds), [bounds]);
+  const { xy, latLng, H } = useMemo(
+    () => projector(bounds),
+    // by value: callers may build new bounds on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bounds.north, bounds.south, bounds.west, bounds.east],
+  );
   // text and markers keep the same size on screen whatever the map's width
   const ref = useRef<SVGSVGElement>(null);
   const [width, setWidth] = useState(600);
@@ -133,6 +164,16 @@ export function SFMap({
         })()
       : null;
   const showHoods = hoods ?? bounds === BOUNDS.city;
+  const pick = (e: MouseEvent<SVGSVGElement>) => {
+    const svg = ref.current;
+    const m = svg?.getScreenCTM();
+    if (!svg || !m || !onPick) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const u = pt.matrixTransform(m.inverse());
+    onPick(latLng(u.x, u.y));
+  };
   const key = (id: string) => (e: KeyboardEvent<SVGGElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -144,7 +185,8 @@ export function SFMap({
     <svg
       ref={ref}
       viewBox={`0 0 ${W} ${H.toFixed(0)}`}
-      className={`fm-map ${className ?? ""}`}
+      className={`fm-map ${onPick ? "is-picking" : ""} ${className ?? ""}`}
+      onClick={onPick ? pick : undefined}
       role="group"
       aria-label={label}
       preserveAspectRatio="xMidYMid slice"
@@ -173,7 +215,13 @@ export function SFMap({
         </>
       )}
       {ordered.map((p) => {
-        const [x, y] = xy(p.at);
+        const [px, py] = xy(p.at);
+        // a pin off the map sits on its edge with an arrow pointing its way
+        const m = 16 * scale;
+        const off = px < 0 || px > W || py < 0 || py > H;
+        const ang = Math.atan2(py - H / 2, px - W / 2);
+        const t = off ? Math.min((W / 2 - m) / Math.abs(Math.cos(ang) || 1e-9), (H / 2 - m) / Math.abs(Math.sin(ang) || 1e-9)) : 0;
+        const [x, y] = off ? [W / 2 + Math.cos(ang) * t, H / 2 + Math.sin(ang) * t] : [px, py];
         const selected = p.id === selectedId;
         const r = (p.tone === "match" || p.tone === "home" ? 7 : p.tone === "place" ? 6.5 : 4.5) * scale;
         const labelled = selected || p.showLabel;
@@ -187,12 +235,26 @@ export function SFMap({
             tabIndex={p.interactive ? 0 : undefined}
             aria-label={`${p.label}${p.sub ? `, ${p.sub}` : ""}`}
             aria-pressed={p.interactive ? selected : undefined}
-            onClick={p.interactive ? () => onSelect?.(p.id) : undefined}
+            onClick={
+              p.interactive
+                ? (e) => {
+                    e.stopPropagation();
+                    onSelect?.(p.id);
+                  }
+                : undefined
+            }
             onKeyDown={p.interactive ? key(p.id) : undefined}
           >
             <title>{`${p.label}${p.sub ? ` · ${p.sub}` : ""}`}</title>
             {p.interactive && <circle r={22 * scale} className="fm-hit" />}
             {(p.tone === "match" || selected) && <circle r={r + 8 * scale} className="fm-pulse" />}
+            {off && (
+              <path
+                className="fm-edge"
+                transform={`rotate(${((ang * 180) / Math.PI).toFixed(1)})`}
+                d={`M${r + 4 * scale} ${-5 * scale} L${r + 12 * scale} 0 L${r + 4 * scale} ${5 * scale} Z`}
+              />
+            )}
             {p.tone === "home" ? (
               <>
                 <circle r={r} className="fm-dot" />
@@ -228,7 +290,7 @@ export function SFMap({
           {markerLabel && (
             <text
               x={marker[0] > W - 130 * scale ? -12 * scale : 12 * scale}
-              y={20 * scale}
+              y={26 * scale}
               textAnchor={marker[0] > W - 130 * scale ? "end" : "start"}
               fontSize={12.5 * scale}
               className="fm-label-main"
