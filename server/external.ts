@@ -81,6 +81,10 @@ export class IntegratedPayment implements PaymentBoundary {
     const prefix =
       /^([A-Z][A-Z0-9_]+)(?::|$)/.exec((error as Error).message)?.[1] ??
       "PAYMENT_SERVICE_UNAVAILABLE";
+    // The order keeps the code only; the operator sees why.
+    console.warn(
+      `Payment ${op.kind} ${op.id} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`,
+    );
     return Object.assign(
       new Error(
         `${prefix}: ${stored?.receipt ? "Reconcile the recorded operation before any replacement." : "No submission was recorded. Check test-payment configuration and retry."}`,

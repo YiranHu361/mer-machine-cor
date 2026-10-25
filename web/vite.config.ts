@@ -14,7 +14,13 @@ export default defineConfig(({ mode }) => {
     (name ? `https://${name}.convex.cloud` : "");
   return {
     plugins: [react()],
-    define: { "import.meta.env.VITE_CONVEX_URL": JSON.stringify(convexUrl) },
+    define: {
+      "import.meta.env.VITE_CONVEX_URL": JSON.stringify(convexUrl),
+      "import.meta.env.VITE_FABYN_CLOUD": JSON.stringify(env.VERCEL === "1" || env.FABYN_CLOUD_BUILD === "1" ? "1" : "0"),
+    },
+    // Scan only the app. The static pages in fabyn-reference/ use a dynamic
+    // import() esbuild cannot resolve, which made the dependency scan fail.
+    optimizeDeps: { entries: ["index.html"] },
     server: {
       proxy: {
         "/api": "http://127.0.0.1:4318",

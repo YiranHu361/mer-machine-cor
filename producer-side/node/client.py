@@ -9,6 +9,7 @@ Run:  python -m node.client --machine node/machines/m_sticker_01.json --hub http
 from __future__ import annotations
 
 import argparse
+import hashlib
 import asyncio
 import json
 import logging
@@ -51,7 +52,7 @@ log = logging.getLogger("node")
 # Keys in node/machines/<id>.json that configure this node only and never go to the hub.
 LOCAL_KEYS = ("adapter",)
 # Adapter errors that only mean the printer could not be reached: nothing was printed.
-UNREACHED = re.compile(r"not found|could not connect", re.I)
+UNREACHED = re.compile(r"not found|could not connect|cannot reach|connect timed out", re.I)
 
 
 class NodeClient:
@@ -235,6 +236,9 @@ class NodeClient:
             return dest
         r = await http.get(urljoin(self.hub + "/", url.lstrip("/")) if not urlparse(url).scheme else url)
         r.raise_for_status()
+        expected = job.params.get("sha256")
+        if expected and hashlib.sha256(r.content).hexdigest() != expected:
+            raise AdapterError("downloaded artifact checksum does not match the approved file")
         dest.write_bytes(r.content)
         return dest
 

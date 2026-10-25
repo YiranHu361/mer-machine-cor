@@ -1,4 +1,4 @@
-// Shared look for every Fabrary machine model: one palette, one set of materials.
+// Shared look for every Fabyn machine model: one palette, one set of materials.
 // Units are metres. Every model's origin is its bottom centre, +Y up, front faces +Z.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';

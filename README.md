@@ -1,5 +1,14 @@
 # Fabyn
 
+## Split deployment
+
+The consumer website and ordering/AI agent have a Vercel runtime. The local producer
+runs independently on this Mac and receives jobs over an outbound HTTPS queue,
+then drives the three machines. See [deployment and migration](docs/deployment.md)
+for configuration, starting the producer, and linking the printers. The existing
+combined local commands below remain available for development.
+
+
 A local requester and owner application that starts with pictures. Upload images and Fabyn recommends a supported output and a suitable machine from the registered database. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
 
 Open the running application at **http://127.0.0.1:4318**. Requester sessions are private; the maker side opens without an access code unless `FABYN_OWNER_CODE` sets one. Do not copy `.data/local-credentials.json` into reports.
@@ -64,16 +73,13 @@ Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press
 - The node checks the printer at start; with the plate empty but the printer still showing its last print as finished, start with `npm run mvp -- --plate-cleared`.
 - A 3D job completes when the machine reports success. Before the next print, take the item off the plate and press **Item removed · clear the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
 
-## Public address: fabyn.vercel.app
+## Public deployment
 
-Vercel builds and serves the website ([vercel.json](vercel.json), [scripts/vercel-build.mjs](scripts/vercel-build.mjs)); the app, its printers and its data stay on the machine next to the printers. The site at [fabyn.vercel.app](https://fabyn.vercel.app) forwards `/api`, uploaded photos (`/assets/<id>`) and `/connect` to that machine through a tunnel, at the project's `FABYN_BACKEND_ORIGIN`. Browsers at `FABYN_PUBLIC_ORIGIN` may act like the local interface; every other address is still refused.
-
-```sh
-cloudflared tunnel --no-autoupdate --url http://127.0.0.1:4318   # the tunnel to this machine
-npm run vercel:link                                               # save its address in Vercel and deploy
-```
-
-Run `npm run vercel:link` again whenever the tunnel restarts (its link changes); the app and agent keep running. Pushes to `main` also deploy through Vercel's GitHub connection, using the saved address. `.env` holds `FABYN_PUBLIC_ORIGIN=https://fabyn.vercel.app`.
+Vercel now hosts the consumer interface and ordering/AI API. The machine computer
+runs `npm run producer` and receives jobs through authenticated outbound HTTPS.
+Use [the deployment guide](docs/deployment.md) and `consumer.env.example` to
+configure the cloud service, migrate saved artwork, and link the three printers.
+The previous tunnel-forwarding deployment is no longer used by `vercel.json`.
 
 ## Fetch.ai agent: order from ASI:One
 

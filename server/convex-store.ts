@@ -48,7 +48,7 @@ export class ConvexStore implements Store {
   constructor(
     private readonly client: StateClient,
     private readonly secret: string,
-    private readonly options: { pollMs?: number } = {},
+    private readonly options: { pollMs?: number; watch?: boolean } = {},
   ) {}
 
   /** Connects, seeds an empty deployment with the initial state, and starts watching. */
@@ -56,7 +56,7 @@ export class ConvexStore implements Store {
     url: string,
     secret: string,
     initial: State,
-    options: { pollMs?: number } = {},
+    options: { pollMs?: number; watch?: boolean } = {},
   ) {
     if (!secret)
       throw new Error(
@@ -83,7 +83,7 @@ export class ConvexStore implements Store {
   async init(initial: State) {
     const first = await this.read(initial);
     if (first.version === 0) await this.compareAndSet(0, initial);
-    this.startWatching();
+    if (this.options.watch !== false) this.startWatching();
   }
 
   async read(initial?: State) {

@@ -26,11 +26,16 @@
     "print:one": "tsx scripts/print-one.ts",
     "mvp": "node scripts/mvp.mjs",
     "convex:push": "node scripts/convex-push.mjs",
-    "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev",
+    "convex:local": "node scripts/convex-local.mjs",
     "vercel:link": "node scripts/vercel-link.mjs",
-    "agent": "integrations/fetch/.venv/bin/python integrations/fetch/order_agent.py"
+    "agent": "integrations/fetch/.venv/bin/python integrations/fetch/order_agent.py",
+    "producer": "node scripts/producer.mjs",
+    "producer:link": "node scripts/link-producer.mjs",
+    "test:cloud": "node --import tsx --test tests/cloud-*.test.ts",
+    "cloud:migrate": "tsx scripts/migrate-cloud.ts"
   },
   "dependencies": {
+    "@vercel/functions": "3.10.3",
     "claude": "^0.1.1",
     "context.dev": "3.15.0",
     "convex": "1.46.0",

@@ -44,6 +44,7 @@ import {
   executionCancellationContext,
 } from "./execution-cancellation.ts";
 export interface Config {
+  cloud?: boolean;
   mode: "simulation" | "hardware";
   paymentMode: "mock" | "testnet";
   storeMode: string;

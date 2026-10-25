@@ -102,6 +102,25 @@ export async function api<T>(
   method?: string,
   options: { headers?: HeadersInit } = {},
 ): Promise<T> {
+  if (path === "/uploads" && body instanceof FormData && import.meta.env?.VITE_FABYN_CLOUD === "1") {
+    const images = body.getAll("images").filter((image): image is File => image instanceof File);
+    const files = await Promise.all(images.map(async (image) => ({
+      size: image.size,
+      sha256: Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await image.arrayBuffer())))
+        .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+    })));
+    const { uploads } = await api<{ uploads: { ticketId: string; url: string }[] }>("/uploads/storage", { files });
+    const completed = await Promise.all(uploads.map(async (upload, index) => {
+      const response = await fetch(upload.url, {
+        method: "POST", body: images[index], headers: { "Content-Type": images[index].type || "application/octet-stream" },
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok) throw new ApiError("The picture upload failed. Try again.", "upload_failed", response.status);
+      const { storageId } = await response.json();
+      return { ticketId: upload.ticketId, storageId };
+    }));
+    return api<T>("/uploads/complete", { uploads: completed });
+  }
   const verb = (method || (body === undefined ? "GET" : "POST")).toUpperCase();
   const headers = new Headers(
     body instanceof FormData

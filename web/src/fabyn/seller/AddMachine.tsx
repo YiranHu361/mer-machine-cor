@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "../../api";
 import type { Dashboard } from "./data";
+import { Connections } from "./Connections";
 
 type Identification = { status: "supported" | "unsupported" | "unclear"; model?: string; modelName?: string; message: string };
 type IssuedCode = { setupCode: { id: string; code: string; expiresAt: string; machineId: string }; command: string; platformUrl: string };
@@ -59,6 +60,19 @@ export function AddMachine({ dash, act, busy }: { dash: Dashboard; act: (key: st
   };
 
   const pending = dash.setupCodes.filter((c) => !c.usedAt && Date.parse(c.expiresAt) > Date.now());
+
+  if (import.meta.env?.VITE_FABYN_CLOUD === "1")
+    return (
+      <section aria-labelledby="sl-add-title" className="sl-add">
+        <p className="sl-kicker">add a machine</p>
+        <h2 id="sl-add-title" className="sl-h2">Connect your local printers.</h2>
+        <p className="sl-lede">
+          Start the producer on the computer beside your Phomemo, Instax and Bambu printers.
+          Once connected, confirm each test print below to accept orders.
+        </p>
+        <Connections act={act} busy={busy} now={Date.now()} />
+      </section>
+    );
 
   return (
     <section aria-labelledby="sl-add-title" className="sl-add">

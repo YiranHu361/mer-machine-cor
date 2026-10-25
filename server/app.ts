@@ -45,6 +45,8 @@ import {
 import { Orchestrator } from "./orchestration/orchestrator.ts";
 import { registerProducerHubRoutes } from "./producer-hub.ts";
 import { registerMvpSetupRoutes, type MvpDeps } from "./mvp-setup.ts";
+import { registerCloudUploads } from "./cloud-uploads.ts";
+import { registerCloudConnections } from "./cloud-connections.ts";
 import { registerOrchestrationRoutes } from "./orchestration/routes.ts";
 import type { TestWallet } from "../integrations/src/test-wallet.ts";
 import {
@@ -152,6 +154,9 @@ export function createApp(
     relay?: ConnectorRelay;
     testWallet?: TestWallet;
     mvpSetup?: MvpDeps;
+    producer?: import("./cloud-producer.ts").CloudProducer;
+    background?: (work: Promise<unknown>) => void;
+    reconcile?: () => Promise<void>;
   } = {},
 ) {
   const app = express();
@@ -183,10 +188,12 @@ export function createApp(
         const port = (url: URL) =>
           Number(url.port || (url.protocol === "https:" ? 443 : 80));
         requireThat(
-          origin.origin === service.config.publicOrigin ||
-            (["http:", "https:"].includes(origin.protocol) &&
-              ["127.0.0.1", "localhost"].includes(origin.hostname) &&
-              [4317, port(configured)].includes(port(origin))),
+          ["http:", "https:"].includes(origin.protocol) &&
+            (service.config.cloud
+              ? origin.origin === configured.origin
+              : origin.origin === service.config.publicOrigin ||
+                (["127.0.0.1", "localhost"].includes(origin.hostname) &&
+                 [4317, port(configured)].includes(port(origin)))),
           "ORIGIN_REJECTED",
           "This local application only accepts requests from its own interface.",
           403,
@@ -238,7 +245,7 @@ export function createApp(
   const parseRelayJson = express.json({ limit: "12mb" });
   app.use((req, res, next) => {
     const parse =
-      req.method === "POST" && req.path === "/api/connectors/reply"
+      req.method === "POST" && (req.path === "/api/connectors/reply" || req.path === "/api/producer/poll")
         ? parseRelayJson
         : parseJson;
     parse(req, res, (error) => {
@@ -333,6 +340,12 @@ export function createApp(
     await service.job(String(req.params.id), a);
     return a;
   };
+  if (options.producer) options.producer.register(app, (id) => service.assetUrl(id, 600), async () => {
+    const work = options.reconcile?.() ?? Promise.resolve();
+    options.background?.(work);
+    await work;
+  });
+  if (options.producer) registerCloudUploads(app, service, options.producer, actor);
   const view = (j: Job) => {
     const { creationSpecHash, ...visible } = j;
     delete (visible as any).evidence;
@@ -431,6 +444,7 @@ export function createApp(
     res
       .cookie(role === "owner" ? OWNER_COOKIE : SESSION_COOKIE, token, {
         httpOnly: true,
+        secure: service.config.cloud === true,
         sameSite: "strict",
         maxAge: 7 * 86400000,
         path: "/",
@@ -526,6 +540,11 @@ export function createApp(
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
     res.write("event: refresh\ndata: {}\n\n");
+    if (service.config.cloud) {
+      // The UI reconnects and also polls. A serverless function cannot own an infinite SSE stream.
+      res.write("retry: 8000\n\n");
+      return res.end();
+    }
     const off = service.store.subscribe(() =>
       res.write("event: refresh\ndata: {}\n\n"),
     );
@@ -566,6 +585,9 @@ export function createApp(
         stagedPaths.push(path);
         await writeFile(path, f.buffer);
         try {
+          const dimensions = options.producer
+            ? await options.producer.rpc("inspect", { path }, [path])
+            : await (async () => {
           const { stdout } = await exec(
             "uv",
             [
@@ -579,7 +601,8 @@ export function createApp(
             ],
             { timeout: 30000, maxBuffer: 50000 },
           );
-          const dimensions = JSON.parse(stdout);
+          return JSON.parse(stdout);
+            })();
           assets.push({
             id: assetId,
             ownerId: a.id,
@@ -615,7 +638,7 @@ export function createApp(
     );
     res
       .status(201)
-      .json({ assets: assets.map(({ path, ownerId, ...asset }) => asset) });
+      .json({ assets: assets.map(({ path, ownerId, storageId, ...asset }) => asset) });
   });
   const prepare = async (
     req: Request,
@@ -657,6 +680,13 @@ export function createApp(
       path = join(service.config.dataDir, "assets", assetId + ".png");
     let bytes: Buffer;
     try {
+      if (options.producer) {
+        const prepared = await options.producer.rpc("bitmap", {
+          source: source.path, extras: spec.assetIds.slice(1).map((a) => s.assets[a].path),
+          output_type: spec.outputType, width_mm: spec.widthMm, height_mm: spec.heightMm, crop: spec.crop,
+        }, spec.assetIds.map((a) => s.assets[a].path));
+        await writeFile(path, await readFile(prepared.path));
+      } else {
       await exec(
         "uv",
         [
@@ -680,6 +710,7 @@ export function createApp(
         ],
         { timeout: 30000, maxBuffer: 50000 },
       );
+      }
       bytes = await readFile(path);
     } catch (error) {
       // No asset registration has started yet, so this unique output is safe
@@ -917,6 +948,8 @@ export function createApp(
         403,
       );
     }
+    if (options.producer && asset.storageId && options.producer.files.signedUrl)
+      return res.redirect(302, options.producer.files.signedUrl(asset.storageId, asset.mime));
     res.type(asset.mime).send(await readFile(asset.path));
   });
   // A 10-minute link to the requester's own artwork, for use outside this
@@ -970,6 +1003,8 @@ export function createApp(
     mode: "simulation" | "hardware",
     target: { nodeUrl: string } | { connectorId: string },
   ) => {
+    requireThat(!service.config.cloud, "LOCAL_PRODUCER_REQUIRED",
+      "Start npm run producer on the machine computer, then link the tested printers with npm run producer:link -- --confirm-test-prints.", 409);
     const observed = (await service.read()).machines[machineId];
     const observedSettings = machineSettingsFingerprint(observed);
     const observedInspection = machineInspectionFingerprint(observed);
@@ -1062,13 +1097,14 @@ export function createApp(
     });
     res.status(201).json({ machine });
   });
-  registerConnectorRoutes(app, { service, relay, owner, registerMachine });
+  if (!service.config.cloud) registerConnectorRoutes(app, { service, relay, owner, registerMachine });
   registerProducerHubRoutes(app, {
     service,
     hub: service.node instanceof RoutingNode ? service.node.hub : undefined,
     owner,
   });
-  registerMvpSetupRoutes(app, { service, owner, hubUrl: service.node instanceof RoutingNode ? service.node.hub?.url : undefined, deps: options.mvpSetup });
+  if (options.producer) registerCloudConnections(app, service, options.producer, owner);
+  else registerMvpSetupRoutes(app, { service, owner, hubUrl: service.node instanceof RoutingNode ? service.node.hub?.url : undefined, deps: options.mvpSetup });
   registerOrchestrationRoutes(app, {
     orchestrator,
     actor,

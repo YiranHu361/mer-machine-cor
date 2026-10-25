@@ -5,6 +5,7 @@ dist/
 .env.*
 !.env.example
 .data/
+.work/
 .vercel/
 .venv/
 __pycache__/

@@ -1,3 +1,4 @@
+// Legacy tunnel forwarding tool. Not used by the split deployment; see docs/deployment.md.
 // Points the Vercel site (FABYN_PUBLIC_ORIGIN) at this machine's current tunnel.
 // Vercel builds and serves only the website (vercel.json, scripts/vercel-build.mjs);
 // the app, its printers and its data stay on this machine, and the site forwards

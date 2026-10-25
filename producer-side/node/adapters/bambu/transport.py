@@ -443,9 +443,10 @@ def make_transport(config: dict[str, Any], *, dry_run_state: Callable[[], dict[s
                              float(config.get("dry_run_step_s", 0.02)))
     if kind != "lan":
         raise AdapterError(f"unknown Bambu transport {kind!r}; use lan or file")
-    host = config.get("host")
+    # The IP changes with the network, so $BAMBU_HOST (e.g. in producer-side/.env) overrides adapter.host.
+    host = os.environ.get(config.get("host_env", "BAMBU_HOST") or "") or config.get("host")
     if not host:
-        raise AdapterError("adapter.host (the printer's IP) is not set")
+        raise AdapterError("the printer's IP is not set: BAMBU_HOST in producer-side/.env, or adapter.host")
     env = config.get("access_code_env", "BAMBU_ACCESS_CODE")
     code = config.get("access_code") or os.environ.get(env)
     if not code:

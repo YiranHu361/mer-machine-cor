@@ -1,5 +1,12 @@
 # Producer side: machines and nodes
 
+For the Vercel deployment, run `npm run producer` from the repository root after
+configuring this folder's `.env`. It starts all three machine nodes and polls the
+cloud for work; no local hub or inbound connection is required. See
+[deployment and recovery](../docs/deployment.md). The standalone tools and local
+stub hub below remain available for development.
+
+
 One node process per machine. Each node dials out to the hub at `/ws/node`, takes jobs, and drives its machine through an adapter. `hub/gateway.py` is the hub's end of that connection.
 
 **How it works, and how to add a machine: [ARCHITECTURE.md](ARCHITECTURE.md).**

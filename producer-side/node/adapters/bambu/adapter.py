@@ -324,7 +324,8 @@ class BambuA1Mini(Adapter):
             self._state, self._detail = "idle", None
 
     def clear_error(self) -> None:
-        self.plate_cleared()
+        """The printer answers again after a job could not reach it. Nothing was uploaded, so
+        this says nothing about the plate: what we knew about it before still stands."""
         self._state, self._detail = "idle", None
 
 

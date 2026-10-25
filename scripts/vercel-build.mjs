@@ -1,3 +1,4 @@
+// Legacy tunnel forwarding tool. Not used by the split deployment; see docs/deployment.md.
 // Vercel build (vercel.json): the website from web/ as static files, and the
 // server's own paths forwarded to the machine next to the printers at
 // FABYN_BACKEND_ORIGIN, which npm run vercel:link keeps current. The app, its

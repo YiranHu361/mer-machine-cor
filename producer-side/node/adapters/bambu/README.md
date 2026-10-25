@@ -22,7 +22,7 @@ Next steps:
 1. Printer and node computer on the **same network**. Check with `python -m node.tools.bambu discover`.
 2. On the printer: **Settings → WLAN → LAN Only Mode: on**, then **Developer Mode: on** (firmware ≥ 01.04 rejects third-party print commands without it). Note the **Access Code** shown there. It changes whenever LAN mode is toggled.
 3. A **microSD card** in the printer. Uploaded jobs are stored on it.
-4. Set the code: `echo BAMBU_ACCESS_CODE=12345678 >> producer-side/.env` (git-ignored), and the IP in `node/machines/m_fdm_01.json` → `adapter.host`.
+4. Set the code and the IP in `producer-side/.env` (git-ignored): `BAMBU_ACCESS_CODE=12345678` and `BAMBU_HOST=192.168.1.50`. `BAMBU_HOST` overrides `adapter.host` in `node/machines/m_fdm_01.json`, so a new network needs no change to a committed file.
 5. On the printer, set the external spool's filament type (PLA). Pre-flight compares it with the file.
 
 ## Print a file

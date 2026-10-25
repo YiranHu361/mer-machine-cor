@@ -7,8 +7,9 @@
   python -m node.tools.bambu print part.gcode --dry-run     # same flow against a fake printer
   python -m node.tools.bambu stop
 
-The LAN access code comes from $BAMBU_ACCESS_CODE (or producer-side/.env). --machine picks the
-manifest (default node/machines/m_fdm_01.json); --host / --serial override it.
+The LAN access code comes from $BAMBU_ACCESS_CODE and the printer's IP from $BAMBU_HOST (or
+producer-side/.env), else the manifest. --machine picks the manifest (default
+node/machines/m_fdm_01.json); --host / --serial override both.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ def load_manifest(a: argparse.Namespace) -> dict:
     manifest = json.loads(a.machine.read_text())
     cfg = manifest["adapter"]
     if a.host:
-        cfg["host"] = a.host
+        cfg["host"], cfg["host_env"] = a.host, ""  # --host wins over $BAMBU_HOST
     if a.serial:
         cfg["serial"] = a.serial
     if getattr(a, "dry_run", False):

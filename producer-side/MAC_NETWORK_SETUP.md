@@ -27,10 +27,19 @@ Pick an address. **Each teammate needs a different one:** `172.20.10.14`, `.13`,
 networksetup -createlocation PrinterHotspot populate
 networksetup -switchtolocation PrinterHotspot
 networksetup -setmanual Wi-Fi 172.20.10.14 255.255.255.240 172.20.10.1   # your address here
+networksetup -setdnsservers Wi-Fi 172.20.10.1 1.1.1.1 8.8.8.8
 networksetup -switchtolocation Automatic
 ```
 
 If macOS asks for your password, enter it. Nothing changes until you switch to the new Location.
+
+`-setmanual` sets no DNS servers, so without the `-setdnsservers` line the Mac reaches the printer but no website loads in this Location. If you set up the Location before that line was added, add DNS to it once:
+
+```sh
+networksetup -switchtolocation PrinterHotspot
+networksetup -setdnsservers Wi-Fi 172.20.10.1 1.1.1.1 8.8.8.8
+networksetup -switchtolocation Automatic
+```
 
 ## Every time you switch networks
 
@@ -58,7 +67,7 @@ networksetup -setdhcp Wi-Fi
 
 ## If the printer's address changes
 
-The hotspot may give the printer a different address after a restart. Run `bambu discover` and put the address it prints in `node/machines/m_fdm_01.json` → `adapter.host`. Alternatively, pass `--host 172.20.10.x` to any `bambu` command.
+The hotspot may give the printer a different address after a restart. Run `bambu discover` and put the address it prints in `producer-side/.env` as `BAMBU_HOST=172.20.10.x` (it overrides `adapter.host` in `node/machines/m_fdm_01.json`). Alternatively, pass `--host 172.20.10.x` to any `bambu` command.
 
 ## Remove the setup
 

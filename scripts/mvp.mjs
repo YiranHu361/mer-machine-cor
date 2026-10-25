@@ -59,6 +59,19 @@ const env = {
 };
 const python = PRODUCER_PYTHON;
 
+// With Convex as the store the app exits at once when it cannot reach it.
+if (process.env.FABYN_STORE === "convex" && convexUrl) {
+  try {
+    await fetch(convexUrl);
+  } catch {
+    console.error(
+      `Convex is not answering at ${convexUrl}. Start it in another terminal with\n` +
+        `  npm run convex:local\nand wait for "Convex functions ready!", then run this again.`,
+    );
+    process.exit(1);
+  }
+}
+
 if (!args.includes("--no-build")) {
   console.log("• Building the web app");
   const build = spawnSync("npm", ["run", "build"], { stdio: "inherit", env });
@@ -153,14 +166,16 @@ const login = await fetch(`${app}/api/session`, {
   }),
 });
 const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
-const dashboard = await (
-  await fetch(`${app}/api/owner/dashboard`, { headers: { cookie } })
-).json();
-for (const [mine, theirs] of answering) {
+/** Point our machine at the hub's; true once it prints through the hub. */
+async function moveOntoHub(mine, theirs) {
+  const dashboard = await (
+    await fetch(`${app}/api/owner/dashboard`, { headers: { cookie } })
+  ).json();
   const ours = dashboard.machines?.find((m) => m.id === mine);
   // A printer paused only because it was unreachable comes back once its
   // probe has just answered; one with an order on it waits for the owner.
   const back = ours?.paused && !ours.activeJobId && !ours.reservation;
+  let moved = true;
   if (ours?.producerHub?.machineId === theirs && !back)
     console.log(
       `• ${mine} already prints through the producer side's hub as ${theirs}.`,
@@ -177,6 +192,7 @@ for (const [mine, theirs] of answering) {
         }),
       },
     );
+    moved = switched.ok;
     console.log(
       switched.ok
         ? `• ${mine} now prints through the producer side's hub as ${theirs}${dryRun ? " (dry run: no paper)" : ""}.`
@@ -192,7 +208,24 @@ for (const [mine, theirs] of answering) {
         `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABYN_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
         `  and use "Reconcile saved outcome" in its recovery actions.`,
     );
+  return moved;
 }
+for (const [mine, theirs] of answering) await moveOntoHub(mine, theirs);
+// A printer that did not answer at startup joins the hub when its node retries;
+// move it onto the hub then, or the app never offers it an order.
+const late = printers.filter(([, theirs]) => missing.has(theirs));
+const joinLate = setInterval(async () => {
+  for (const [i, [mine, theirs]] of [...late.entries()].reverse()) {
+    try {
+      const online = (await (await fetch(`${hub}/machines`)).json()).some(
+        (m) => m.machine_id === theirs && m.status !== "offline",
+      );
+      if (online && (await moveOntoHub(mine, theirs))) late.splice(i, 1);
+    } catch {}
+  }
+  if (!late.length) clearInterval(joinLate);
+}, 15_000);
+if (!late.length) clearInterval(joinLate);
 console.log(
   `\nReady. Open ${app}/make, type "i want a sticker", add a picture and press Start.\n` +
     (args.includes("--photo")

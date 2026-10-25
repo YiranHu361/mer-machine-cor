@@ -36,6 +36,7 @@ interface MachineConn {
   orders: Row & { onHub: boolean; known: boolean };
 }
 interface MvpStatus {
+  cloud?: boolean;
   local: boolean;
   app: Row & { realMachines: boolean };
   python: Row & { ready: boolean };
@@ -117,7 +118,9 @@ export function Connections({ act, busy, now }: { act: Act; busy: string; now: n
         <>
           {!status.local && (
             <p className="sl-note unclear" role="note">
-              Open this page on the Mac that runs fabyn to start programs or save codes. Here you can see the state only.
+              {status.cloud
+                ? <>Start <code>npm run producer</code> on the machine computer. Device settings and access codes stay there; this page shows its connection and lets you link tested printers.</>
+                : <>Open this page on the Mac that runs fabyn to start programs or save codes. Here you can see the state only.</>}
             </p>
           )}
           <ol className="sl-conn-list">
@@ -228,7 +231,7 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
           <button
             className="sl-btn ghost sl-btn-sm"
             type="button"
-            disabled={!can(testKey) || (m.link === "ble" ? !m.program.online : !m.program.online && (!status.python.ready || !m.accessCode?.present))}
+            disabled={status.cloud ? !m.program.online || Boolean(shared.sending) : !can(testKey) || (m.link === "ble" ? !m.program.online : !m.program.online && (!status.python.ready || !m.accessCode?.present))}
             onClick={() => void step("test-device", { machine: m.theirs }, testKey)}
           >
             Test connection

@@ -187,3 +187,16 @@ def test_check_connects_to_the_machine_and_reports_back(tmp_path):
         await asyncio.gather(node_task, server_task, return_exceptions=True)
 
     asyncio.run(go())
+
+
+def test_a1_mini_takes_jobs_again_once_it_answers_after_being_out_of_reach(tmp_path):
+    manifest = json.loads((ROOT / "node/machines/m_fdm_01.json").read_text())
+    manifest["adapter"].update(transport="file", out_dir=str(tmp_path / "sd"))
+    node = NodeClient(manifest, "http://127.0.0.1:1", tmp_path / "work")
+    for unreachable in ("cannot reach printer MQTT at 172.20.10.8:8883 (timed out); same network? LAN mode on?",
+                        "MQTT connect timed out"):
+        node.adapter._state, node.adapter._detail = "error", unreachable
+        asyncio.run(node._on_check({"check_id": "c"}))
+        assert asyncio.run(node.adapter.status())["state"] == "idle"
+    # Nothing reached the printer, so the plate is still unknown, not cleared.
+    assert node.adapter._plate_clear is None

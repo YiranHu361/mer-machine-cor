@@ -1,7 +1,20 @@
-# Vercel builds only the website; nothing else (and no .env or .data) is uploaded.
-/*
-!/web
-!/scripts
-!/vercel.json
-/web/node_modules
-/web/dist
+.env*
+.data/
+.vercel/
+.venv/
+node/
+producer-side/
+integrations/fetch/
+integrations/spacetimedb/
+**/node_modules/
+**/__pycache__/
+**/.venv/
+**/.work/
+docs/
+tests/
+web/tests/
+web/evidence/
+web/fabyn-reference/
+handoff-samples/
+.git/
+.DS_Store

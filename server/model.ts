@@ -102,6 +102,8 @@ export const specSchema = z
   });
 export type Spec = z.infer<typeof specSchema>;
 export interface Asset {
+  /** Durable private object storage; path is only a disposable local cache. */
+  storageId?: string;
   id: string;
   ownerId: string;
   path: string;
@@ -311,6 +313,8 @@ export interface Connector {
   registrationError?: string;
 }
 export interface State {
+  uploadTickets?: Record<string, import("./cloud-uploads.ts").UploadTicket>;
+  producer?: import("./cloud-producer.ts").ProducerState;
   machines: Record<string, Machine>;
   jobs: Record<string, Job>;
   assets: Record<string, Asset>;

@@ -28,12 +28,12 @@ export class ConvexPublisher implements Publisher {
     private readonly send: Send,
     private readonly options: { delayMs?: number; maxQueue?: number } = {},
   ) {}
-  static connect(url: string, secret: string) {
+  static connect(url: string, secret: string, source: "consumer" | "producer" = "consumer") {
     const client = new ConvexHttpClient(url);
     return new ConvexPublisher((events) =>
       client.mutation(anyApi.publish.batch, {
         secret,
-        source: "consumer",
+        source,
         events,
       }),
     );

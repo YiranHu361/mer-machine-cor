@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as files from "../files.js";
+import type * as http from "../http.js";
 import type * as live from "../live.js";
 import type * as publish from "../publish.js";
 import type * as state from "../state.js";
@@ -19,6 +21,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  files: typeof files;
+  http: typeof http;
   live: typeof live;
   publish: typeof publish;
   state: typeof state;

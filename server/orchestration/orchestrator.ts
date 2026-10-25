@@ -143,6 +143,7 @@ const RECOVERY_SCAN_MS = 60_000;
 
 export interface OrchestratorDeps {
   producer?: ProducerRunner;
+  background?: (work: Promise<unknown>) => void;
   understand?: (input: RequestInput) => Promise<RequestBrief>;
   draft?: (input: DraftInput) => Promise<DesignDraft[]>;
   imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
@@ -268,6 +269,7 @@ export class Orchestrator {
           this.inflight.delete(orderId);
       });
     this.inflight.set(orderId, tracked);
+    this.deps.background?.(tracked);
   }
   private async load(orderId: string) {
     const s = await this.service.read();
@@ -776,6 +778,7 @@ export class Orchestrator {
       });
     if (last?.answer) entry.answer = last.answer;
     this.printerChecks.set(m.id, entry);
+    this.deps.background?.(entry.result);
   }
   /**
    * What the site shows for each real printer: whether it answered its

@@ -10,5 +10,10 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "server/**/*.ts",
+    "tests/**/*.ts",
+    "api/**/*.ts",
+    "scripts/migrate-cloud.ts"
+  ]
 }
