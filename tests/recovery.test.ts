@@ -50,6 +50,8 @@ test(
       CONVEX_DEPLOY_KEY: "",
       FABRARY_PUBLISH_SECRET: "",
       ANTHROPIC_API_KEY: "",
+      GEMINI_API_KEY: "",
+      OPENAI_API_KEY: "",
     };
     let backend: ChildProcess | undefined, node: ChildProcess | undefined;
     async function alive(url: string, headers: any = {}) {

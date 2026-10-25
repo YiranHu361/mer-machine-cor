@@ -20,8 +20,38 @@ import {
   type State,
 } from "./model.ts";
 import type { Service } from "./service.ts";
+import { PUBLISHED_PROFILES } from "./orchestration/knowledge.ts";
 
 const exec = promisify(execFile);
+const STICKER_WIDTHS = [15, 25, 48, 53];
+/** The widest sticker a machine prints, from its published profile (the M02 Pro: 48 mm). */
+function printableWidthMm(machine: Machine) {
+  return (
+    (Object.hasOwn(PUBLISHED_PROFILES, machine.model)
+      ? PUBLISHED_PROFILES[machine.model].fields.printableWidthMm.value
+      : null) ?? 53
+  );
+}
+/** Real machines first, then the cheapest; only in a mode this workshop allows. */
+function usableMachines(service: Service, state: State, spec: Spec) {
+  const price = (m: Machine) =>
+    m.priceCard.consumables +
+    m.priceCard.machine +
+    m.priceCard.handling +
+    m.priceCard.platform;
+  return Object.values(state.machines)
+    .filter(
+      (machine) =>
+        service.modeAllowed(machine.mode) &&
+        machineSupportsSpec(machine, spec, machine.mode),
+    )
+    .sort(
+      (a, b) =>
+        Number(a.mode !== "hardware") - Number(b.mode !== "hardware") ||
+        price(a) - price(b) ||
+        a.id.localeCompare(b.id),
+    );
+}
 export const recommendationInput = z
   .object({
     assetIds: z
@@ -183,16 +213,18 @@ function dimensions(
   outputType: "sticker" | "instax",
   assets: Asset[],
   suggested?: IntakeDraft,
+  maxWidthMm = 53,
 ) {
   if (outputType === "instax") return { widthMm: 54, heightMm: 86 };
   const source = assets[0];
   // Multiple pictures use the existing prepared collage; leave room for it.
   const ratio = assets.length > 1 ? 1 : source.height / source.width;
-  const widthMm =
-    suggested?.widthMm && [15, 25, 53].includes(suggested.widthMm)
-      ? suggested.widthMm
-      : 53;
+  const widths = STICKER_WIDTHS.filter((w) => w <= maxWidthMm);
+  const keepSuggested =
+    !!suggested?.widthMm && widths.includes(suggested.widthMm);
+  const widthMm = keepSuggested ? suggested!.widthMm! : widths.at(-1)!;
   const heightMm =
+    keepSuggested &&
     suggested?.heightMm &&
     Number.isInteger(suggested.heightMm) &&
     suggested.heightMm >= 5 &&
@@ -297,14 +329,15 @@ export async function recommendImages(
     material: machine.material,
     available:
       machine.outputType !== "3d" &&
-      machineSupportsSpec(
-        machine,
-        template(machine.outputType),
-        service.config.mode,
-      ),
+      service.modeAllowed(machine.mode) &&
+      machineSupportsSpec(machine, template(machine.outputType), machine.mode),
     constraints: {
       ...(machine.outputType === "sticker"
-        ? { widthsMm: [15, 25, 53] }
+        ? {
+            widthsMm: STICKER_WIDTHS.filter(
+              (w) => w <= printableWidthMm(machine),
+            ),
+          }
         : machine.outputType === "instax"
           ? { widthMm: 54, heightMm: 86 }
           : {}),
@@ -455,19 +488,7 @@ export async function recommendImages(
       suggested?.outputType === outputType ? suggested : undefined,
     ),
   });
-  const candidates = Object.values(current.machines)
-    .filter((machine) =>
-      machineSupportsSpec(machine, spec, service.config.mode),
-    )
-    .sort((a, b) => {
-      const price = (m: Machine) =>
-        m.priceCard.consumables +
-        m.priceCard.machine +
-        m.priceCard.handling +
-        m.priceCard.platform;
-      return price(a) - price(b) || a.id.localeCompare(b.id);
-    });
-  const machine = candidates[0];
+  const machine = usableMachines(service, current, spec)[0];
   if (!machine)
     return {
       status: "unavailable",
@@ -481,6 +502,16 @@ export async function recommendImages(
       machine: null,
       notice,
     };
+  // The chosen machine sets the sticker width: the M02 Pro prints 48 mm, not the 53 mm roll.
+  const fitted = specSchema.parse({
+    ...spec,
+    ...dimensions(
+      outputType,
+      currentAssets,
+      suggested?.outputType === outputType ? suggested : undefined,
+      printableWidthMm(machine),
+    ),
+  });
   return {
     status: "recommended",
     provider,
@@ -490,7 +521,7 @@ export async function recommendImages(
         ? "The pictures suit a black-and-white graphic print. The selected thermal machine supports this format and is available in the saved workshop state."
         : "A color photo print preserves the pictures' color or tonal detail. The selected photo machine supports this format and is available in the saved workshop state.",
     questions: [],
-    spec: { ...spec, recommendedMachineId: machine.id },
+    spec: { ...fitted, recommendedMachineId: machine.id },
     machine: publicRecommendationMachine(machine, true),
     notice: `${notice}${machine.mode === "simulation" ? " This workshop is in simulation; no physical item will be produced." : ""}`,
   };

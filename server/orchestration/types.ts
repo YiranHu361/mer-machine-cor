@@ -39,11 +39,14 @@ export interface DesignCandidate {
   round: number;
   index: number;
   title: string;
-  svgAssetId: string;
-  svgSha256: string;
+  /** A drawing (Claude, fixture) has an SVG; a picture (OpenAI, Nano Banana) has an image. */
+  svgAssetId?: string;
+  svgSha256?: string;
+  imageAssetId?: string;
+  imageSha256?: string;
   previewAssetId: string;
   previewUrl: string;
-  provider: "claude" | "fixture";
+  provider: "claude" | "fixture" | "nano-banana" | "openai";
   model?: string;
   promptVersion: string;
   createdAt: string;

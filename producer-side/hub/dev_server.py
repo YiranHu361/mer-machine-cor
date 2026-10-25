@@ -134,6 +134,18 @@ def create_app() -> FastAPI:
         await gw.cancel_job(body.machine_id, body.job_id)
         return {"ok": "sent"}
 
+    @app.post("/dev/check")
+    async def check(body: MachineRef) -> dict[str, Any]:
+        """The node connects to its machine once, printing nothing: {machine_id, ok, detail}."""
+        if body.machine_id not in gw.nodes:
+            raise HTTPException(404, f"{body.machine_id} never connected")
+        try:
+            return await gw.check_machine(body.machine_id)
+        except LookupError as e:
+            raise HTTPException(409, str(e))
+        except asyncio.TimeoutError:
+            return {"machine_id": body.machine_id, "ok": False, "detail": "the node did not answer in time"}
+
     @app.post("/dev/plate-cleared")
     async def plate_cleared(body: MachineRef) -> dict[str, str]:
         try:

@@ -7,7 +7,7 @@ One node process per machine. Each node dials out to the hub at `/ws/node`, take
 | Machine | Adapter | Process | State |
 | --- | --- | --- | --- |
 | Phomemo M02 Pro | [`node/adapters/phomemo/`](node/adapters/phomemo/README.md) | `sticker_print` | Working on the real printer (BLE, macOS) |
-| Fujifilm Instax mini | `node/adapters/instax/` | `photo_print` | Not started |
+| Fujifilm Instax mini | [`node/adapters/instax/`](node/adapters/instax/README.md) | `photo_print` | First version: picture transfer checked on the real Link 3 (BLE, macOS); first real print pending |
 | Bambu Lab A1 mini | [`node/adapters/bambu/`](node/adapters/bambu/README.md) | `fdm_print` | Rudimentary: prints a pre-sliced G-code file over LAN; one test part printed |
 
 ## Setup

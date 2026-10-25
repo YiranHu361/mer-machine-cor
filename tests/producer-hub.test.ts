@@ -509,3 +509,47 @@ test(
     }
   },
 );
+
+test("a printer check asks the hub to connect once and reads its answer", async () => {
+  const calls: { url: string; body: any }[] = [];
+  const hub = new ProducerHubNode("http://hub.test", {
+    fetch: (async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      calls.push({ url, body });
+      if (body.machine_id === "m_gone")
+        return new Response("machine m_gone is offline", { status: 409 });
+      if (body.machine_id === "m_old_hub")
+        return new Response('{"detail":"Not Found"}', { status: 404 });
+      if (body.machine_id === "m_never")
+        return new Response('{"detail":"m_never never connected"}', {
+          status: 404,
+        });
+      return new Response(
+        JSON.stringify({
+          machine_id: body.machine_id,
+          ok: body.machine_id === "m_photo_01",
+          detail: body.machine_id === "m_photo_01" ? "answered" : "not found",
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch,
+  });
+  assert.deepEqual(await hub.check("m_photo_01"), {
+    ok: true,
+    detail: "answered",
+  });
+  assert.deepEqual(await hub.check("m_sticker_01"), {
+    ok: false,
+    detail: "not found",
+  });
+  assert.equal(calls[0].url, "http://hub.test/dev/check");
+  assert.deepEqual(calls[0].body, { machine_id: "m_photo_01" });
+  // The printer's program is offline or never connected: not answering.
+  assert.deepEqual(await hub.check("m_gone"), {
+    ok: false,
+    detail: "Its printer program is not running.",
+  });
+  assert.equal((await hub.check("m_never")).ok, false);
+  // A hub from before checks existed cannot tell, so it never blocks an order.
+  assert.equal((await hub.check("m_old_hub")).ok, true);
+});

@@ -18,12 +18,14 @@ JOB_ACCEPT = "job.accept"
 JOB_REJECT = "job.reject"
 JOB_PROGRESS = "job.progress"
 JOB_RESULT = "job.result"
+MACHINE_CHECKED = "machine.checked"  # check_id, ok, detail
 
 # hub -> node
 WELCOME = "welcome"
 JOB_OFFER = "job.offer"
 JOB_CANCEL = "job.cancel"
 PLATE_CLEARED = "plate.cleared"  # a person took the last print off the machine
+MACHINE_CHECK = "machine.check"  # check_id: connect to the machine once, print nothing
 
 HEARTBEAT_INTERVAL_S = 5
 OFFLINE_AFTER_S = 15

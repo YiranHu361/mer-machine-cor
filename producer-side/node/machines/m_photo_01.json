@@ -1,0 +1,32 @@
+{
+  "machine_id": "m_photo_01",
+  "process": "photo_print",
+  "display_name": "Table Instax mini Link 3",
+  "owner": "team",
+  "owner_wallet": "0xOWNER_WALLET_ON_BASE_SEPOLIA",
+  "simulated": false,
+  "location": {"lat": 37.8029, "lng": -122.4484, "label": "Palace of Fine Arts, our table"},
+  "media_loaded": {"kind": "instax_mini_film", "remaining_est": 10},
+  "limits": {"max_size_mm": [54, 86, 0], "max_job_minutes": 5, "hours": "00:00-24:00"},
+  "time_model": {"setup_s": 15, "per_unit_s": 35},
+  "price_card": {
+    "material_unit": "sheet",
+    "material_cost_usd": 0.75,
+    "unit_cost_usd": 0.30,
+    "time_rate_usd_per_min": 0.0,
+    "min_price_usd": 1.00
+  },
+  "status": "idle",
+
+  "adapter": {
+    "type": "instax_mini",
+    "transport": "ble",
+    "ble_name": "INSTAX-71659090",
+    "ble_address": "14D07F8A-A977-DEB1-107D-28B1A6E98F43",
+    "max_jpeg_kb": 55,
+    "flip_vertical": false,
+    "scan_s": 12,
+    "job_timeout_s": 120,
+    "eject_s": 15
+  }
+}

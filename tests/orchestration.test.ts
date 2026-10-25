@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { SqliteStore, mutate } from "../server/store.ts";
-import { initialState, type Machine } from "../server/model.ts";
+import { initialState, now, type Machine } from "../server/model.ts";
 import { Service, type Config } from "../server/service.ts";
 import { MockPayment } from "../server/payments.ts";
 import { IntegratedPayment } from "../server/external.ts";
@@ -36,6 +36,10 @@ import {
 } from "../server/orchestration/context-dev.ts";
 import { priceAssignment } from "../server/orchestration/pricing.ts";
 import type { RequestBrief, RequestInput } from "../integrations/src/claude.ts";
+import type {
+  ImageDraft,
+  ImageDraftInput,
+} from "../integrations/src/nano-banana.ts";
 import {
   localIntent,
   drawableSubject,
@@ -183,10 +187,14 @@ function fixture(
   options: {
     mode?: Machine["mode"];
     allowed?: Machine["mode"][];
-    design?: "fixture" | "none";
+    design?: "fixture" | "none" | "nano-banana" | "openai";
     /** "cli" runs the real fabrary-producer; tests using it skip without uv. */
     producer?: "fake" | "cli";
     understand?: (input: RequestInput) => Promise<RequestBrief>;
+    imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
+    checkPrinter?: (
+      machine: Machine,
+    ) => Promise<{ ok: boolean; detail: string }>;
   } = {},
 ) {
   const dir = mkdtempSync(join(tmpdir(), "fabrary-orchestration-"));
@@ -219,6 +227,8 @@ function fixture(
         : producer.runner,
     designProvider: options.design ?? "fixture",
     understand: options.understand,
+    imageDraft: options.imageDraft,
+    checkPrinter: options.checkPrinter,
     analyze: async (assets) => ({
       kind: "photo",
       colorful: true,
@@ -345,6 +355,62 @@ test("a text-only cat sticker request drafts designs, prepares the chosen one an
     f.close();
   }
 });
+
+for (const provider of ["openai", "nano-banana"] as const)
+  test(`${provider} picture drafts are their own previews and reach the sticker printer as a photo design`, async () => {
+    const asked: ImageDraftInput[] = [];
+    const pictures = [1, 2, 3].map((n) => gradientPng(40 + n, 40));
+    const f = fixture({
+      design: provider,
+      imageDraft: async (input) => {
+        asked.push(input);
+        return pictures.slice(0, input.count).map((bytes, i) => ({
+          title: `cat · look ${i + 1}`,
+          image: { bytes, mediaType: "image/png" as const },
+        }));
+      },
+    });
+    try {
+      await f.ready(["phomemo_01", "instax_01", "bambu_01"]);
+      const { order } = await f.orchestrator.createOrder(
+        requester,
+        { requestText: "I want a cat sticker" },
+        `create-key-${provider}`,
+      );
+      await f.orchestrator.settle(order.id);
+      let o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "awaiting_design_choice");
+      assert.equal(
+        asked[0].colour,
+        false,
+        "a sticker asks for black and white",
+      );
+      const chosen = o.candidates!.candidates[2];
+      assert.equal(chosen.provider, provider);
+      assert.equal(chosen.previewUrl, `/assets/${chosen.imageAssetId}`);
+      assert.equal(chosen.imageSha256, sha(pictures[2]));
+      assert.equal(chosen.svgAssetId, undefined);
+      assert.ok(
+        !f.producer.calls.some((c) => c.operation === "render_design_preview"),
+        "a picture needs no rendering",
+      );
+      o = await f.orchestrator.chooseDesign(requester, order.id, {
+        expectedRevision: 1,
+        candidateSetId: o.candidates!.id,
+        candidateId: chosen.id,
+      });
+      await f.orchestrator.settle(order.id);
+      o = await f.orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "proposed");
+      const prep = f.producer.calls.find((c) => c.operation === "prepare");
+      assert.equal(prep.process, "sticker_print");
+      assert.equal(prep.design.kind, "photos");
+      assert.equal(prep.design.photos[0].sha256, sha(pictures[2]));
+      assert.deepEqual(readFileSync(prep.design.photos[0].path), pictures[2]);
+    } finally {
+      f.close();
+    }
+  });
 
 test("one confirmation authorizes simulated work without payment and dispatches the exact prepared file", async () => {
   const f = fixture();
@@ -491,7 +557,7 @@ test("a failed bundle payment releases the reservations and dispatches nothing",
   }
 });
 
-test("a colour photo becomes a named black-and-white sticker only when no colour printer is free and colour was not asked for", async () => {
+test("with no colour printer free, a photo becomes a named black-and-white sticker, even when colour or a photo print was asked for", async () => {
   const f = fixture();
   try {
     await f.ready(["phomemo_01"]); // the photo printer is not ready
@@ -512,21 +578,53 @@ test("a colour photo becomes a named black-and-white sticker only when no colour
     assert.equal(item.name, "A black-and-white sticker of your photo");
     assert.match(item.why, /No colour printer is free/);
     assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
-    // Asking for colour or a photo print is never silently turned into a sticker.
-    for (const [text, key] of [
-      ["print this photo in full colour", "create-key-0005b"],
-      ["a photo print please", "create-key-0005c"],
-    ]) {
-      const kept = await order(text, key);
-      assert.equal(kept.draft.stage, "unavailable", text);
-      assert.match(kept.draft.reason!, /keep these colours|make/);
-      assert.equal(kept.plan, undefined);
-      assert.deepEqual(
-        kept.draft.photoAssetIds,
-        [photo],
-        "the photos are kept",
+    // The best available machine is offered even when another was asked for;
+    // the proposal says so, and a colour request is told its colours go.
+    for (const [text, key, colourNote] of [
+      ["print this photo in full colour", "create-key-0005b", true],
+      ["a photo print please", "create-key-0005c", false],
+    ] as const) {
+      const moved = await order(text, key);
+      assert.equal(moved.draft.stage, "proposed", text);
+      assert.equal(moved.plan!.items[0].process, "sticker_print");
+      assert.equal(
+        /colours become black and white/.test(moved.plan!.items[0].why),
+        colourNote,
+        text,
       );
+      assert.equal(moved.plan!.assignments[0].machineId, "phomemo_01");
     }
+  } finally {
+    f.close();
+  }
+});
+
+test("with no real sticker printer free, a sticker prints for real on the photo printer, named as a photo print", async () => {
+  const f = fixture({ allowed: ["hardware", "simulation"] });
+  try {
+    await f.ready(["phomemo_01"], "simulation"); // only a pretend sticker printer
+    await f.ready(["instax_01"], "hardware"); // a real photo printer
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "I want a cat sticker" },
+      "create-key-sticker-to-photo",
+    );
+    await f.orchestrator.settle(order.id);
+    let o = await f.orchestrator.view(requester, order.id);
+    o = await f.orchestrator.chooseDesign(requester, order.id, {
+      expectedRevision: 1,
+      candidateSetId: o.candidates!.id,
+      candidateId: o.candidates!.candidates[0].id,
+    });
+    await f.orchestrator.settle(order.id);
+    o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    const [item] = o.plan!.items;
+    assert.equal(item.process, "photo_print");
+    assert.equal(item.name, "A photo print of your design");
+    assert.match(item.why, /No sticker printer is free/);
+    assert.equal(o.plan!.assignments[0].machineId, "instax_01");
+    assert.equal(o.plan!.assignments[0].executionMode, "hardware");
   } finally {
     f.close();
   }
@@ -556,10 +654,11 @@ test("a colour photo prints for real as a black-and-white sticker rather than on
     );
     assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
     assert.equal(o.plan!.assignments[0].executionMode, "hardware");
-    // Asked for a photo print: kept, even though only a simulated one is free.
+    // Asked for a photo print: the real sticker printer still beats a pretend
+    // photo printer, and the proposal names the change.
     const asked = await order("a photo print please", "real-first-2");
-    assert.equal(asked.plan!.items[0].process, "photo_print");
-    assert.equal(asked.plan!.assignments[0].executionMode, "simulation");
+    assert.equal(asked.plan!.items[0].process, "sticker_print");
+    assert.equal(asked.plan!.assignments[0].executionMode, "hardware");
   } finally {
     f.close();
   }
@@ -609,6 +708,72 @@ test("an explicit sticker request keeps the thermal printer even when Claude cal
     } finally {
       f.close();
     }
+  }
+});
+
+test("a colourful drawing with no sticker named becomes a colour print, drafted in colour", async () => {
+  const asked: ImageDraftInput[] = [];
+  const f = fixture({
+    design: "openai",
+    // What Claude returned for "a beautiful colorful dragon": a sticker whose colour matters.
+    understand: async (i) => ({
+      provider: "claude",
+      model: "test-model",
+      outcome: "A colourful dragon.",
+      question: null,
+      reason: "Original artwork.",
+      items: [
+        {
+          process: "sticker_print",
+          name: "Colorful dragon sticker",
+          why: i.requestText,
+          quantity: 1,
+          creation: "generate",
+          photoAssetIds: [],
+          subject: "colorful dragon",
+          text: null,
+          colorImportant: true,
+          subjectBoxes: {},
+        },
+      ],
+    }),
+    imageDraft: async (input) => {
+      asked.push(input);
+      return [
+        {
+          title: "colorful dragon · Flat colour",
+          image: {
+            bytes: gradientPng(48, 48),
+            mediaType: "image/png" as const,
+          },
+        },
+      ];
+    },
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"]);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "a beautiful colorful dragon" },
+      "create-key-colour-dragon",
+    );
+    await f.orchestrator.settle(order.id);
+    let o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "awaiting_design_choice");
+    assert.equal(asked[0].colour, true, "the drafts are drawn in colour");
+    o = await f.orchestrator.chooseDesign(requester, order.id, {
+      expectedRevision: 1,
+      candidateSetId: o.candidates!.id,
+      candidateId: o.candidates!.candidates[0].id,
+    });
+    await f.orchestrator.settle(order.id);
+    o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed");
+    assert.equal(o.plan!.items[0].process, "photo_print");
+    assert.equal(o.plan!.items[0].name, "Colorful dragon print");
+    assert.equal(o.plan!.assignments[0].machineId, "instax_01");
+  } finally {
+    f.close();
   }
 });
 
@@ -1773,6 +1938,218 @@ test("testnet mode does not ask for a wallet or collect funds for simulated-only
     );
     assert.equal(result.makeIntent.payment.status, "not_required");
     assert.equal(payment.settlements(), 0);
+  } finally {
+    f.close();
+  }
+});
+
+test("printers on the hub are checked while drafts are drawn, and one that does not answer is not offered", async () => {
+  const checked: string[] = [];
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async (m) => {
+      checked.push(m.id);
+      return m.id === "instax_01"
+        ? { ok: false, detail: "INSTAX-71659090 not found" }
+        : { ok: true, detail: "answered" };
+    },
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"], "hardware");
+    await mutate(f.store, (s) => {
+      s.machines.phomemo_01.producerHub = {
+        machineId: "m_sticker_01",
+        since: now(),
+      };
+      s.machines.instax_01.producerHub = {
+        machineId: "m_photo_01",
+        since: now(),
+      };
+    });
+    // A words-only order: both printers are checked before any design is chosen.
+    const drawn = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "I want a cat sticker" },
+      "create-key-check-1",
+    );
+    await f.orchestrator.settle(drawn.order.id);
+    let o = await f.orchestrator.view(requester, drawn.order.id);
+    assert.equal(o.draft.stage, "awaiting_design_choice");
+    assert.deepEqual([...checked].sort(), ["instax_01", "phomemo_01"]);
+
+    // A photo meant for the Instax: the Instax is asleep, so the real sticker
+    // printer makes it, named as such.
+    const photo = await f.photo(requester.id);
+    const asleep = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "", photoAssetIds: [photo] },
+      "create-key-check-2",
+    );
+    await f.orchestrator.settle(asleep.order.id);
+    o = await f.orchestrator.view(requester, asleep.order.id);
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    assert.equal(o.plan!.items[0].process, "sticker_print");
+    assert.equal(o.plan!.assignments[0].machineId, "phomemo_01");
+  } finally {
+    f.close();
+  }
+});
+
+test("when no printer answers its check, the order says which one to turn on", async () => {
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async () => ({ ok: false, detail: "not found" }),
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"], "hardware");
+    await mutate(f.store, (s) => {
+      s.machines.phomemo_01.producerHub = {
+        machineId: "m_sticker_01",
+        since: now(),
+      };
+      s.machines.instax_01.producerHub = {
+        machineId: "m_photo_01",
+        since: now(),
+      };
+    });
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "", photoAssetIds: [photo] },
+      "create-key-check-3",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "unavailable");
+    assert.match(
+      o.draft.reason!,
+      /did not answer: they may be off.*Turn them on, close their phone apps/,
+    );
+    assert.deepEqual(o.draft.photoAssetIds, [photo], "the photo is kept");
+  } finally {
+    f.close();
+  }
+});
+
+test("a printer paused only because it could not be reached comes back on its own once a check reaches it", async () => {
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async () => ({ ok: true, detail: "answered" }),
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"], "hardware");
+    await mutate(f.store, (s) => {
+      s.machines.phomemo_01.producerHub = {
+        machineId: "m_sticker_01",
+        since: now(),
+      };
+      Object.assign(s.machines.instax_01, {
+        producerHub: { machineId: "m_photo_01", since: now() },
+        paused: true,
+        ready: false,
+        reason:
+          "The producer side reported a failure: INSTAX-71659090 not found; is it on and not connected to the phone app?.",
+      });
+    });
+    // The next photo order checks it, finds it answering, and uses it again.
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { requestText: "", photoAssetIds: [photo] },
+      "create-key-recover-1",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+    assert.equal(o.plan!.items[0].process, "photo_print");
+    assert.equal(o.plan!.assignments[0].machineId, "instax_01");
+    const m = (await f.service.read()).machines.instax_01;
+    assert.equal(m.paused, false);
+    assert.match(m.reason!, /answered a check after being unreachable/);
+  } finally {
+    f.close();
+  }
+});
+
+test("without any order, a paused unreachable printer is checked again and returns; other pauses wait for the owner", async () => {
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async () => ({ ok: true, detail: "answered" }),
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"], "hardware");
+    await mutate(f.store, (s) => {
+      Object.assign(s.machines.instax_01, {
+        producerHub: { machineId: "m_photo_01", since: now() },
+        paused: true,
+        ready: false,
+        reason: "m_photo_01 is not connected to the producer side's hub.",
+      });
+      Object.assign(s.machines.phomemo_01, {
+        producerHub: { machineId: "m_sticker_01", since: now() },
+        paused: true,
+        ready: false,
+        reason:
+          "The producer side reported a failure: out_of_media: no labels left.",
+      });
+    });
+    await f.orchestrator.tick();
+    for (let i = 0; i < 50; i++) {
+      if (!(await f.service.read()).machines.instax_01.paused) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const s = await f.service.read();
+    assert.equal(s.machines.instax_01.paused, false, "back on its own");
+    assert.equal(
+      s.machines.phomemo_01.paused,
+      true,
+      "out of labels waits for the owner",
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("the printer indicator shows which real printers answered their latest check", async () => {
+  const f = fixture({
+    allowed: ["hardware"],
+    checkPrinter: async (m) =>
+      m.id === "instax_01"
+        ? { ok: true, detail: "answered" }
+        : { ok: false, detail: "Its printer program is not running." },
+  });
+  try {
+    await f.ready(["phomemo_01", "instax_01"], "hardware");
+    await mutate(f.store, (s) => {
+      s.machines.phomemo_01.producerHub = {
+        machineId: "m_sticker_01",
+        since: now(),
+      };
+      s.machines.instax_01.producerHub = {
+        machineId: "m_photo_01",
+        since: now(),
+      };
+    });
+    // Before any check: both are being checked.
+    assert.deepEqual(
+      (await f.orchestrator.printerStatus()).map((p) => p.status),
+      ["checking", "checking"],
+    );
+    await f.orchestrator.tick(); // the once-a-minute check
+    let printers = await f.orchestrator.printerStatus();
+    for (
+      let i = 0;
+      i < 50 && printers.some((p) => p.status === "checking");
+      i++
+    ) {
+      await new Promise((r) => setTimeout(r, 10));
+      printers = await f.orchestrator.printerStatus();
+    }
+    const by = Object.fromEntries(printers.map((p) => [p.id, p]));
+    assert.equal(by.instax_01.status, "connected");
+    assert.equal(by.instax_01.makes, "Photo prints");
+    assert.equal(by.phomemo_01.status, "not_answering");
+    assert.match(by.phomemo_01.detail, /not running/);
   } finally {
     f.close();
   }

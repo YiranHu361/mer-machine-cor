@@ -26,6 +26,7 @@ import {
 } from "./owner-drafts";
 import { api, ApiError } from "./api";
 import { MakeApp } from "./MakeApp";
+import { PrinterStatus } from "./PrinterStatus";
 import { ReliefApp } from "./ReliefApp";
 import { LivePage, liveEnabled } from "./live";
 import { prepareLabelPhoto } from "./label-photo";
@@ -169,6 +170,7 @@ type Job = {
   creationRequestId?: string;
   checkoutKey?: string;
   machineId?: string;
+  /** The order's own mode; older orders follow the workshop's mode. */
   specVersion: number;
   spec: Spec;
   artifact?: Asset;
@@ -728,6 +730,7 @@ function App() {
           Connection lost · retrying
         </p>
       )}
+      {session && !isLive && !isRelief && <PrinterStatus />}
       <main id="main" tabIndex={-1}>
         {(storage.local === "unavailable" ||
           storage.session === "unavailable") && (
@@ -7129,8 +7132,7 @@ function OwnerJob({
                     ? "Awaiting pickup"
                     : requesterStatus(j)}
           </Badge>
-          {(health?.mode === "simulation" ||
-            j.executionMode === "simulation") && (
+          {(j.executionMode ?? health?.mode) === "simulation" && (
             <span className="sim-label">Simulation</span>
           )}
         </div>
