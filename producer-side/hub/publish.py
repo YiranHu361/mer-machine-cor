@@ -28,7 +28,7 @@ log = logging.getLogger("publish")
 # Only what the read model shows. asset_url and preview_url are signed file
 # links, so they never leave the hub.
 MACHINE_KEYS = ("machine_id", "process", "display_name", "simulated", "status", "media_loaded", "location", "reason")
-JOB_KEYS = ("job_id", "machine_id", "state", "progress", "eta_s", "reason", "error", "verification")
+JOB_KEYS = ("job_id", "machine_id", "state", "progress", "eta_s", "reason", "error")
 
 
 def convex_url(env: dict[str, str] = os.environ) -> str | None:  # type: ignore[assignment]

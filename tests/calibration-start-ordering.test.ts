@@ -57,8 +57,6 @@ async function fixture(held = false) {
             calibrated: false,
             execution_status: "failed",
           };
-        if (tool === "camera_snapshot")
-          throw Error("No camera in isolated preparation fixture");
         throw Error("Unconfigured fake node method");
       },
     },

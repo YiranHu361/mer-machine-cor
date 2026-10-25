@@ -47,13 +47,13 @@ Each computer keeps its own `.env` (never committed). For the MVP it needs:
 | --- | --- | --- |
 | `FABRARY_ALLOWED_MODES` | `hardware` | Orders go to real machines only (`npm run mvp` uses this when unset) |
 | `FABRARY_PRODUCER_HUB_URL` | `http://127.0.0.1:8000` | The producer side's hub (the default) |
-| `FABRARY_AUTO_ACCEPT_PRINTS` | `1` | A finished hub print completes the order and frees the printer (`npm run mvp` sets it); `0` keeps the owner's check |
+| `FABRARY_AUTO_PREPARE_PRINTS` | `1` | A finished hub print completes the order and frees the printer (`npm run mvp` sets it); `0` requires separate output handling |
 | `ANTHROPIC_API_KEY` | optional | Reads requests and draws designs; without it, photos still work by local rules and words-only requests cannot be drawn |
 | `CONVEX_URL`, `FABRARY_PUBLISH_SECRET` | optional | The live view (below); any long random secret |
 
 **Convex on your own computer, no account:** run `npm run convex:local` in its own terminal and keep it running (the first run downloads Convex's local backend). Once, store the same secret there with `npx convex env set FABRARY_PUBLISH_SECRET <the value from .env>`, and set `CONVEX_URL=http://127.0.0.1:3210` in `.env`. Its data stays in the ignored `.convex/` folder.
 
-Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. There is no camera check yet, so `npm run mvp` sets `FABRARY_AUTO_ACCEPT_PRINTS=1`: as soon as the printer reports a print finished, the order gets its pickup code and the printer takes the next order. The print is recorded as accepted without inspection, never as a camera pass; a failed or declined print still pauses the printer for the owner. Set `FABRARY_AUTO_ACCEPT_PRINTS=0` to check each print yourself in **Owner workshop** ("Printed fine · approve and free the printer").
+Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. Jobs complete as soon as the machine reports success. `npm run mvp` sets `FABRARY_AUTO_PREPARE_PRINTS=1` so finished stickers get a pickup code and the printer takes the next order. A failed or uncertain machine result still pauses for recovery. Set `FABRARY_AUTO_PREPARE_PRINTS=0` to record output handling yourself in **Owner workshop**.
 
 ### Name tags on the Bambu Lab A1 mini
 
@@ -61,7 +61,7 @@ Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press
 
 - Once: `brew install --cask openscad@snapshot`; Bambu Studio in `/Applications`; the printer set up as in [the adapter README](producer-side/node/adapters/bambu/README.md) (LAN Only and Developer Mode, `BAMBU_ACCESS_CODE` in `producer-side/.env`, PLA on the external spool, microSD card). On the printer's iPhone hotspot, switch the Mac's network Location first ([MAC_NETWORK_SETUP.md](producer-side/MAC_NETWORK_SETUP.md)).
 - The node checks the printer at start; with the plate empty but the printer still showing its last print as finished, start with `npm run mvp -- --plate-cleared`.
-- A 3D print stays on the plate, so it never completes by itself: take it off, then press **Printed fine · approve and free the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
+- A 3D job completes when the machine reports success. Before the next print, take the item off the plate and press **Item removed · clear the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
 
 ## Convex live state
 
@@ -71,7 +71,7 @@ Convex is the live read model every screen watches ([design doc](https://claude.
 | --- | --- | --- |
 | `machines` | both hubs | §2 manifest with live status; registry machines link to the node that prints them |
 | `plans` | this app | §3 plan per order: stage, status, items, assignments, payment status |
-| `jobs` | both hubs, separate fields | §4 job: order-side states from this app; hub job id, progress and verification from the gateway |
+| `jobs` | both hubs, separate fields | §4 job: order-side states from this app; hub job id, progress and machine completion from the gateway |
 | `events` | both hubs | Append-only feed of state changes |
 
 No requester ids, pickup codes, signed file links or device settings are published. Schema and functions are in [convex/](convex/).

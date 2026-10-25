@@ -2709,9 +2709,6 @@ function orderView(o: Order, s: State, actor: Actor) {
             paymentState: j.paymentState,
             fulfillmentState: j.fulfillmentState,
             pickupCode: actor.id === o.requesterId ? j.pickup?.code : undefined,
-            evidence: j.evidence
-              ? { result: j.evidence.result, source: j.evidence.source }
-              : undefined,
           }
         : undefined,
       sim: sim ? { status: sim.status, progress: sim.progress } : undefined,

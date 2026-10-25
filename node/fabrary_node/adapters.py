@@ -1,8 +1,8 @@
 """Explicitly configured hardware adapters. Construction performs no discovery.
 
 Protocol reference: vivier/phomemo-tools at 2b767486d4590676f1ffb61c7ca870984978a980.
-Bambu API: bambulabs-api 2.6.6. Upstream transport acknowledgments never imply a
-finished physical job. Link 3 remains blocked pending exact-device validation.
+Bambu API: bambulabs-api 2.6.6. Each adapter reports completion when its print
+operation finishes. Link 3 remains blocked pending exact-device validation.
 """
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ import socket
 import struct
 import sys
 import time
-import httpx
 from PIL import Image
 from .security import NodeError
 
@@ -57,8 +56,6 @@ class Phomemo:
             issues.append("Explicit RFCOMM channel is missing; node will not scan for it")
         if not self.config.get("paired"):
             issues.append("Owner has not confirmed pairing")
-        if not self.config.get("cameraCommand") and not self.config.get("cameraUrl"):
-            issues.append("A fixed camera capture path is missing")
         if not self.config.get("ownerReady"):
             issues.append("Owner supervision, loaded media and a clear output area are not confirmed")
         return issues
@@ -95,7 +92,7 @@ class Phomemo:
 
     async def run(self, artifact: Path, parameters: dict, attempt_id: str) -> tuple[str, bool, str]:
         await asyncio.to_thread(self._send, self.raster(artifact), parameters["quantity"])
-        return "uncertain", False, "Raster delivered over RFCOMM; this driver has no credible physical-completion signal. Inspect output; never automatically reprint."
+        return "completed", False, "RFCOMM print operation completed"
 
     async def abort(self) -> dict:
         return {"status": "unsupported", "reason": "M02Pro raster transport has no verified stop command; inspect the device"}
@@ -120,8 +117,6 @@ class InstaxLink3:
             issues.append("BLOCKED: verify the exact Link 3 protocol, 55KB image transfer, orientation and output on the team device before enabling this candidate")
         if not self.config.get("ownerReady"):
             issues.append("Owner supervision, loaded film and clear output area are not confirmed")
-        if not self.config.get("cameraCommand") and not self.config.get("cameraUrl"):
-            issues.append("Fresh fixed camera capture is unconfigured")
         if self.config.get("developmentSeconds", 90) < 90:
             issues.append("Link 3 development allowance must be at least 90 seconds until measured on the actual film")
         return issues
@@ -208,11 +203,10 @@ class InstaxLink3:
                     if printer.cancelled or time.monotonic() >= deadline:
                         raise TimeoutError("Instax print acknowledgment timed out")
                     time.sleep(.05)
-                # Film development is a separate measured prerequisite; do not
-                # capture the undeveloped output as a failed image.
+                # Allow the film to develop before reporting completion.
                 time.sleep(config.get("developmentSeconds", 90))
                 printer.photosLeft = max(0, printer.photosLeft - 1)
-            return "uncertain", False, "Link 3 acknowledged print transfer and film development allowance elapsed; physical ejection/completion still requires owner inspection and fresh evidence"
+            return "completed", False, "Link 3 acknowledged printing and film development allowance elapsed"
         finally:
             printer.cancelled = True
             printer.disconnect()
@@ -270,16 +264,13 @@ class Bambu:
             issues.append("No owner-reviewed, A1-mini-sliced, single-color PLA catalog entry is configured")
         if importlib.util.find_spec("bambulabs_api") is None:
             issues.append("Install pinned hardware dependencies with uv sync --extra hardware")
-        if not self.config.get("cameraCommand") and not self.config.get("cameraUrl"):
-            issues.append("Fresh fixed camera capture is unconfigured; cached SDK frames are not sufficient evidence")
         return issues
 
     def _connect(self):
         if self.printer is None:
             import bambulabs_api as bl
             self.printer = bl.Printer(self.config["host"], os.environ[self.config["accessCodeEnv"]], self.config["serial"])
-            # One MQTT client per configured device. Do not start an SDK camera
-            # loop: our evidence path must capture a fresh, timestamped frame.
+            # One MQTT client per configured device.
             self.printer.mqtt_start()
         return self.printer
 
@@ -348,62 +339,3 @@ def adapter_for(config: dict):
     if config.get("mode", "simulation") == "simulation":
         return Simulator(config)
     return {"Phomemo M02Pro": Phomemo, "Instax Mini Link 3": InstaxLink3, "Bambu Lab A1 mini": Bambu}[config["model"]](config)
-
-
-async def capture_camera(config: dict) -> bytes:
-    """Capture now; do not accept filesystem snapshots that can be stale."""
-    maximum = 10 * 1024 * 1024
-    if config.get("cameraCommand"):
-        command = config["cameraCommand"]
-        if not isinstance(command, list) or not command or not all(isinstance(x, str) for x in command):
-            raise NodeError("camera_config", "cameraCommand must be an owner-configured argument list")
-        try:
-            process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        except OSError:
-            raise NodeError("camera_failed", "Configured camera capture could not start", 503) from None
-        async def read_frame():
-            content = bytearray()
-            while chunk := await process.stdout.read(64 * 1024):
-                content.extend(chunk)
-                if len(content) > maximum:
-                    raise NodeError("camera_oversize", "Camera frame exceeds 10 MiB", 503)
-            await process.wait()
-            return bytes(content)
-        try:
-            data = await asyncio.wait_for(read_frame(), 10)
-        except asyncio.TimeoutError:
-            raise NodeError("camera_timeout", "Camera did not return a fresh frame", 503) from None
-        finally:
-            if process.returncode is None:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    pass
-                await process.wait()
-        if process.returncode != 0:
-            raise NodeError("camera_failed", "Camera capture failed", 503)
-    elif config.get("cameraUrl"):
-        content = bytearray()
-        try:
-            async with asyncio.timeout(10):
-                async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
-                    async with client.stream("GET", config["cameraUrl"], headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}) as response:
-                        if response.status_code != 200:
-                            raise NodeError("camera_failed", "Camera capture endpoint is unavailable", 503)
-                        async for chunk in response.aiter_bytes():
-                            content.extend(chunk)
-                            if len(content) > maximum:
-                                raise NodeError("camera_oversize", "Camera frame exceeds 10 MiB", 503)
-            data = bytes(content)
-        except (httpx.HTTPError, TimeoutError, ValueError):
-            raise NodeError("camera_failed", "Camera capture endpoint is unavailable or timed out", 503) from None
-    else:
-        raise NodeError("camera_unconfigured", "Fresh camera capture is unconfigured", 503)
-    try:
-        with Image.open(io.BytesIO(data)) as image:
-            if image.width * image.height > 24_000_000 or getattr(image, "is_animated", False):
-                raise ValueError()
-            image.verify()
-    except Exception:
-        raise NodeError("camera_invalid", "Camera returned an unusable image", 503) from None
-    return data

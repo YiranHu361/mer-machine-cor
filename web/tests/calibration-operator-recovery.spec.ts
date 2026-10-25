@@ -612,7 +612,7 @@ test("failed confirmation recovers locally at320px with an unchecked fresh inspe
   await page.emulateMedia({ reducedMotion: "reduce" });
   const state = await fixture(page, { outcome: "produced", active: true });
   state.actionFailure =
-    "Calibration requires a fresh associated result camera frame";
+    "Calibration device configuration changed; refresh its saved status";
   await inspect(page);
   await page
     .getByRole("button", { name: "Confirm usable calibration", exact: true })

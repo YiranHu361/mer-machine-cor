@@ -189,7 +189,7 @@
   font-size: 14px;
   color: var(--muted);
 }
-.owner-job > :is(form, .owner-pickup, .owner-evidence, .payment-recovery),
+.owner-job > :is(form, .owner-pickup, .payment-recovery),
 .owner-job > .notice,
 .owner-machine > .notice {
   margin: 16px 0 0 72px;
@@ -244,26 +244,8 @@
 .redeem-form .button-row {
   margin-top: 12px;
 }
-.owner-evidence > summary,
 .payment-recovery > summary {
   font-size: 14px;
-}
-.evidence-review {
-  display: grid;
-  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
-  gap: 16px;
-  padding-bottom: 12px;
-}
-.evidence-review .result-image {
-  margin: 0;
-}
-.evidence-review p,
-.evidence-review small {
-  overflow-wrap: anywhere;
-}
-.evidence-review small {
-  display: block;
-  margin-bottom: 8px;
 }
 .payment-recovery > p {
   font-size: 14px;
@@ -685,16 +667,6 @@
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.calibration-evidence {
-  max-width: 420px;
-  margin: 16px 0;
-}
-.calibration-evidence figcaption {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
 .calibration-inspection {
   display: grid;
   gap: 10px;
@@ -760,7 +732,7 @@
     gap: 4px 12px;
   }
   .owner-next-step,
-  .owner-job > :is(form, .owner-pickup, .owner-evidence, .payment-recovery),
+  .owner-job > :is(form, .owner-pickup, .payment-recovery),
   .owner-job > .notice,
   .owner-machine > .notice,
   .owner-job-more,
@@ -768,9 +740,6 @@
   .provider-next-step,
   .owner-machine > details {
     margin-left: 0;
-  }
-  .evidence-review {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 400px) {

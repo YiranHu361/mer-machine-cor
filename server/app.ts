@@ -57,12 +57,7 @@ import {
   findCreatedJob,
   jobCreationQueue,
 } from "./job-creation.ts";
-import {
-  evidenceUrl,
-  expectedEvidenceFrame,
-  latestCalibration,
-  requireEvidenceFrame,
-} from "./evidence.ts";
+import { latestCalibration } from "./calibration-state.ts";
 import {
   machineSettingsFingerprint,
   machineInspectionFingerprint,
@@ -230,7 +225,7 @@ export function createApp(
     next();
   });
   const parseJson = express.json({ limit: "100kb" });
-  // Connector replies can carry one camera frame; every other request stays small.
+  // Connector replies may contain larger device manifests.
   const parseRelayJson = express.json({ limit: "12mb" });
   app.use((req, res, next) => {
     const parse =
@@ -305,16 +300,9 @@ export function createApp(
   };
   const view = (j: Job) => {
     const { creationSpecHash, ...visible } = j;
-    return {
-      ...visible,
-      evidence: j.evidence
-        ? {
-            ...j.evidence,
-            frame: undefined,
-            url: evidenceUrl(j),
-          }
-        : undefined,
-    };
+    delete (visible as any).evidence;
+    delete (visible as any).baseline;
+    return visible;
   };
   app.get("/api/health", async (req, res) => {
     try {
@@ -851,35 +839,6 @@ export function createApp(
       ),
     });
   });
-  app.get("/api/jobs/:id/evidence", async (req, res) => {
-    await owned(req);
-    const j = await service.job(String(req.params.id));
-    requireEvidenceFrame(j, expectedEvidenceFrame(req.query.frame));
-    const frameUrl = j.evidence?.url;
-    requireThat(
-      frameUrl,
-      "NO_EVIDENCE",
-      "No evidence image is available.",
-      404,
-    );
-    const m = (await service.read()).machines[j.machineId!];
-    requireThat(
-      service.node.fetchFrame,
-      "FRAME_UNAVAILABLE",
-      "The recorded frame cannot be loaded. Ask the owner to check the camera node.",
-      502,
-    );
-    try {
-      const bytes = await service.node.fetchFrame(frameUrl, m);
-      res.type("png").send(bytes);
-    } catch {
-      throw new Problem(
-        "FRAME_UNAVAILABLE",
-        "The recorded frame cannot be loaded. Ask the owner to check the camera node.",
-        502,
-      );
-    }
-  });
   app.get("/assets/:id", async (req, res) => {
     const assetId = String(req.params.id),
       s = await service.read(),
@@ -1294,18 +1253,7 @@ export function createApp(
     });
   });
   const calibrationView = (calibration: Job | null | undefined) =>
-    calibration
-      ? {
-          ...calibration,
-          evidence: calibration.evidence
-            ? {
-                ...calibration.evidence,
-                frame: undefined,
-                url: evidenceUrl(calibration, true),
-              }
-            : undefined,
-        }
-      : null;
+    calibration ? view(calibration) : null;
   const calibrationResponse = (result: any) => ({
     ...result,
     calibration: calibrationView(result.calibration),
@@ -1320,51 +1268,6 @@ export function createApp(
       req.query.requestKey,
     );
     res.json(calibrationResponse(result));
-  });
-  app.get("/api/owner/machines/:id/calibration/evidence", async (req, res) => {
-    await owner(req);
-    const state = await service.read(),
-      m = ownValue(state.machines, String(req.params.id));
-    requireThat(m, "NOT_FOUND", "Machine not found.", 404);
-    const expected = expectedEvidenceFrame(req.query.frame);
-    const calibrationId = req.query.calibration;
-    requireThat(
-      calibrationId === undefined ||
-        (typeof calibrationId === "string" &&
-          calibrationId.length > 0 &&
-          calibrationId.length <= 200 &&
-          expected !== undefined),
-      "INVALID_EVIDENCE_BINDING",
-      "Refresh the saved calibration before loading its image.",
-      400,
-    );
-    requireThat(
-      expected === undefined || calibrationId !== undefined,
-      "INVALID_EVIDENCE_BINDING",
-      "Refresh the saved calibration before loading its image.",
-      400,
-    );
-    // Legacy no-query reads retain latest-attempt behavior. Bound metadata
-    // explicitly identifies its calibration and never substitutes another one.
-    const c =
-      calibrationId === undefined
-        ? latestCalibration(state, m.id)
-        : ownValue(state.calibrations ?? {}, calibrationId);
-    requireThat(
-      c && c.machineId === m.id,
-      "EVIDENCE_UNAVAILABLE",
-      "The saved calibration frame is unavailable. Refresh the saved calibration.",
-      404,
-    );
-    requireEvidenceFrame(c, expected);
-    requireThat(
-      c.evidence?.url && service.node.fetchFrame,
-      "EVIDENCE_UNAVAILABLE",
-      "Capture a calibration result frame first.",
-      404,
-    );
-    const bytes = await service.node.fetchFrame(c.evidence.url, m);
-    res.type("png").send(bytes);
   });
   app.post("/api/owner/machines/:id/calibration/reject", async (req, res) => {
     await owner(req);
@@ -1567,7 +1470,6 @@ export function createApp(
     review: (jobId: string, b: any) =>
       service.operatorReview(jobId, b.result, b.reason),
     reconcile: (jobId: string) => service.reconcile(jobId),
-    verify: (jobId: string) => service.verify(jobId),
     abort: async (jobId: string) => (await service.abort(jobId)).job,
   }))
     app.post(`/api/owner/jobs/:id/${route}`, async (req, res) => {

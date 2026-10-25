@@ -230,7 +230,7 @@ test("restart retries a provably unsubmitted release with the same allocation; s
     const opId = "release:" + f.j.id;
     await mutate(f.store, (s) => {
       const j = s.jobs[f.j.id];
-      j.evidence = { result: "pass" };
+      j.productionState = "produced";
       j.paymentState = "release_pending";
       s.operations[opId] = {
         id: opId,

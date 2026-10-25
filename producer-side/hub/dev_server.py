@@ -7,8 +7,6 @@ Serves the real gateway plus just enough to push jobs by hand:
          -d '{"machine_id": "m_sticker_01"}'     # prints hub/dev_assets/test_sticker.png
     curl localhost:8000/machines
     curl localhost:8000/dev/events
-    curl -X POST localhost:8000/dev/approve -d '{"machine_id":"m_sticker_01","job_id":"job_dev_0001"}' \
-         -H 'content-type: application/json'
     curl -X POST localhost:8000/dev/plate-cleared -d '{"machine_id":"m_fdm_01"}' -H 'content-type: application/json'
 """
 from __future__ import annotations
@@ -62,16 +60,12 @@ class JobRef(BaseModel):
     job_id: str
 
 
-class ApproveIn(JobRef):
-    reason: str | None = None
-
-
 class MachineRef(BaseModel):
     machine_id: str
 
 
-def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
-    gw = Gateway(frames_dir=frames_dir)
+def create_app() -> FastAPI:
+    gw = Gateway()
     events: deque[dict[str, Any]] = deque(maxlen=500)
     ids = itertools.count(1)
 
@@ -102,9 +96,7 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
     app.state.gateway = gw
     app.include_router(gw.router)
     ASSETS.mkdir(parents=True, exist_ok=True)
-    frames_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
-    app.mount("/frames", StaticFiles(directory=frames_dir), name="frames")
 
     @app.get("/machines")
     def machines() -> list[dict[str, Any]]:
@@ -130,7 +122,6 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
             "progress": 0.0,
             "eta_s": None,
             "escrow": "held",
-            "verification": None,
         }
         try:
             await gw.offer_job(job)
@@ -142,13 +133,6 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
     async def cancel(body: JobRef) -> dict[str, str]:
         await gw.cancel_job(body.machine_id, body.job_id)
         return {"ok": "sent"}
-
-    @app.post("/dev/approve")
-    async def approve(body: ApproveIn) -> dict[str, Any]:
-        try:
-            return await gw.approve_manually(body.machine_id, body.job_id, body.reason)
-        except LookupError:
-            raise HTTPException(404, "unknown job")
 
     @app.post("/dev/plate-cleared")
     async def plate_cleared(body: MachineRef) -> dict[str, str]:

@@ -81,11 +81,6 @@ for (let i = 0; i < 50; i++) {
   await new Promise((r) => setTimeout(r, 100));
 }
 assert.equal(result.status.execution_status, "completed");
-assert.equal(result.calibration.evidence.frame, undefined);
-const frame = await fetch(origin + result.calibration.evidence.url, {
-  headers: { Cookie: cookie },
-});
-assert(frame.ok);
 const confirmed = await api(path + "/calibrate", {
   inspected: true,
   attemptId: started.attemptId,
@@ -104,7 +99,7 @@ const evidence = {
   calibrationId: started.id,
   attemptId: started.attemptId,
   scope:
-    "Actual owner upload, prepare, signed calibration attempt, durable duplicate, status/evidence, inspection and explicit resume",
+    "Actual owner upload, prepare, signed calibration attempt, durable duplicate, machine status, inspection and explicit resume",
   physicalCalibration: "NOT_RUN",
 };
 await writeFile(

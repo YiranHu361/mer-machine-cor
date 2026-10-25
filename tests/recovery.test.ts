@@ -45,7 +45,7 @@ test(
       // dotenv keeps values that are already set, even empty ones.
       FABRARY_ALLOWED_MODES: "simulation",
       FABRARY_PRODUCER_HUB_URL: "",
-      FABRARY_AUTO_ACCEPT_PRINTS: "",
+      FABRARY_AUTO_PREPARE_PRINTS: "",
       CONVEX_URL: "",
       CONVEX_DEPLOY_KEY: "",
       FABRARY_PUBLISH_SECRET: "",

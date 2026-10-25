@@ -179,10 +179,7 @@ test("requester and owner complete an honest simulated order, independent handli
     }),
   ).toBeVisible({ timeout: 45000 });
   await expect(
-    requestPage.getByText("Simulated evidence", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    requestPage.getByText("Your item passed the output check.", {
+    requestPage.getByText("The machine finished your item.", {
       exact: false,
     }),
   ).toBeVisible();

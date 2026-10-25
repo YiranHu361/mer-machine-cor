@@ -99,7 +99,7 @@ async def test_actual_bambu_sdk_failures_leave_node_uncertain_without_consumptio
     config = {"id": "bambu_01", "model": "Bambu Lab A1 mini", "mode": "hardware", "host": "isolated.invalid",
               "serial": "fixture", "accessCodeEnv": "FABRARY_ISOLATED_SDK_TEST", "lanOnly": True,
               "developerMode": True, "ownerReady": True, "paired": True, "catalog": [entry],
-              "maxJobSeconds": 60, "cameraCommand": ["never-invoked"]}
+              "maxJobSeconds": 60}
     monkeypatch.setenv("FABRARY_ISOLATED_SDK_TEST", "fake-test-value")
     service = NodeService(key=KEY, data_dir=tmp_path, machines=[config],
                           artifact_transport=httpx.MockTransport(lambda _: httpx.Response(200, content=data)))
@@ -171,7 +171,7 @@ async def test_absent_bluetooth_uses_actual_instax_init_without_exiting_node_or_
     config = {"id": "instax_01", "model": "Instax Mini Link 3", "mode": "hardware", "paired": True,
               "ownerReady": True, "bluetoothAddress": "fake-owner-instax", "serviceUUID": "fixture-service",
               "writeCharUUID": "fixture-write", "notifyCharUUID": "fixture-notify", "compatibilityValidated": True,
-              "cameraCommand": ["never-invoked"], "developmentSeconds": 90, "maxJobSeconds": 240}
+              "developmentSeconds": 90, "maxJobSeconds": 240}
     # Directly exercise the same vendored constructor's ordinary disconnected
     # path before proving that a journaled job can survive it in this process.
     with pytest.raises(NodeError) as unavailable:

@@ -56,9 +56,9 @@ const env = {
   // Real machines only: an order never lands on a simulated machine.
   FABRARY_ALLOWED_MODES: process.env.FABRARY_ALLOWED_MODES ?? "hardware",
   FABRARY_PRODUCER_HUB_URL: hub,
-  // No camera check yet: a finished sticker completes the order and frees the
+  // A finished sticker is self-ejected; automatically handle it and free the
   // printer. A 3D print always waits for the owner to take it off the plate.
-  FABRARY_AUTO_ACCEPT_PRINTS: process.env.FABRARY_AUTO_ACCEPT_PRINTS ?? "1",
+  FABRARY_AUTO_PREPARE_PRINTS: process.env.FABRARY_AUTO_PREPARE_PRINTS ?? "1",
   ...(convexUrl ? { CONVEX_URL: convexUrl } : {}),
 };
 const python = "producer-side/.venv/bin/python";
@@ -80,7 +80,12 @@ const start = (name, command, argv, options = {}, hint = "") => {
   children.push(child);
 };
 const hubPort = new URL(hub).port || "8000";
-start("The producer side's hub", "../" + python, ["-m", "hub.dev_server", "--host", "127.0.0.1", "--port", hubPort], { cwd: "producer-side" });
+start(
+  "The producer side's hub",
+  "../" + python,
+  ["-m", "hub.dev_server", "--host", "127.0.0.1", "--port", hubPort],
+  { cwd: "producer-side" },
+);
 for (const [, producerMachine, makes] of counters) {
   const printer = makes === "name tags";
   start(
@@ -96,7 +101,9 @@ for (const [, producerMachine, makes] of counters) {
       ...(dryRun ? ["--transport", "file"] : []),
       // The A1 mini is checked once at start: reachable, and its plate empty.
       ...(printer ? ["--probe"] : []),
-      ...(printer && args.includes("--plate-cleared") ? ["--plate-cleared"] : []),
+      ...(printer && args.includes("--plate-cleared")
+        ? ["--plate-cleared"]
+        : []),
     ],
     { cwd: "producer-side" },
     printer
@@ -186,7 +193,7 @@ for (const [ourMachine, producerMachine, makes] of counters) {
     console.log(
       `• ${waiting.length} ${makes} print${waiting.length > 1 ? "s are" : " is"} waiting for your check, so ${ourMachine} takes no new order yet.\n` +
         `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
-        `  and press "Printed fine · approve and free the printer".`,
+        `  and press "Item removed · clear the printer".`,
     );
 }
 const plate = with3d
@@ -204,12 +211,12 @@ console.log(
       ? `  Name tag: type a name under "Or make a name tag" and press "Make a name tag".\n`
       : "") +
     `Tick the permission box, then "Pay & make" (${env.FABRARY_PAYMENT_MODE === "testnet" ? "x402 · Base Sepolia test USDC" : "mock payment"}).\n` +
-    (env.FABRARY_AUTO_ACCEPT_PRINTS === "1"
-      ? `Camera check is off: a finished sticker completes the order and frees the printer.`
-      : `After each print, approve it in ${app}/owner so the printer takes the next order.`) +
+    (env.FABRARY_AUTO_PREPARE_PRINTS === "1"
+      ? `A finished sticker completes the order and frees the printer.`
+      : `After each print, record handling in ${app}/owner to free the printer.`) +
     (with3d
-      ? `\nA name tag waits on the plate: take it off, then press "Printed fine · approve and free the printer"\n` +
-        `in ${app}/owner. That completes the order and tells the A1 mini its plate is clear.`
+      ? `\nA name tag waits on the plate: take it off, then press "Item removed · clear the printer"\n` +
+        `in ${app}/owner. The job is already complete; this tells the A1 mini its plate is clear.`
       : "") +
     (convexUrl
       ? `\nLive view from Convex: ${app}/live`

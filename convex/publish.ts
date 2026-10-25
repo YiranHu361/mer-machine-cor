@@ -22,17 +22,26 @@ export const batch = mutation({
   args: {
     secret: v.string(),
     source: v.union(v.literal("consumer"), v.literal("producer")),
-    events: v.array(v.object({ type: v.string(), ts: v.string(), data: v.any() })),
+    events: v.array(
+      v.object({ type: v.string(), ts: v.string(), data: v.any() }),
+    ),
   },
   returns: v.number(),
   handler: async (ctx, { secret, source, events }) => {
     checkSecret(secret);
-    for (const e of events) await apply(ctx, source, e.type, e.ts, e.data ?? {});
+    for (const e of events)
+      await apply(ctx, source, e.type, e.ts, e.data ?? {});
     return events.length;
   },
 });
 
-async function apply(ctx: MutationCtx, source: Source, type: string, ts: string, d: Data) {
+async function apply(
+  ctx: MutationCtx,
+  source: Source,
+  type: string,
+  ts: string,
+  d: Data,
+) {
   if (type.startsWith("machine.")) return machine(ctx, source, type, ts, d);
   if (type.startsWith("plan.")) return plan(ctx, type, ts, d);
   if (type.startsWith("job.")) return job(ctx, source, type, ts, d);
@@ -54,14 +63,23 @@ async function log(
   await ctx.db.insert("events", e);
 }
 
-async function machine(ctx: MutationCtx, source: Source, type: string, ts: string, d: Data) {
+async function machine(
+  ctx: MutationCtx,
+  source: Source,
+  type: string,
+  ts: string,
+  d: Data,
+) {
   const machineId = str(d.machine_id);
   if (!machineId) return;
   const existing = await ctx.db
     .query("machines")
     .withIndex("by_machineId", (q) => q.eq("machineId", machineId))
     .unique();
-  const status = type === "machine.offline" ? "offline" : (str(d.status) ?? existing?.status ?? "idle");
+  const status =
+    type === "machine.offline"
+      ? "offline"
+      : (str(d.status) ?? existing?.status ?? "idle");
   const location = d.location;
   const row = {
     machineId,
@@ -69,13 +87,25 @@ async function machine(ctx: MutationCtx, source: Source, type: string, ts: strin
     process: str(d.process) ?? existing?.process ?? "unknown",
     displayName: str(d.display_name) ?? existing?.displayName ?? machineId,
     model: str(d.model) ?? existing?.model,
-    simulated: typeof d.simulated === "boolean" ? d.simulated : (existing?.simulated ?? false),
+    simulated:
+      typeof d.simulated === "boolean"
+        ? d.simulated
+        : (existing?.simulated ?? false),
     status,
-    reason: str(d.reason) ?? (type === "machine.offline" ? undefined : existing?.reason),
-    mediaRemaining: num(d.media_loaded?.remaining_est) ?? existing?.mediaRemaining,
+    reason:
+      str(d.reason) ??
+      (type === "machine.offline" ? undefined : existing?.reason),
+    mediaRemaining:
+      num(d.media_loaded?.remaining_est) ?? existing?.mediaRemaining,
     location:
-      location && num(location.lat) !== undefined && num(location.lng) !== undefined
-        ? { lat: location.lat, lng: location.lng, label: str(location.label) ?? "" }
+      location &&
+      num(location.lat) !== undefined &&
+      num(location.lng) !== undefined
+        ? {
+            lat: location.lat,
+            lng: location.lng,
+            label: str(location.label) ?? "",
+          }
         : existing?.location,
     linkedMachineId: str(d.linked_machine_id) ?? existing?.linkedMachineId,
     updatedAt: ts,
@@ -118,20 +148,26 @@ async function plan(ctx: MutationCtx, type: string, ts: string, d: Data) {
       process: String(i.process),
       quantity: Number(i.quantity),
     })),
-    assignments: (Array.isArray(d.assignments) ? d.assignments : []).map((a: Data) => ({
-      itemId: String(a.item_id),
-      machineId: String(a.machine_id),
-      machineName: String(a.machine_name),
-      simulated: !!a.simulated,
-      quantity: Number(a.quantity),
-      jobId: str(a.job_id),
-      totalCents: Number(a.total_cents ?? 0),
-    })),
+    assignments: (Array.isArray(d.assignments) ? d.assignments : []).map(
+      (a: Data) => ({
+        itemId: String(a.item_id),
+        machineId: String(a.machine_id),
+        machineName: String(a.machine_name),
+        simulated: !!a.simulated,
+        quantity: Number(a.quantity),
+        jobId: str(a.job_id),
+        totalCents: Number(a.total_cents ?? 0),
+      }),
+    ),
     updatedAt: ts,
   };
   if (existing) await ctx.db.replace(existing._id, row);
   else await ctx.db.insert("plans", row);
-  if (!existing || existing.stage !== row.stage || existing.status !== row.status)
+  if (
+    !existing ||
+    existing.stage !== row.stage ||
+    existing.status !== row.status
+  )
     await log(ctx, {
       type,
       ts,
@@ -141,7 +177,13 @@ async function plan(ctx: MutationCtx, type: string, ts: string, d: Data) {
     });
 }
 
-async function job(ctx: MutationCtx, source: Source, type: string, ts: string, d: Data) {
+async function job(
+  ctx: MutationCtx,
+  source: Source,
+  type: string,
+  ts: string,
+  d: Data,
+) {
   // A producer report names our job in params.fabrary_job_id; its own job_id
   // is the hub's. Anything else is keyed by its own job_id.
   const ours = str(d.params?.fabrary_job_id);
@@ -160,13 +202,6 @@ async function job(ctx: MutationCtx, source: Source, type: string, ts: string, d
         progress: num(d.progress),
         etaS: num(d.eta_s),
         reason: str(d.error) ?? str(d.reason),
-        verification:
-          d.verification && typeof d.verification === "object"
-            ? {
-                pass: typeof d.verification.pass === "boolean" ? d.verification.pass : null,
-                reason: str(d.verification.reason),
-              }
-            : undefined,
       }
     : {
         orderId: str(d.order_id),
@@ -179,7 +214,8 @@ async function job(ctx: MutationCtx, source: Source, type: string, ts: string, d
         paymentState: str(d.payment_state),
         fulfillmentState: str(d.fulfillment_state),
       };
-  for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
+  for (const k of Object.keys(patch))
+    if (patch[k] === undefined) delete patch[k];
   if (existing) await ctx.db.patch(existing._id, { ...patch, updatedAt: ts });
   else await ctx.db.insert("jobs", { jobId, ...patch, updatedAt: ts });
   const before = fromHub ? existing?.hubState : existing?.state;
@@ -199,4 +235,5 @@ async function job(ctx: MutationCtx, source: Source, type: string, ts: string, d
 }
 
 const str = (x: unknown) => (typeof x === "string" && x ? x : undefined);
-const num = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : undefined);
+const num = (x: unknown) =>
+  typeof x === "number" && Number.isFinite(x) ? x : undefined;

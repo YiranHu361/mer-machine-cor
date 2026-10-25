@@ -5,7 +5,7 @@ import {
 } from "./media-estimate.ts";
 import { createHmac, randomBytes } from "node:crypto";
 import { mutate, type Store } from "./store.ts";
-import { latestCalibration } from "./evidence.ts";
+import { latestCalibration } from "./calibration-state.ts";
 import {
   id,
   hash,
@@ -26,8 +26,6 @@ import {
 } from "./model.ts";
 import type { NodeBoundary } from "./node-client.ts";
 import type { PaymentBoundary, PaymentResult } from "./payments.ts";
-import { readFile } from "node:fs/promises";
-import { createClaudeProvider } from "../integrations/src/claude.ts";
 import { machineSupportsSpec } from "./recommendations.ts";
 import { parseJobCreation, findCreatedJob } from "./job-creation.ts";
 import { machineInspectionFingerprint } from "./machine-settings.ts";
@@ -59,12 +57,8 @@ export interface Config {
   catalog?: any[];
   /** Execution modes this deployment may authorize; defaults to [mode]. */
   allowedModes?: ("simulation" | "hardware")[];
-  /**
-   * The producer side's hub has no camera check yet. When true, a print it
-   * reports finished is accepted without inspection (labeled as such) and the
-   * printer is freed for the next order. Failures still wait for the owner.
-   */
-  autoAcceptHubPrints?: boolean;
+  /** Automatically handle finished, self-ejecting hub prints. */
+  autoPrepareHubPrints?: boolean;
 }
 export class Service {
   private busy = new Set<string>();
@@ -236,7 +230,6 @@ export class Service {
           current.attemptId === c.attemptId &&
           current.version === c.version &&
           current.productionState === c.productionState &&
-          JSON.stringify(current.evidence) === JSON.stringify(c.evidence) &&
           machine.activeJobId === c.id &&
           deviceContext(machine) === observedContext
         );
@@ -352,16 +345,12 @@ export class Service {
     };
     const observedContext = context(s);
     const snapshot = (calibration: Job) =>
-      JSON.stringify([
-        calibration.version,
-        calibration.productionState,
-        calibration.evidence,
-      ]);
+      JSON.stringify([calibration.version, calibration.productionState]);
     let observedSnapshot = snapshot(c);
     let status: any;
     try {
       // The durable owner resolution is authoritative for this attempt. A later
-      // read may capture fresh evidence, but cannot undo the observed outcome.
+      // status read cannot undo the recorded outcome.
       status = c.history.some(
         (entry) => entry.event === "calibration_operator_resolution",
       )
@@ -395,44 +384,6 @@ export class Service {
         "INVALID_STATUS",
         "The node did not confirm this calibration status. The saved record is unchanged.",
       );
-      let evidence: Job["evidence"];
-      if (
-        ["completed", "failed", "uncertain"].includes(status.execution_status)
-      ) {
-        try {
-          const frame = await this.node.call(
-            "camera_snapshot",
-            {
-              token: this.node.token(c, s.machines[machineId], "camera").token,
-              machine_id: machineId,
-              job_id: c.id,
-              attempt_id: c.attemptId,
-              phase: "result",
-            },
-            s.machines[machineId],
-          );
-          requireThat(
-            frame.machine_id === machineId &&
-              frame.job_id === c.id &&
-              frame.attempt_id === c.attemptId &&
-              frame.source ===
-                (s.machines[machineId].mode === "simulation"
-                  ? "simulation"
-                  : "camera") &&
-              Date.parse(frame.captured_at) >= Date.parse(c.createdAt) &&
-              Math.abs(Date.now() - Date.parse(frame.captured_at)) < 60000,
-            "INVALID_FRAME",
-            "Calibration evidence does not match this attempt or capture time.",
-          );
-          evidence = {
-            url: frame.frame_url,
-            capturedAt: frame.captured_at,
-            machineId,
-            jobId: c.id,
-            frame,
-          };
-        } catch {}
-      }
       const applied = await mutate(this.store, (currentState) => {
         const current = currentState.calibrations?.[c.id];
         // Check inside every CAS retry: another status read, owner resolution,
@@ -442,8 +393,7 @@ export class Service {
           latest(currentState)?.id !== c.id ||
           context(currentState) !== observedContext ||
           current.version !== c.version ||
-          current.productionState !== c.productionState ||
-          JSON.stringify(current.evidence) !== JSON.stringify(c.evidence)
+          current.productionState !== c.productionState
         )
           return false;
         observeMediaEstimate(
@@ -452,13 +402,6 @@ export class Service {
           mediaEstimateSnapshot(s.machines[machineId]),
           status,
         );
-        const freshEvidence =
-          evidence &&
-          (!current.evidence ||
-            Date.parse(evidence.capturedAt) >=
-              Date.parse(current.evidence.capturedAt))
-            ? evidence
-            : undefined;
         if (
           current.productionState !== state ||
           !current.history.some((entry) =>
@@ -467,16 +410,13 @@ export class Service {
               "calibration_status",
               "calibration_operator_resolution",
             ].includes(entry.event),
-          ) ||
-          (freshEvidence &&
-            JSON.stringify(freshEvidence) !== JSON.stringify(current.evidence))
+          )
         ) {
           current.productionState = state;
-          if (freshEvidence) current.evidence = freshEvidence;
           record(
             current,
             "calibration_status",
-            "Saved the current node observation and matching result evidence.",
+            "Saved the current machine completion status.",
           );
         }
         return snapshot(current);
@@ -1443,9 +1383,9 @@ export class Service {
       );
       if (kind === "release")
         requireThat(
-          j.evidence?.result === "pass",
-          "VERIFICATION_REQUIRED",
-          "Only passing verified output can release funds.",
+          j.productionState === "produced",
+          "COMPLETION_REQUIRED",
+          "Only machine-confirmed completed output can release funds.",
         );
       const operation: Operation = {
         id: `${kind}:${j.id}`,
@@ -1657,26 +1597,6 @@ export class Service {
     const j = s.jobs[jobId],
       m = s.machines[j.machineId!];
     try {
-      const baseline = await this.node.call(
-        "camera_snapshot",
-        {
-          token: this.node.token(j, m, "camera").token,
-          machine_id: m.id,
-          job_id: j.id,
-          attempt_id: j.attemptId,
-          phase: "baseline",
-        },
-        m,
-      );
-      await mutate(this.store, (s) => {
-        s.jobs[jobId].baseline = baseline;
-      });
-    } catch (e) {
-      await mutate(this.store, (s) =>
-        record(s.jobs[jobId], "baseline_unavailable", (e as Error).message),
-      );
-    }
-    try {
       const response = await this.node.call(
         "run_job",
         {
@@ -1728,23 +1648,21 @@ export class Service {
       if (mediaSnapshot) observeMediaEstimate(s, j, mediaSnapshot, response);
       if (["produced", "failed"].includes(j.productionState)) return;
       if (execution === "completed") {
-        if (response.completion_credible !== true) {
-          j.productionState = "needs_review";
-          s.machines[j.machineId!].paused = true;
-          s.machines[j.machineId!].ready = false;
-          record(
-            j,
-            "completion_review",
-            "Device completion is not independently credible; owner review required.",
-          );
-          return;
-        }
         j.deviceCompletedAt = response.completed_at ?? now();
-        j.productionState = "verifying";
+        j.productionState = "produced";
+        j.fulfillmentState = "awaiting_owner";
+        const m = s.machines[j.machineId!];
+        m.ready = false;
+        m.paused = true;
+        m.reason =
+          "Job completed. Remove and store the output, clear the machine, then resume.";
         record(
           j,
-          "device_completed",
-          "Node reports credible completion; fresh evidence still required.",
+          response.operator_resolution
+            ? "operator_override"
+            : "device_completed",
+          response.reason ??
+            "Machine reports this execution attempt completed.",
         );
       } else if (["uncertain", "unknown"].includes(execution)) {
         j.productionState = "needs_review";
@@ -1760,11 +1678,12 @@ export class Service {
         m.ready = false;
         m.reason =
           response.reason ?? "Device failure; inspect before resuming.";
-        record(j, "device_failed", m.reason);
+        record(
+          j,
+          response.operator_resolution ? "operator_override" : "device_failed",
+          m.reason,
+        );
       } else if (["running", "started", "accepted"].includes(execution)) {
-        // Ignore an older progress response while a credible completion is
-        // already awaiting its result frame.
-        if (j.productionState === "verifying") return;
         const next = execution === "accepted" ? "dispatched" : "running";
         if (j.productionState !== next) {
           j.productionState = next;
@@ -1773,58 +1692,63 @@ export class Service {
       }
     });
     const j = await this.job(jobId);
-    if (j.productionState === "verifying") await this.verify(jobId);
+    if (j.productionState === "produced" && j.paymentState === "held")
+      await this.transfer(jobId, "release");
     if (j.productionState === "failed" && j.paymentState === "held")
       await this.transfer(jobId, "refund");
     // A 3D print stays on the build plate until someone takes it off, so the
-    // owner always finishes it ("Printed fine" also tells the printer the plate is clear).
+    // owner clears the plate separately before the next job.
     if (
       execution === "completed" &&
-      j.productionState === "needs_review" &&
-      this.config.autoAcceptHubPrints &&
+      j.productionState === "produced" &&
+      this.config.autoPrepareHubPrints &&
       j.spec.outputType !== "3d" &&
       (await this.read()).machines[j.machineId!]?.producerHub
     )
       try {
-        await this.approveHubPrint(
-          jobId,
-          "Printer reported the print finished; accepted without inspection because the camera check is off.",
-          "accepted_unchecked",
-        );
+        await this.clearHubPrint(jobId);
       } catch (error) {
-        // The print stays in owner review, where the owner can approve it.
+        // Completion stays recorded; handling can be retried independently.
         console.warn(
-          `Could not accept the finished print ${jobId} automatically: ${(error as Error).message}`,
+          `Could not handle the finished print ${jobId} automatically: ${(error as Error).message}`,
         );
       }
   }
-  /**
-   * Finishes a print from the producer side's hub that has no camera check:
-   * records the passing review, the handling and the resume in one step, so
-   * the printer takes the next order. Each step keeps its own checks.
-   */
-  async approveHubPrint(
-    jobId: string,
-    reason: string,
-    inspection: "owner_inspection" | "accepted_unchecked" = "owner_inspection",
-  ) {
+  /** Record handling and resume after a completed hub print. */
+  async clearHubPrint(jobId: string) {
     const job = await this.job(jobId);
     const machineId = job.machineId!;
     requireThat(
       (await this.read()).machines[machineId]?.producerHub,
       "NOT_ON_HUB",
-      "Only prints from the producer side's hub are approved this way.",
+      "Only prints from the producer side's hub are cleared this way.",
       409,
     );
-    if (job.productionState === "needs_review")
-      await this.operatorReview(jobId, "pass", reason, inspection);
-    if ((await this.job(jobId)).productionState === "produced")
-      await this.prepare(jobId, {
-        removed: true,
-        labeled: true,
-        stored: true,
-        cleared: true,
-      });
+    requireThat(
+      job.productionState === "produced",
+      "NOT_PRODUCED",
+      "Wait for the machine to report completion before clearing the output.",
+    );
+    const m = (await this.read()).machines[machineId];
+    // A replay for an already handled job must not touch a newer print or plate.
+    if (job.fulfillmentState !== "awaiting_owner") return m;
+    requireThat(
+      m.activeJobId === job.id,
+      "ORDER_NOT_CURRENT",
+      "This print is no longer the active machine job.",
+    );
+    if (job.spec.outputType === "3d")
+      await this.node.call(
+        `/machines/${machineId}/policy`,
+        { paused: false, cleared: true },
+        m,
+      );
+    await this.prepare(jobId, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
     return mutate(this.store, (s) => {
       const m = s.machines[machineId];
       requireThat(
@@ -1863,7 +1787,7 @@ export class Service {
     // transfer allocation. Recover that boundary from the recorded outcome,
     // while transfer() keeps release/refund allocation mutually exclusive.
     if (j.paymentState === "held") {
-      if (j.productionState === "produced" && j.evidence?.result === "pass")
+      if (j.productionState === "produced")
         await this.transfer(jobId, "release");
       else if (j.productionState === "failed")
         await this.transfer(jobId, "refund");
@@ -1897,177 +1821,7 @@ export class Service {
     }
     return this.job(jobId);
   }
-  async verify(jobId: string) {
-    const j = await this.job(jobId);
-    requireThat(
-      j.productionState === "verifying",
-      "COMPLETION_REQUIRED",
-      "Fresh verification requires a credible device completion.",
-    );
-    const s = await this.read(),
-      m = s.machines[j.machineId!];
-    let evidence: any;
-    try {
-      const frame = await this.node.call(
-        "camera_snapshot",
-        {
-          token: this.node.token(j, m, "camera").token,
-          machine_id: m.id,
-          job_id: j.id,
-          attempt_id: j.attemptId,
-          phase: "result",
-        },
-        m,
-      );
-      const captured = Date.parse(frame.captured_at);
-      const fresh =
-        Number.isFinite(captured) &&
-        captured >= Date.parse(j.deviceCompletedAt ?? j.createdAt) &&
-        Date.now() - captured < 60000 &&
-        captured <= Date.now() + 1000;
-      const associated =
-        frame.machine_id === m.id &&
-        frame.job_id === j.id &&
-        frame.attempt_id === j.attemptId;
-      const credible = frame.completion_credible === true && associated;
-      let result = "review",
-        reason = "Evidence needs operator review.";
-      if (!fresh || !credible)
-        reason = "Evidence is stale, missing, or completion is not credible.";
-      else if (
-        (frame.source === "simulation") !==
-        (this.jobMode(j) === "simulation")
-      )
-        reason =
-          "The evidence source does not match this job's execution mode; owner review required.";
-      else if (
-        frame.source === "simulation" &&
-        this.jobMode(j) === "simulation" &&
-        m.mode === "simulation"
-      ) {
-        result =
-          frame.observation === "visible"
-            ? "pass"
-            : frame.observation === "missing"
-              ? "fail"
-              : "review";
-        reason =
-          result === "pass"
-            ? "Simulated visible output after simulated completion."
-            : result === "fail"
-              ? "Simulated output is missing."
-              : "Simulated frame is ambiguous.";
-      } else {
-        reason =
-          "Camera frame captured. Claude verification is unavailable; owner review required.";
-        try {
-          requireThat(
-            this.node.fetchFrame,
-            "CAMERA_UNAVAILABLE",
-            "Camera fetch boundary unavailable.",
-          );
-          const state = await this.read();
-          const approved = await readFile(state.assets[j.artifact.id].path);
-          const bytes = await this.node.fetchFrame(frame.frame_url, m);
-          const baseline = j.baseline?.frame_url
-            ? await this.node
-                .fetchFrame(j.baseline.frame_url, m)
-                .catch(() => undefined)
-            : undefined;
-          const checked = await createClaudeProvider().verifyOutput({
-            approvedArtifact: { bytes: approved, mediaType: "image/png" },
-            resultFrame: { bytes, mediaType: "image/png" },
-            baselineFrame: baseline
-              ? { bytes: baseline, mediaType: "image/png" }
-              : undefined,
-            capturedAt: frame.captured_at,
-            completionCredible: credible,
-            jobId: j.id,
-            machineId: m.id,
-            expected: j.spec,
-          });
-          result = checked.result;
-          reason = checked.reason;
-        } catch (e) {
-          reason = (e as Error).message.includes("CLAUDE_BLOCKED")
-            ? "Claude verification is not configured; fresh camera evidence needs owner review."
-            : "Automated visual verification is unavailable; owner review required.";
-        }
-      }
-      evidence = {
-        url: frame.frame_url,
-        capturedAt: frame.captured_at,
-        machineId: m.id,
-        jobId: j.id,
-        attemptId: j.attemptId,
-        result,
-        reason,
-        source: frame.source,
-        completionCredible: credible,
-        frame,
-      };
-    } catch (e) {
-      evidence = {
-        capturedAt: now(),
-        machineId: m.id,
-        jobId: j.id,
-        result: "review",
-        reason: `Fresh evidence unavailable: ${(e as Error).message}`,
-        source: m.mode === "simulation" ? "simulation" : "camera",
-        completionCredible: false,
-      };
-    }
-    await this.resolveEvidence(jobId, evidence);
-    return this.job(jobId);
-  }
-  async resolveEvidence(
-    jobId: string,
-    evidence: any,
-    operatorReason?: string,
-    media?: { snapshot: ReturnType<typeof mediaEstimateSnapshot>; status: any },
-  ) {
-    const accepted = await mutate(this.store, (s) => {
-      const j = s.jobs[jobId],
-        m = s.machines[j.machineId!];
-      // Camera/model requests and owner reviews may overlap. Only the first
-      // resolution of the current state may change the outcome or allocate a
-      // transfer; a delayed result must never undo handling or pause a new job.
-      const expectedState = operatorReason ? "needs_review" : "verifying";
-      if (j.productionState !== expectedState) return false;
-      if (media) observeMediaEstimate(s, j, media.snapshot, media.status);
-      j.evidence = evidence;
-      j.productionState =
-        evidence.result === "pass"
-          ? "produced"
-          : evidence.result === "fail"
-            ? "failed"
-            : "needs_review";
-      j.fulfillmentState = "awaiting_owner";
-      m.ready = false;
-      m.paused = true;
-      m.reason =
-        evidence.result === "pass"
-          ? "Owner must remove, label and store the output, clear the machine, then resume."
-          : evidence.reason;
-      record(
-        j,
-        operatorReason
-          ? "operator_override"
-          : `verification_${evidence.result}`,
-        operatorReason ?? evidence.reason,
-      );
-      return true;
-    });
-    if (!accepted) return;
-    if (evidence.result === "pass") await this.transfer(jobId, "release");
-    if (evidence.result === "fail") await this.transfer(jobId, "refund");
-  }
-  async operatorReview(
-    jobId: string,
-    result: "pass" | "fail",
-    reason: string,
-    inspection: "owner_inspection" | "accepted_unchecked" = "owner_inspection",
-  ) {
+  async operatorReview(jobId: string, result: "pass" | "fail", reason: string) {
     requireThat(
       ["pass", "fail"].includes(result),
       "INVALID_REVIEW",
@@ -2112,7 +1866,7 @@ export class Service {
         return current;
       });
     }
-    if (!j.evidence) {
+    {
       const s = await this.read(),
         m = s.machines[j.machineId!];
       requireThat(
@@ -2169,101 +1923,29 @@ export class Service {
             "The saved order changed while cancellation was confirmed. Its newer state and payment were preserved; refresh before deciding what to do next.",
           );
           current.executionCancellation = proof;
-          current.evidence = {
-            capturedAt: now(),
-            machineId: m.id,
-            jobId: j.id,
-            result: "fail",
-            reason:
-              "The node durably cancelled this exact authorization before acceptance. " +
-              reason,
-            source: m.mode,
-            completionCredible: false,
-            operatorOverride: true,
-          };
           current.productionState = "failed";
           current.fulfillmentState = "awaiting_owner";
           machine.ready = false;
           machine.paused = true;
-          machine.reason = current.evidence.reason;
+          machine.reason =
+            "This authorization was cancelled before execution. " + reason;
           record(current, "operator_override", reason);
         });
         await this.transfer(jobId, "refund");
         return this.job(jobId);
       }
-      let evidence: any;
-      try {
-        const frame = await this.node.call(
-          "camera_snapshot",
-          {
-            token: this.node.token(j, m, "camera").token,
-            machine_id: m.id,
-            job_id: j.id,
-            attempt_id: j.attemptId,
-            phase: "result",
-          },
-          m,
-        );
-        requireThat(
-          frame.machine_id === m.id &&
-            frame.job_id === j.id &&
-            frame.attempt_id === j.attemptId &&
-            Date.parse(frame.captured_at) >= Date.parse(j.createdAt) &&
-            Math.abs(Date.now() - Date.parse(frame.captured_at)) < 60000,
-          "INVALID_FRAME",
-          "The result frame is stale or belongs to another attempt.",
-        );
-        evidence = {
-          url: frame.frame_url,
-          capturedAt: frame.captured_at,
-          machineId: m.id,
-          jobId: j.id,
-          source: frame.source,
-          completionCredible: frame.completion_credible,
-          frame,
-          result,
-          reason,
-          operatorOverride: true,
-        };
-      } catch (e) {
-        // The producer side's hub has no camera yet, so for its machines the
-        // owner's own inspection is the evidence: a labeled manual approval,
-        // never presented as a camera check.
-        const manual = result === "pass" && !!m.producerHub;
-        requireThat(
-          result === "fail" || manual,
-          "EVIDENCE_REQUIRED",
-          "A passing override requires a usable fresh result frame.",
-        );
-        evidence = {
-          capturedAt: now(),
-          machineId: m.id,
-          jobId: j.id,
-          result,
-          source: manual ? inspection : m.mode,
-          completionCredible: false,
-          reason,
-          operatorOverride: true,
-          ...(manual ? { manual: inspection === "owner_inspection" } : {}),
-        };
-      }
-      await this.resolveEvidence(jobId, evidence, reason, {
-        snapshot: mediaEstimateSnapshot(m),
-        status: resolvedStatus,
-      });
+      await this.applyNodeStatus(
+        jobId,
+        {
+          ...resolvedStatus,
+          execution_status: result === "pass" ? "completed" : "failed",
+          operator_resolution: true,
+          reason: `Owner resolved an uncertain execution: ${reason}`,
+        },
+        mediaEstimateSnapshot(m),
+      );
       return this.job(jobId);
     }
-    await this.resolveEvidence(
-      jobId,
-      {
-        ...j.evidence,
-        result,
-        reason: `Owner inspection: ${reason}`,
-        operatorOverride: true,
-      },
-      reason,
-    );
-    return this.job(jobId);
   }
   async prepare(jobId: string, body: any) {
     return mutate(this.store, (s) => {
@@ -2373,7 +2055,7 @@ export class Service {
       requireThat(
         j.productionState === "failed",
         "NOT_FAILED",
-        "Resolve execution and verification before clearing a failed job.",
+        "Resolve execution before clearing a failed job.",
       );
       requireThat(
         body.inspected === true &&
@@ -2604,7 +2286,7 @@ export class Service {
           current.ready = false;
           current.paused = true;
           // A configured authenticated node may revoke calibration after its
-          // physical identity/capture configuration changes. Connectivity loss
+          // physical device configuration changes. Connectivity loss
           // alone provides no evidence that the recorded inspection is invalid.
           if (known && status.calibrated === false) {
             current.calibrated = false;
@@ -2633,6 +2315,13 @@ export class Service {
       for (const j of Object.values(s.jobs)) {
         if (
           ["dispatched", "running", "verifying"].includes(j.productionState) ||
+          (j.productionState === "needs_review" &&
+            j.attemptId &&
+            j.history.some((entry) =>
+              ["completion_review", "verification_review"].includes(
+                entry.event,
+              ),
+            )) ||
           (j.paymentState === "held" &&
             ["produced", "failed"].includes(j.productionState)) ||
           Object.values(s.operations).some(

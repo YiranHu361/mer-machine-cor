@@ -77,7 +77,7 @@ if (
 )
   throw new Error("FABRARY_ALLOWED_MODES lists simulation and/or hardware.");
 config.allowedModes = allowedModes as Config["mode"][];
-config.autoAcceptHubPrints = process.env.FABRARY_AUTO_ACCEPT_PRINTS === "1";
+config.autoPrepareHubPrints = process.env.FABRARY_AUTO_PREPARE_PRINTS === "1";
 const catalog = await loadCatalog(process.env.FABRARY_CATALOG_FILE, dataDir);
 config.catalog = catalog.models;
 if (catalog.assets.length)

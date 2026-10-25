@@ -31,7 +31,7 @@ async def wait_for(pred, timeout=15.0):
 def test_offer_to_result(tmp_path):
     async def go():
         port = free_port()
-        app = create_app(frames_dir=tmp_path / "frames")
+        app = create_app()
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         server_task = asyncio.create_task(server.serve())
         await wait_for(lambda: asyncio.sleep(0, server.started))
@@ -57,8 +57,8 @@ def test_offer_to_result(tmp_path):
 
             async def finished():
                 evs = (await http.get("/dev/events", params={"limit": 500})).json()
-                return [e for e in evs if e["data"].get("job_id") == job_id and e["data"].get("state") == "verifying"
-                        and e["type"] == "job.updated"] and evs
+                return [e for e in evs if e["data"].get("job_id") == job_id and e["data"].get("state") == "done"
+                        and e["type"] == "job.done"] and evs
             events = await wait_for(finished)
 
         states = [e["data"].get("state") for e in events if e["data"].get("job_id") == job_id]
@@ -82,7 +82,7 @@ def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
 
     async def go():
         port = free_port()
-        app = create_app(frames_dir=tmp_path / "frames")
+        app = create_app()
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         server_task = asyncio.create_task(server.serve())
         await wait_for(lambda: asyncio.sleep(0, server.started))
@@ -112,7 +112,7 @@ def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
 
             await wait_for(machine)
             first = await offer()
-            await state_of(first, "verifying")
+            await state_of(first, "done")
             await wait_for(lambda: _status(machine, "error"))
             assert (await machine())["detail"].startswith("plate_not_cleared")
 
@@ -122,7 +122,7 @@ def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
             assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_fdm_01"})).status_code == 200
             await wait_for(lambda: _status(machine, "idle"), timeout=2)  # reported at once, not at the next heartbeat
             third = await offer()
-            await state_of(third, "verifying")
+            await state_of(third, "done")
             assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_nope"})).status_code == 409
 
         assert len(list((tmp_path / "sd").glob("fabrary_*.gcode.3mf"))) == 2

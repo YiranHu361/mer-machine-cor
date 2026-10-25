@@ -47,7 +47,6 @@ const sha = (b: string | Buffer) =>
 /** A node that answers like the simulator, or like hardware with a camera. */
 class Device implements NodeBoundary {
   runs: { machine: string; mode: string; artifact: string }[] = [];
-  evidenceSource: "auto" | "simulation" = "auto";
   token() {
     return {
       token: "signed-test-boundary",
@@ -55,20 +54,6 @@ class Device implements NodeBoundary {
     };
   }
   async call(tool: string, input: any, machine?: Machine) {
-    if (tool === "camera_snapshot")
-      return {
-        frame_url: "http://127.0.0.1:8788/frames/example.png",
-        captured_at: new Date(Date.now() + 1).toISOString(),
-        completion_credible: input.phase === "result",
-        machine_id: input.machine_id,
-        job_id: input.job_id,
-        attempt_id: input.attempt_id,
-        source:
-          this.evidenceSource === "simulation" || machine?.mode === "simulation"
-            ? "simulation"
-            : "camera",
-        observation: "visible",
-      };
     if (tool === "run_job") {
       this.runs.push({
         machine: input.machine_id,
@@ -91,9 +76,6 @@ class Device implements NodeBoundary {
         completion_credible: true,
       };
     return { calibrated: true };
-  }
-  async fetchFrame() {
-    return Buffer.from("frame");
   }
 }
 /** A stand-in for the producer CLI that honours the same contract, deterministically. */
@@ -442,7 +424,7 @@ test("one confirmation authorizes simulated work without payment and dispatches 
   }
 });
 
-test("hardware work is payable once, funds each child by allocation and refuses simulated evidence", async () => {
+test("hardware work is payable once, funds each child by allocation and completes from the machine report", async () => {
   const f = fixture({ mode: "hardware", allowed: ["hardware", "simulation"] });
   try {
     await f.ready(["phomemo_01", "instax_01"], "hardware");
@@ -464,7 +446,6 @@ test("hardware work is payable once, funds each child by allocation and refuses 
     assert.equal(a.chargeable, true);
     assert.equal(o.plan!.payableCents, a.price.totalCents);
     assert.equal(a.price.totalCents, a.price.ownerCents + a.price.feeCents);
-    f.device.evidenceSource = "simulation";
     o = await f.orchestrator.confirm(requester, order.id, confirmBody(o));
     const confirmed = o.plan!.assignments[0];
     assert.equal(o.makeIntent!.payment.status, "confirmed");
@@ -476,10 +457,8 @@ test("hardware work is payable once, funds each child by allocation and refuses 
       allocation.receipt.parentReference,
       o.makeIntent!.payment.reference,
     );
-    // A simulated frame cannot verify a hardware job, so nothing is released.
-    assert.equal(job.productionState, "needs_review");
-    assert.match(job.evidence.reason, /execution mode/);
-    assert.equal(job.paymentState, "held");
+    assert.equal(job.productionState, "produced");
+    assert.equal(job.paymentState, "released");
   } finally {
     f.close();
   }

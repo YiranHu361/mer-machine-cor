@@ -32,7 +32,6 @@ const SETUP_CODE_MS = 15 * 60 * 1000;
 const POLL_WAIT_MS = 20_000;
 const ONLINE_WINDOW_MS = 45_000;
 const CALL_TIMEOUT_MS = 12_000;
-const FRAME_LIMIT = 8 * 1024 * 1024;
 export const supportedModels: Record<string, string> = {
   "phomemo-m02pro": "phomemo_01",
   "instax-mini-link-3": "instax_01",
@@ -246,26 +245,6 @@ export class RoutingNode implements NodeBoundary {
       );
     }
     return reply.json;
-  }
-  async fetchFrame(url: string, machine: Machine) {
-    if (machine.producerHub)
-      throw new Error("The producer side's hub provides no camera frames yet.");
-    if (!machine.connectorId) return this.direct.fetchFrame(url, machine);
-    const frame = new URL(url, CONNECTOR_NODE_ORIGIN);
-    if (
-      frame.origin !== CONNECTOR_NODE_ORIGIN ||
-      !/^\/frames\/[0-9a-f]{32}\.png$/.test(frame.pathname)
-    )
-      throw new Error("Frame outside configured camera node");
-    const reply = await this.relay.request(machine.connectorId, {
-      method: "GET",
-      path: frame.pathname,
-    });
-    if (reply.status !== 200 || typeof reply.base64 !== "string")
-      throw new Error("Camera frame unavailable");
-    const bytes = Buffer.from(reply.base64, "base64");
-    if (bytes.length > FRAME_LIMIT) throw new Error("Camera frame too large");
-    return bytes;
   }
 }
 

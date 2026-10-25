@@ -54,12 +54,6 @@ async function fixture() {
       }),
       async call(tool, body) {
         calls.push(tool);
-        if (tool === "camera_snapshot")
-          throw new Problem(
-            "camera_unavailable",
-            "No camera in isolated fixture",
-            503,
-          );
         if (tool === "run_job") {
           controls.pending = true;
           pending = gate.promise.then(() => {

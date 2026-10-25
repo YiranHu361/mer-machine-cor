@@ -9,12 +9,10 @@ Source of truth for the shared contracts: the *Fabrary — Cal Hacks Build Desig
 | Part | State |
 | --- | --- |
 | Node loop: connect, heartbeat, offer → accept/reject → run → result, reconnect | Working, tested end to end |
-| Gateway: `/ws/node`, offline detection, dispatch, frame upload, events | Working against the stub hub; not yet mounted in the consumer's hub |
+| Gateway: `/ws/node`, offline detection, dispatch and events | Working against the stub hub; not yet mounted in the consumer's hub |
 | Phomemo M02 Pro adapter (`sticker_print`) | Working on the real printer over BLE from macOS |
 | Instax mini adapter (`photo_print`) | Not started |
 | Bambu A1 mini adapter (`fdm_print`) | Rudimentary: prints a pre-sliced `.gcode` / `.gcode.3mf` over LAN. One test part printed on the real printer. No STL slicing yet |
-| Webcam frame capture and upload | Code written, no camera tested yet |
-| Claude vision check | Not started; results say `pass: null` (needs manual approval) |
 | Simulator (`sim/`, `SimAdapter`), outage, add-machine | Not started |
 | Convex publish (`hub/publish.py`) | Working: the stub hub forwards gateway events to Convex when `CONVEX_URL` (or a full `CONVEX_DEPLOY_KEY`) and `FABRARY_PUBLISH_SECRET` are set; progress at most every 2 s per job; signed links and adapter config stay in the hub |
 
@@ -48,7 +46,6 @@ producer-side/
     client.py            NodeClient: the node loop; CLI `python -m node.client`
     protocol.py          Job model, message type names, envelope(); mirrors contracts/ until it exists
     policy.py            owner rules → reject reason or None
-    verify.py            capture a webcam frame, upload it, return (photo_url, verification)
     adapters/
       __init__.py        REGISTRY: adapter.type → "package:Class", lazy import
       base.py            Adapter ABC, Progress, AdapterError
@@ -84,9 +81,8 @@ producer-side/
    2. Download `asset_url`. It may be relative to the hub, absolute, or `file://`, which is for tests.
    3. `adapter.prepare(job, asset_path)` → native file
    4. `async for p in adapter.run(job, native)`, sending `job.progress` for each `p`.
-   5. `job.progress {state: "verifying", progress: 1}`
-   6. `verify.verify_job` captures a frame, uploads it, and returns `(photo_url, verification)`.
-   7. `job.result {ok: true, photo_url, verification}`. Any exception → `job.result {ok: false, error}`.
+   5. Once the adapter reports completion, send the successful result immediately.
+   6. `job.result {ok: true}`. Any exception → `job.result {ok: false, error}`.
 6. **On disconnect:** reconnect with backoff (1 s doubling to 15 s, plus jitter). Job messages wait in the outbox and are sent after the reconnect. A message leaves the outbox only after a successful send. Heartbeats are never queued.
 
 Per-job working files go in `.work/<machine_id>/<job_id>/`.
@@ -114,8 +110,8 @@ Every message in both directions uses the same envelope as `/ws/events`: `{"type
 | hub → node | `job.offer` | The job (§4 of the design doc) |
 | node → hub | `job.accept` | `{job_id, reason: null}` |
 | node → hub | `job.reject` | `{job_id, reason}`. Reason strings are listed under "Owner policy" |
-| node → hub | `job.progress` | `{job_id, state: running\|verifying, progress: 0–1, eta_s, message}` |
-| node → hub | `job.result` | `{job_id, ok, photo_url, verification: {pass: true\|false\|null, reason}, error?}` |
+| node → hub | `job.progress` | `{job_id, state: running, progress: 0–1, eta_s, message}` |
+| node → hub | `job.result` | `{job_id, ok, error?}` |
 | hub → node | `job.cancel` | `{job_id}` |
 
 Timing: the gateway marks a node offline after 15 s without any message.
@@ -128,7 +124,7 @@ Example `job.offer` data:
 {"job_id": "job_0031", "order_id": "ord_0007", "item_id": "it_2", "machine_id": "m_sticker_01",
  "process": "sticker_print", "quantity": 1, "asset_url": "/assets/ord_0007/it_2.png",
  "preview_url": "/assets/ord_0007/it_2_preview.png", "params": {"width_mm": 40, "height_mm": 25},
- "state": "offered", "progress": 0.0, "eta_s": 60, "escrow": "held", "verification": null}
+ "state": "offered", "progress": 0.0, "eta_s": 60, "escrow": "held"}
 ```
 
 ## The machine manifest (`node/machines/<id>.json`)
@@ -138,7 +134,6 @@ The manifest follows design doc §2. It has two kinds of keys:
 - **Public keys** (sent in `hello`): `machine_id, process, display_name, owner, owner_wallet, simulated, location, media_loaded, limits, time_model, price_card, status`
 - **Local keys** (`LOCAL_KEYS` in `client.py`, never sent):
   - `adapter`: `type` picks the class; everything else is that adapter's config.
-  - `camera`: `{index, warmup_frames, delay_s}` for OpenCV. `index: null` means no camera.
 
 Fields the node itself uses:
 
@@ -205,8 +200,8 @@ Notes for the two remaining machines:
 
 - **Instax mini (`photo_print`):**
   - The design doc says the consumer sends a 4×6 postcard JPEG. Instax mini film needs a 600×800 portrait image (about 46 × 62 mm), so `prepare` must crop and fit it. Confirm with the consumer at standup.
-  - Prior art in this repo: `../node/fabrary_node/adapters.py` (`InstaxLink3`, which shrinks the JPEG to ~55 KB), and the vendored [javl/InstaxBLE](https://github.com/javl/InstaxBLE) in `../node/fabrary_node/instaxble/`. Neither was validated on our camera/printer.
-  - Development takes about 90 s after ejection, so delay the camera frame.
+  - Prior art in this repo: `../node/fabrary_node/adapters.py` (`InstaxLink3`, which shrinks the JPEG to ~55 KB), and the vendored [javl/InstaxBLE](https://github.com/javl/InstaxBLE) in `../node/fabrary_node/instaxble/`. Neither was validated on our printer.
+  - Allow about 90 s for film development after ejection.
 - **Bambu A1 mini (`fdm_print`):**
   - The consumer sends an STL.
   - `prepare` slices it with the OrcaSlicer CLI and one fixed profile → `.gcode.3mf` plus print statistics.
@@ -218,8 +213,8 @@ Notes for the two remaining machines:
 ## Gateway (`hub/gateway.py`): what the consumer's hub uses
 
 ```python
-from hub.gateway import gateway                 # module singleton (or Gateway(frames_dir=...))
-app.include_router(gateway.router)              # adds /ws/node and POST /nodes/{machine_id}/frames
+from hub.gateway import gateway                 # module singleton (or Gateway())
+app.include_router(gateway.router)              # adds /ws/node
 gateway.start()                                 # in the app lifespan: starts the heartbeat watchdog
 gateway.subscribe(handler)                      # handler(type, data), sync or async
 await gateway.offer_job(job)                    # raises LookupError if the machine is offline
@@ -235,13 +230,12 @@ Events it emits, named like the `/ws/events` types so the hub can forward them a
 | `machine.online` | `hello`, or a heartbeat after being offline | Manifest |
 | `machine.updated` | Heartbeat changed `status` or `media_loaded` | Manifest |
 | `machine.offline` | Disconnect or 15 s of silence | `{machine_id, reason, unfinished_jobs}` |
-| `job.updated` | Offered, accepted, rejected, running, verifying (including made but awaiting approval) | Job fields so far |
-| `job.done` | `ok` and `verification.pass == true`, or manual approval | Job, including `photo_url` |
-| `job.failed` | `ok == false` or `verification.pass == false` | Job, including `error` |
+| `job.updated` | Offered, accepted, rejected, running | Job fields so far |
+| `job.done` | `ok == true` from the machine adapter | Job with progress 1.0 |
+| `job.failed` | `ok == false` | Job, including `error` |
 
 The gateway keeps the last known state of each job per machine, but the consumer owns plans, escrow and re-planning. On `machine.offline` the consumer re-plans `unfinished_jobs`.
 
-Frames are saved to `frames_dir` and returned as `/frames/<name>`. The hub must serve that directory, as `dev_server.py` does.
 
 ## Stub hub (`hub/dev_server.py`)
 
@@ -253,7 +247,7 @@ Frames are saved to `frames_dir` and returned as `/frames/<name>`. The hub must 
 | `POST /dev/offer` | `{machine_id, asset_url?, quantity?, params?}` builds a job and offers it. The default asset is a generated 48×30 mm test sticker |
 | `POST /dev/cancel`, `POST /dev/approve` | `{machine_id, job_id}` |
 | `GET /dev/events?limit=` | Recent gateway events |
-| `/assets/*`, `/frames/*` | Static files |
+| `/assets/*` | Static files |
 
 ## Testing
 
@@ -265,7 +259,7 @@ Frames are saved to `frames_dir` and returned as `/frames/<name>`. The hub must 
 | --- | --- |
 | `test_phomemo_raster.py` | Byte layout, scaling, centering, alpha, cropping |
 | `test_policy.py` | Every reject reason and the midnight-wrapping hours window |
-| `test_end_to_end.py` | Starts the stub hub in-process, runs a real `NodeClient` with the Phomemo adapter on the `file` transport, checks rejection and acceptance through to `verifying`, the bytes written and the media count |
+| `test_end_to_end.py` | Starts the stub hub in-process, runs a real `NodeClient` with the Phomemo adapter on the `file` transport, checks rejection and acceptance through to `done`, the bytes written and the media count |
 
 No test touches hardware. Use `node.tools.run_job` for that.
 
@@ -273,7 +267,6 @@ No test touches hardware. Use `node.tools.run_job` for that.
 
 - The hub ↔ node envelope is `{type, ts, data}`.
 - Sticker size travels as `params.width_mm` / `height_mm` (or `size_mm`).
-- `job.result` may carry `error`, and `verification.pass` may be `null`, meaning made but unchecked. The gateway then emits `job.updated` with state `verifying`.
 - Heartbeats carry the extra keys `queue`, `current_job`, `detail` and `battery_pct`.
 - `node/protocol.py` duplicates the `Job` model until `contracts/models.py` lands. Then import from there.
 - Instax image size vs the "4×6 postcard" in the design doc.

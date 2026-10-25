@@ -582,24 +582,6 @@ summary:hover {
 }
 
 /* ---------- Shared order components ---------- */
-.result-image {
-  margin: 10px 0;
-}
-.result-image a {
-  display: block;
-  border-radius: var(--radius);
-}
-.result-image img {
-  display: block;
-  width: 100%;
-  max-height: 320px;
-  object-fit: contain;
-  border-radius: var(--radius);
-  background: var(--sunken);
-}
-.result-image .notice {
-  margin: 0;
-}
 .prepared-facts {
   margin: 12px 0;
 }

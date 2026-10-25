@@ -82,7 +82,7 @@ function pythonVerify(
 }
 
 for (const mode of ["simulation", "hardware"] as const)
-  for (const scope of ["dispatch", "calibration", "camera", "abort"])
+  for (const scope of ["dispatch", "calibration", "abort"])
     test(`signed ${scope} authorization binds explicit ${mode} mode and every approved field`, () => {
       const before = Math.floor(Date.now() / 1000),
         signed = node.token(job, machine(mode), scope),

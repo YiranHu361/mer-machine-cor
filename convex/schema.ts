@@ -70,7 +70,7 @@ export default defineSchema({
   // §4 job. The two writers own separate fields so neither can roll the other
   // back: the consumer writes the order-side states (state, production,
   // payment, fulfillment); the producer gateway writes what the node reports
-  // (hubJobId, hubState, progress, verification).
+  // (hubJobId, hubState, progress).
   jobs: defineTable({
     jobId: v.string(),
     orderId: v.optional(v.string()),
@@ -88,6 +88,7 @@ export default defineSchema({
     progress: v.optional(v.number()),
     etaS: v.optional(v.number()),
     reason: v.optional(v.string()),
+    // Deprecated storage compatibility for old rows; never read or written.
     verification: v.optional(
       v.object({
         pass: v.union(v.boolean(), v.null()),

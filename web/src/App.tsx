@@ -18,7 +18,7 @@ import {
 } from "./OwnerRecords";
 import { useOwnerFormGuard } from "./owner-form-guard";
 import { settingsSnapshot } from "./machine-settings";
-import { ResultImage, retryImageSource, useImageAttempt } from "./ResultImage";
+import { retryImageSource, useImageAttempt } from "./image-loading";
 import {
   OwnerDraftProvider,
   ownerActionDraftKey,
@@ -165,6 +165,7 @@ type Quote = {
 };
 type Job = {
   id: string;
+  executionMode?: "simulation" | "hardware";
   creationRequestId?: string;
   checkoutKey?: string;
   machineId?: string;
@@ -179,16 +180,6 @@ type Job = {
   attemptId?: string;
   abortStatus?: string;
   economics?: TrialEconomics;
-  evidence?: {
-    url: string;
-    capturedAt: string;
-    machineId: string;
-    jobId: string;
-    result: string;
-    reason: string;
-    source: string;
-    completionCredible: boolean;
-  };
   pickup?: { code?: string; expiresAt?: string; redeemedAt?: string };
   pickupRenewals?: {
     key: string;
@@ -270,7 +261,7 @@ const productionLabels: Record<string, string> = {
   payment_confirmed: "Paid · ready to start",
   dispatched: "Sent to the machine",
   running: "Being made",
-  verifying: "Checking the result",
+  verifying: "Waiting for machine status",
   produced: "Made",
   failed: "Didn’t pass the check",
   needs_review: "Needs a review",
@@ -3091,7 +3082,7 @@ function OrderDetail({
     payment_confirmed: "Payment confirmed",
     dispatched: "Sent to the machine",
     running: "Your item is being made",
-    verifying: "Checking the result",
+    verifying: "Waiting for machine status",
     produced: "Production is complete",
     failed: "Production needs attention",
     needs_review: "An owner review is needed",
@@ -3337,7 +3328,7 @@ function OrderDetail({
         <Notice>
           <span className="spinner" />{" "}
           {job.productionState === "verifying"
-            ? "Waiting for fresh result evidence."
+            ? "Waiting for the machine to report completion."
             : "The machine is working. Status updates automatically."}{" "}
           Production cannot be cancelled here after dispatch.
         </Notice>
@@ -3369,19 +3360,19 @@ function OrderDetail({
         <Notice>
           {job.spec.permission === "unclear" && !job.attemptId
             ? "The owner needs to review artwork permission. After review, approve the production file before checkout."
-            : "An uncertain completion or ambiguous result needs owner review. A new print will not start automatically."}
+            : "An uncertain machine status needs owner review. A new print will not start automatically."}
         </Notice>
       )}
       {job.productionState === "failed" && (
         <Notice kind="error">
-          This output did not pass verification. The owner can inspect the
-          recorded reason and handle recovery.
+          The machine reported a failure. The owner can inspect the recorded
+          reason and handle recovery.
         </Notice>
       )}
       {job.productionState === "produced" &&
         job.fulfillmentState === "awaiting_owner" && (
           <Notice>
-            Your item passed the output check. The owner still needs to remove,
+            The machine finished your item. The owner still needs to remove,
             label and store it before pickup.
           </Notice>
         )}
@@ -3389,61 +3380,6 @@ function OrderDetail({
         <Notice kind="success">
           Collected. The owner redeemed your pickup code and recorded handoff.
         </Notice>
-      )}
-      {job.evidence && (
-        <div className="evidence">
-          <div className="quote-head">
-            <h3>Result photo</h3>
-            <Badge
-              tone={
-                job.evidence.result === "pass"
-                  ? "green"
-                  : job.evidence.result === "fail"
-                    ? "red"
-                    : "amber"
-              }
-            >
-              {job.evidence.result === "pass"
-                ? "Passed"
-                : job.evidence.result === "fail"
-                  ? "Did not pass"
-                  : sentence(job.evidence.result)}
-            </Badge>
-          </div>
-          {job.evidence.url ? (
-            <ResultImage
-              src={job.evidence.url}
-              frameKey={JSON.stringify([
-                job.id,
-                job.attemptId,
-                job.evidence.jobId,
-                job.evidence.machineId,
-                job.evidence.capturedAt,
-                job.evidence.source,
-              ])}
-              alt={`Result evidence for order ${shortId(job.id)}`}
-            />
-          ) : (
-            <Notice>
-              No usable result frame was recorded. The owner must inspect this
-              outcome.
-            </Notice>
-          )}
-          <p>{job.evidence.reason}</p>
-          <small>
-            {job.evidence.source === "simulation"
-              ? "Simulated evidence"
-              : "Camera frame"}{" "}
-            · {date(job.evidence.capturedAt)}
-            <br />
-            Machine {job.evidence.machineId} · completion{" "}
-            {job.evidence.completionCredible ? "credible" : "unconfirmed"}
-          </small>
-          <p className="fine-print">
-            Visible output check only. This does not certify dimensions or
-            material properties.
-          </p>
-        </div>
       )}
       {canCancel && (
         <div className="cancel-area">
@@ -5242,12 +5178,6 @@ type Calibration = {
   };
   productionState?: string;
   reason?: string;
-  evidence?: {
-    url?: string;
-    capturedAt: string;
-    machineId: string;
-    jobId: string;
-  };
 };
 function PhysicalCalibration({
   machine: m,
@@ -5376,10 +5306,6 @@ function PhysicalCalibration({
     calibration?.productionState,
     calibration?.calibrationInspection,
     calibration?.executionCancellation,
-    calibration?.evidence?.url,
-    calibration?.evidence?.capturedAt,
-    calibration?.evidence?.machineId,
-    calibration?.evidence?.jobId,
   ]);
   const actionContext = JSON.stringify([
     m.id,
@@ -5395,7 +5321,6 @@ function PhysicalCalibration({
     calibration?.productionState,
     calibration?.calibrationInspection,
     calibration?.executionCancellation,
-    calibration?.evidence,
   ]);
   const liveActionContext = useRef(actionContext);
   liveActionContext.current = actionContext;
@@ -5404,7 +5329,7 @@ function PhysicalCalibration({
     setActionError("");
   }, [actionContext]);
   useEffect(() => {
-    // An inspection is a fresh confirmation of this exact attempt and frame.
+    // An inspection is a fresh confirmation of this exact attempt.
     // A newer saved attempt must not inherit an earlier checked confirmation.
     setInspected(false);
     setOwnerReady(false);
@@ -5864,7 +5789,7 @@ function PhysicalCalibration({
         return;
       target.focus({ preventScroll: true });
       (target.closest(".field, .check") || target).scrollIntoView({
-        // Leave room for the bounded evidence image above an inspection check
+        // Leave room above an inspection check
         // to finish loading without pushing the focused label below the fold.
         block: target.matches('input[type="checkbox"]') ? "center" : "nearest",
         behavior: "instant",
@@ -5994,8 +5919,8 @@ function PhysicalCalibration({
       <summary>Physical calibration job & inspection</summary>
       <Notice>
         This starts one real job on the configured device and uses loaded media.
-        Check the adapter, output area and camera first. Installing an adapter
-        does not establish a calibration pass.
+        Check the adapter and output area first. Installing an adapter does not
+        establish a calibration pass.
       </Notice>
       {error && <Notice kind="error">{error}</Notice>}
       {authorizationNotice && <Notice>{authorizationNotice}</Notice>}
@@ -6359,28 +6284,6 @@ function PhysicalCalibration({
               This saved attempt belongs to an earlier device setup. Its
               inspection cannot confirm calibration for the current setup.
             </Notice>
-          )}
-          {calibration.evidence?.url && (
-            <figure className="calibration-evidence">
-              <ResultImage
-                src={calibration.evidence.url}
-                frameKey={JSON.stringify([
-                  m.id,
-                  m.adapterVersion,
-                  calibration.id,
-                  calibration.attemptId,
-                  calibration.evidence.jobId,
-                  calibration.evidence.machineId,
-                  calibration.evidence.capturedAt,
-                ])}
-                alt={`Fresh calibration evidence for ${m.name}`}
-                owner
-              />
-              <figcaption>
-                Calibration evidence · {date(calibration.evidence.capturedAt)} ·{" "}
-                {calibration.evidence.machineId}
-              </figcaption>
-            </figure>
           )}
           {calibration.calibrationInspection && (
             <Notice>
@@ -7096,7 +6999,7 @@ function OwnerJob({
   job: Job;
   ledger: Ledger[];
   machineName?: string;
-  /** The machine prints through the producer side's hub, which has no camera yet. */
+  /** The machine prints through the producer side's hub. */
   onProducerHub?: boolean;
   busy: string;
   health: Health | null;
@@ -7153,7 +7056,7 @@ function OwnerJob({
     : j.productionState === "needs_review"
       ? j.spec.permission === "unclear" && !j.attemptId
         ? "Confirm whether the requester may print this artwork."
-        : "The result is uncertain. Inspect the evidence and the machine, then record a decision."
+        : "The result is uncertain. Check the machine status, then record a decision."
       : j.productionState === "failed" && !recovered
         ? "The output did not pass its check. Inspect and clear the machine below."
         : j.fulfillmentState === "ready_for_pickup"
@@ -7227,7 +7130,7 @@ function OwnerJob({
                     : requesterStatus(j)}
           </Badge>
           {(health?.mode === "simulation" ||
-            j.evidence?.source === "simulation") && (
+            j.executionMode === "simulation") && (
             <span className="sim-label">Simulation</span>
           )}
         </div>
@@ -7324,67 +7227,22 @@ function OwnerJob({
       {j.fulfillmentState === "ready_for_pickup" && (
         <OwnerPickup job={j} busy={busy} action={action} refresh={refresh} />
       )}
-      {j.evidence && (
-        <details className="owner-evidence" open={needsReview}>
-          <summary>
-            Result evidence · {j.evidence.result} ·{" "}
-            {j.evidence.source === "simulation" ? "simulated" : "camera"}
-          </summary>
-          <div className="evidence-review">
-            {j.evidence.url ? (
-              <ResultImage
-                src={j.evidence.url}
-                frameKey={JSON.stringify([
-                  j.id,
-                  j.attemptId,
-                  j.evidence.jobId,
-                  j.evidence.machineId,
-                  j.evidence.capturedAt,
-                  j.evidence.source,
-                ])}
-                alt={`Evidence for order ${shortId(j.id)}`}
-                owner
-              />
-            ) : (
-              <Notice>
-                No usable result frame was recorded. Inspect the physical
-                machine before resolving the outcome.
-              </Notice>
-            )}
-            <div>
-              <p>{j.evidence.reason}</p>
-              <small>
-                Captured {date(j.evidence.capturedAt)}
-                <br />
-                Machine {j.evidence.machineId}
-                <br />
-                Completion:{" "}
-                {j.evidence.completionCredible ? "credible" : "unconfirmed"}
-              </small>
-              <p className="fine-print">
-                This check establishes visible output, not exact dimensions or
-                material properties.
-              </p>
-            </div>
-          </div>
-        </details>
-      )}
       {onProducerHub &&
-        j.productionState === "needs_review" &&
+        j.productionState === "produced" &&
+        j.fulfillmentState === "awaiting_owner" &&
         j.attemptId && (
-          <div className="approve-print">
+          <div className="clear-print">
             <p>
-              This printer has no camera yet, so you are the check. Look at the
-              print, take it off the printer, then approve it to free the
-              printer for the next order.
+              The machine finished this job. Take the item off the printer and
+              clear the plate before starting the next order.
             </p>
             <Button
               className="primary"
-              busy={busy === `${j.id}-approve-print`}
+              busy={busy === `${j.id}-clear-print`}
               disabled={Boolean(busy)}
-              onClick={() => void action("approve-print", { checked: true })}
+              onClick={() => void action("clear-print", { cleared: true })}
             >
-              Printed fine · approve and free the printer
+              Item removed · clear the printer
             </Button>
           </div>
         )}
@@ -7405,7 +7263,7 @@ function OwnerJob({
           <p>
             {j.spec.permission === "unclear" && !j.attemptId
               ? "Confirm the requester’s permission to print this artwork. Allowed artwork returns to requester approval; declined artwork cancels this unpaid order."
-              : "Inspect the evidence and machine before overriding the result. Your reason stays in the order history."}
+              : "Resolve the uncertain machine status before recording the outcome. Your reason stays in the order history."}
           </p>
           <div className="form-grid">
             <Field label="Reviewed result">
@@ -7592,18 +7450,6 @@ function OwnerJob({
             >
               Reconcile saved outcome
             </Button>
-            {j.attemptId && (
-              <Button
-                className="secondary"
-                busy={busy === `${j.id}-verify`}
-                disabled={Boolean(busy)}
-                onClick={() => {
-                  void action("verify");
-                }}
-              >
-                Capture fresh evidence
-              </Button>
-            )}
             {["dispatched", "running", "verifying"].includes(
               j.productionState,
             ) && (
@@ -7659,7 +7505,9 @@ function OwnerJob({
               >
                 <option value="pass">Visible output · pass</option>
                 <option value="fail">Missing output · fail</option>
-                <option value="review">Ambiguous evidence · review</option>
+                <option value="review">
+                  Uncertain machine status · review
+                </option>
                 <option value="lost_ack">
                   Lost acknowledgment · uncertain
                 </option>

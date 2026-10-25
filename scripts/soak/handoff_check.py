@@ -31,8 +31,8 @@ def outcome(hub: str, job_id: str, timeout=60):
             data = event["data"]
             if data.get("job_id") != job_id:
                 continue
-            # The gateway reports rejected/verifying as job.updated, and job.done/job.failed.
-            if event["type"] in ("job.done", "job.failed") or data.get("state") in ("rejected", "verifying"):
+            # The gateway reports rejected as job.updated, and job.done/job.failed.
+            if event["type"] in ("job.done", "job.failed") or data.get("state") in ("rejected",):
                 return data.get("state"), data
         time.sleep(0.5)
     return "timeout", {}
@@ -60,7 +60,7 @@ def main(folder: Path, hub: str, count: int):
         line = f'{f["file"]}: {params["width_mm"]}x{params["height_mm"]} mm -> {kind}'
         if kind == "rejected":
             line += f' ({data.get("reason")})'
-        elif kind in ("verifying", "done", "failed"):
+        elif kind in ("done", "failed"):
             line += f' error={data.get("error")} verification={data.get("verification")}'
             printed =PRODUCER / ".work" / "m_sticker_01" / job["job_id"] / f'{job["job_id"]}_print_preview.png'
             line += f" | {compare(path, printed) if printed.exists() else 'no print preview found'}"

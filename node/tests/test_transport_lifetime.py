@@ -39,7 +39,7 @@ async def phomemo(tmp_path,monkeypatch,*,late_error=False):
     monkeypatch.setattr(socket,'socket',lambda *a,**kw:FakeSocket() if a and a[0]==999 else original(*a,**kw))
     data=artifact()
     def serve(request):fetched.append(request.url.path);return httpx.Response(200,content=data)
-    config={'id':MID,'model':'Phomemo M02Pro','mode':'hardware','paired':True,'bluetoothAddress':'fake-owner-device','rfcommChannel':1,'cameraCommand':['never-invoked'],'ownerReady':True}
+    config={'id':MID,'model':'Phomemo M02Pro','mode':'hardware','paired':True,'bluetoothAddress':'fake-owner-device','rfcommChannel':1, 'ownerReady':True}
     service=NodeService(key=KEY,data_dir=tmp_path,machines=[config],artifact_transport=httpx.MockTransport(serve))
     monkeypatch.setattr(service.adapters[MID],'blockers',lambda:[])
     state=service.journal.machine(MID);state.update(calibrated=True,configured=True,listed=True,ready=True,paused=False,mediaRemaining=100,maxJobSeconds=1);service.journal.save_machine(MID,state)
@@ -219,7 +219,7 @@ async def test_instax_thread_fence_includes_disconnect_cleanup_after_cancelled_t
     monkeypatch.setattr(adapters.time,'sleep',sleep)
     image=io.BytesIO();Image.new('RGB',(600,800),'white').save(image,'PNG');data=image.getvalue()
     machine='instax_01'
-    config={'id':machine,'model':'Instax Mini Link 3','mode':'hardware','paired':True,'ownerReady':True,'bluetoothAddress':'fake-owner-instax','serviceUUID':'fixture-service','writeCharUUID':'fixture-write','notifyCharUUID':'fixture-notify','compatibilityValidated':True,'developmentSeconds':90,'maxJobSeconds':240,'cameraCommand':['never-invoked']}
+    config={'id':machine,'model':'Instax Mini Link 3','mode':'hardware','paired':True,'ownerReady':True,'bluetoothAddress':'fake-owner-instax','serviceUUID':'fixture-service','writeCharUUID':'fixture-write','notifyCharUUID':'fixture-notify','compatibilityValidated':True,'developmentSeconds':90,'maxJobSeconds':240}
     service=NodeService(key=KEY,data_dir=tmp_path,machines=[config],artifact_transport=httpx.MockTransport(lambda _:httpx.Response(200,content=data)))
     monkeypatch.setattr(service.adapters[machine],'blockers',lambda:[])
     state=service.journal.machine(machine);state.update(calibrated=True,configured=True,listed=True,ready=True,paused=False,mediaRemaining=100,maxJobSeconds=1);service.journal.save_machine(machine,state)

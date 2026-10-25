@@ -57,7 +57,7 @@ const spec = (assetId: string) => ({
   permission: "authorized",
   crop: "contain",
 });
-test("HTTP authentication, owner boundaries, private cameras and cross-origin writes", async () => {
+test("HTTP authentication, owner boundaries and cross-origin writes", async () => {
   const f = fixture();
   try {
     await request(f.app).get("/api/owner/dashboard").expect(401);
@@ -77,7 +77,7 @@ test("HTTP authentication, owner boundaries, private cameras and cross-origin wr
       .post("/api/owner/simulation/phomemo_01")
       .send({ outcome: "pass" })
       .expect(403);
-    await request(f.app).get("/api/jobs/nonexistent/evidence").expect(401);
+    await request(f.app).get("/api/jobs/nonexistent/evidence").expect(404);
   } finally {
     f.close();
   }
@@ -412,53 +412,6 @@ test("empty bodies and multibyte invalid credentials return useful validation er
     await request(f.app)
       .get(url.pathname + url.search)
       .expect(401);
-  } finally {
-    f.close();
-  }
-});
-
-test("result frames use the configured authenticated node boundary and preserve requester isolation", async () => {
-  const f = fixture();
-  try {
-    const a = request.agent(f.app),
-      stranger = request.agent(f.app);
-    await a.post("/api/session").send({ role: "requester" }).expect(200);
-    await stranger.post("/api/session").send({ role: "requester" }).expect(200);
-    const uploaded = await a
-      .post("/api/uploads")
-      .attach("images", image, {
-        filename: "evidence-check.png",
-        contentType: "image/png",
-      })
-      .expect(201);
-    const created = await a
-      .post("/api/jobs")
-      .send(spec(uploaded.body.assets[0].id))
-      .expect(201);
-    const jobId = created.body.job.id;
-    await mutate(f.store, (s) => {
-      s.jobs[jobId].machineId = "phomemo_01";
-      s.jobs[jobId].evidence = { url: "/frames/private-fixture.png" };
-    });
-    let calls = 0;
-    f.service.node.fetchFrame = async (url, machine) => {
-      calls++;
-      assert.equal(url, "/frames/private-fixture.png");
-      assert.equal(machine.id, "phomemo_01");
-      return image;
-    };
-    await stranger.get(`/api/jobs/${jobId}/evidence`).expect(403);
-    assert.equal(calls, 0);
-    const frame = await a.get(`/api/jobs/${jobId}/evidence`).expect(200);
-    assert.equal(frame.headers["content-type"], "image/png");
-    assert.deepEqual(frame.body, image);
-    assert.equal(calls, 1);
-    f.service.node.fetchFrame = async () => {
-      throw new Error("Node offline");
-    };
-    const unavailable = await a.get(`/api/jobs/${jobId}/evidence`).expect(502);
-    assert.equal(unavailable.body.error.code, "FRAME_UNAVAILABLE");
-    assert.match(unavailable.body.error.message, /camera node/);
   } finally {
     f.close();
   }

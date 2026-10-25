@@ -131,7 +131,8 @@ const childLine = (a: Assignment) => {
       ? "Simulated · made, waiting for the owner to finish up"
       : "Made · the owner is getting it ready for pickup";
   if (c.productionState === "needs_review") return "Checking with the workshop";
-  if (["verifying", "produced"].includes(c.productionState)) return "Checking";
+  if (c.productionState === "produced") return "Finished";
+  if (c.productionState === "verifying") return "Waiting for machine status";
   if (["dispatched", "running"].includes(c.productionState)) return "Making";
   if (c.productionState === "failed") return "Not made";
   if (c.productionState === "cancelled") return "Cancelled";

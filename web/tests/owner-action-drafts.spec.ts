@@ -398,7 +398,7 @@ test("a changed execution clears preparation confirmations, even when the old at
   expect(state.mutations).toEqual([]);
 });
 
-test("changed evidence invalidates an off-screen review result and reason without carrying a decision to the new frame", async ({
+test("a changed attempt invalidates an off-screen review result and reason", async ({
   page,
 }) => {
   const state = await fixture(page);
@@ -406,9 +406,7 @@ test("changed evidence invalidates an off-screen review result and reason withou
   await page
     .getByLabel("Find an order", { exact: true })
     .fill("Action draft order 9");
-  state.jobs[2].evidence.capturedAt = "2026-10-23T10:33:00.000Z";
-  state.jobs[2].evidence.reason =
-    "New frame requires a fresh operator decision";
+  state.jobs[2].attemptId = "replacement_attempt";
   await state.refresh();
   await page.getByLabel("Find an order", { exact: true }).fill("");
   const order = orderFor(page, 2);
@@ -418,11 +416,6 @@ test("changed evidence invalidates an off-screen review result and reason withou
   await expect(
     order.getByLabel("Reason for decision", { exact: true }),
   ).toHaveValue("");
-  await expect(
-    order.getByText("New frame requires a fresh operator decision", {
-      exact: true,
-    }),
-  ).toBeVisible();
   await openHandlingSteps(orderFor(page, 4));
   await expect(
     orderFor(page, 4).getByRole("checkbox", {

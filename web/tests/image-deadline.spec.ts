@@ -11,12 +11,9 @@ function deferred() {
     release: () => release(),
   };
 }
-async function fixture(page: Page, kind: "result" | "preview") {
+async function fixture(page: Page, kind: "preview") {
   const at = "2026-10-23T10:30:00.000Z";
-  const url =
-    kind === "result"
-      ? "/api/jobs/image_deadline/evidence"
-      : "/fixture-image-deadline-initial.png";
+  const url = "/fixture-image-deadline-initial.png";
   const job: any = {
     id: "image_deadline",
     version: 1,
@@ -34,36 +31,11 @@ async function fixture(page: Page, kind: "result" | "preview") {
       permission: "authorized",
       crop: "contain",
     },
-    productionState: kind === "result" ? "needs_review" : "specified",
-    paymentState: kind === "result" ? "release_pending" : "unpaid",
+    productionState: "specified",
+    paymentState: "unpaid",
     fulfillmentState: "unprepared",
     history: [],
-    ...(kind === "result"
-      ? {
-          artifact: {
-            id: "saved_source_artifact",
-            url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3ioAAAAASUVORK5CYII=",
-            sha256: "a".repeat(64),
-          },
-          attemptId: "image_deadline_attempt",
-          evidence: {
-            url,
-            jobId: "image_deadline",
-            machineId: "image_fixture_machine",
-            capturedAt: at,
-            source: "simulation",
-            completionCredible: false,
-            result: "review",
-            reason: "Saved image result is awaiting inspection",
-          },
-        }
-      : {
-          artifact: {
-            id: "deadline_original_artifact",
-            url,
-            sha256: "a".repeat(64),
-          },
-        }),
+    artifact: { id: "deadline_original_artifact", url, sha256: "a".repeat(64) },
   };
   const state = {
     job,
@@ -124,7 +96,6 @@ async function fixture(page: Page, kind: "result" | "preview") {
         body: "No mutation is allowed in the native-image fixture",
       });
     }
-    if (kind === "result" && path === url) return holdImage(route);
     const data: Record<string, unknown> = {
       "/api/health": {
         mode: "simulation",
@@ -144,9 +115,7 @@ async function fixture(page: Page, kind: "result" | "preview") {
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect.poll(() => state.imageRequests.length).toBe(1);
-  const surface = page.locator(
-    kind === "result" ? ".result-image" : ".preview-surface",
-  );
+  const surface = page.locator(".preview-surface");
   await expect(surface).toHaveAttribute("aria-busy", "true");
   const refresh = async () => {
     const response = page.waitForResponse(
@@ -168,7 +137,7 @@ async function fixture(page: Page, kind: "result" | "preview") {
   };
 }
 
-for (const kind of ["result", "preview"] as const)
+for (const kind of ["preview"] as const)
   for (const recovery of ["retry", "new context"] as const)
     test(`${kind} native image timeout permits ${recovery} and ignores the late expired read (offline fixture)`, async ({
       page,
@@ -185,10 +154,7 @@ for (const kind of ["result", "preview"] as const)
         await expect(f.surface).not.toHaveAttribute("aria-busy", "true");
         await expect(f.surface).toContainText("did not finish loading");
         const retry = f.surface.getByRole("button", {
-          name:
-            kind === "result"
-              ? "Retry result image"
-              : "Retry production preview",
+          name: "Retry production preview",
           exact: true,
         });
         await expect(retry).toBeVisible();
@@ -204,18 +170,12 @@ for (const kind of ["result", "preview"] as const)
           await expect(retry).toHaveAttribute("aria-disabled", "true");
           await retry.press("Enter");
         } else {
-          if (kind === "result") {
-            f.state.job.evidence.capturedAt = "2026-10-23T10:31:00.000Z";
-            f.state.job.evidence.reason =
-              "A replacement captured frame is loading";
-          } else {
-            f.state.job.artifact = {
-              id: "deadline_replacement_artifact",
-              url: "/fixture-image-deadline-current.png",
-              sha256: "b".repeat(64),
-            };
-            f.state.job.specVersion++;
-          }
+          f.state.job.artifact = {
+            id: "deadline_replacement_artifact",
+            url: "/fixture-image-deadline-current.png",
+            sha256: "b".repeat(64),
+          };
+          f.state.job.specVersion++;
           f.state.job.version++;
           f.state.revision++;
           await f.refresh();
@@ -252,10 +212,7 @@ for (const kind of ["result", "preview"] as const)
               exact: true,
             }),
           ).toBeEnabled();
-        if (recovery === "retry")
-          await expect(
-            kind === "result" ? f.surface.getByRole("link") : image,
-          ).toBeFocused();
+        if (recovery === "retry") await expect(image).toBeFocused();
         await page.clock.fastForward(30_001); // Settled attempts have no live deadline.
         await expect(image).toBeVisible();
         await expect(f.surface).not.toContainText("did not finish loading");

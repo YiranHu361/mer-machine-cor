@@ -15,7 +15,9 @@ export interface Publisher {
   publish(type: string, data: Record<string, unknown>): void;
   flush(): Promise<void>;
 }
-type Send = (events: { type: string; ts: string; data: unknown }[]) => Promise<unknown>;
+type Send = (
+  events: { type: string; ts: string; data: unknown }[],
+) => Promise<unknown>;
 
 export class ConvexPublisher implements Publisher {
   private queue: { type: string; ts: string; data: unknown }[] = [];
@@ -111,8 +113,9 @@ export function jobState(j: Job) {
     case "running":
       return "running";
     case "verifying":
+      return "running";
     case "needs_review":
-      return "verifying";
+      return "needs_review";
     case "produced":
       return "done";
     case "failed":
@@ -213,7 +216,10 @@ export function mirrorState(
         const data = planEvent(o);
         const prevVersion = before ? JSON.parse(before).version : undefined;
         const type =
-          prevVersion && data.version && data.version > prevVersion && o.makeIntent
+          prevVersion &&
+          data.version &&
+          data.version > prevVersion &&
+          o.makeIntent
             ? "plan.replanned"
             : ["proposed", "approved"].includes(o.status)
               ? `plan.${o.status}`

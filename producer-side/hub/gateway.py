@@ -1,6 +1,6 @@
 """Node gateway: the producer's part of the hub (design doc, Ownership).
 
-Owns /ws/node, heartbeats, job dispatch and POST /nodes/{machine_id}/frames.
+Owns /ws/node, heartbeats and job dispatch.
 The consumer's hub core mounts it and talks to it through three calls plus events:
 
     from hub.gateway import gateway
@@ -17,12 +17,10 @@ import asyncio
 import inspect
 import logging
 import time
-import uuid
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from node.protocol import (
     HEARTBEAT,
@@ -54,14 +52,12 @@ class NodeConn:
 
 
 class Gateway:
-    def __init__(self, frames_dir: Path = Path(".data/frames")):
+    def __init__(self):
         self.nodes: dict[str, NodeConn] = {}
-        self.frames_dir = frames_dir
         self._subs: list[EventHandler] = []
         self._watchdog: asyncio.Task | None = None
         self.router = APIRouter()
         self.router.add_api_websocket_route("/ws/node", self._ws_node)
-        self.router.add_api_route("/nodes/{machine_id}/frames", self._upload_frame, methods=["POST"])
 
     # ---- consumer-facing API ----------------------------------------------
 
@@ -119,7 +115,7 @@ class Gateway:
 
     def _job_update(self, conn: NodeConn, job_id: str, **changes: Any) -> dict[str, Any]:
         job = conn.jobs.setdefault(job_id, {"job_id": job_id, "machine_id": conn.manifest["machine_id"]})
-        job.update({k: v for k, v in changes.items() if v is not None or k == "verification"})
+        job.update({k: v for k, v in changes.items() if v is not None})
         return dict(job)
 
     async def _mark_offline(self, conn: NodeConn, reason: str) -> None:
@@ -205,43 +201,15 @@ class Gateway:
             await self._emit("job.updated", self._job_update(
                 conn, d["job_id"], state=d.get("state"), progress=d.get("progress"), eta_s=d.get("eta_s")))
         elif type_ == JOB_RESULT:
-            v = d.get("verification")
-            if not d.get("ok") or (v and v.get("pass") is False):
-                job = self._job_update(conn, d["job_id"], state="failed", verification=v,
-                                       photo_url=d.get("photo_url"), error=d.get("error"))
-                await self._emit("job.failed", job)
-            elif v and v.get("pass") is True:
-                job = self._job_update(conn, d["job_id"], state="done", progress=1.0, verification=v,
-                                       photo_url=d.get("photo_url"))
+            if d.get("ok") is True:
+                job = self._job_update(conn, d["job_id"], state="done", progress=1.0)
                 await self._emit("job.done", job)
             else:
-                # Made, but nobody has checked it yet: wait for "Approve manually" on the dashboard.
-                job = self._job_update(conn, d["job_id"], state="verifying", progress=1.0, verification=v,
-                                       photo_url=d.get("photo_url"))
-                await self._emit("job.updated", job)
+                job = self._job_update(conn, d["job_id"], state="failed", error=d.get("error"))
+                await self._emit("job.failed", job)
         else:
             log.debug("%s sent unknown type %s", mid, type_)
 
-    async def approve_manually(self, machine_id: str, job_id: str, reason: str | None = None) -> dict[str, Any]:
-        """Owner dashboard's labeled "Approve manually" button (or the consumer's no-camera acceptance)."""
-        conn = self.nodes.get(machine_id)
-        if not conn or job_id not in conn.jobs:
-            raise LookupError(job_id)
-        job = self._job_update(conn, job_id, state="done",
-                               verification={"pass": True, "reason": reason or "approved manually by owner", "manual": True})
-        await self._emit("job.done", job)
-        return job
-
-    async def _upload_frame(self, machine_id: str, file: UploadFile = File(...), job_id: str = Form(...)) -> dict:
-        if machine_id not in self.nodes:
-            raise HTTPException(404, "unknown machine")
-        data = await file.read()
-        if len(data) > 10 * 1024 * 1024:
-            raise HTTPException(413, "frame too large")
-        self.frames_dir.mkdir(parents=True, exist_ok=True)
-        name = f"{machine_id}_{job_id}_{uuid.uuid4().hex[:6]}.jpg"
-        (self.frames_dir / name).write_bytes(data)
-        return {"photo_url": f"/frames/{name}"}
 
 
 gateway = Gateway()

@@ -29,9 +29,9 @@ def test_progress_is_held_to_one_every_two_seconds_and_a_state_change_supersedes
         p.handle("job.updated", {**JOB, "state": "running", "progress": progress})
     assert [e["data"]["progress"] for e in p.queue] == [0.1]
     assert p.held["job_dev_0001"]["data"]["progress"] == 0.3
-    p.handle("job.updated", {**JOB, "state": "verifying", "progress": 1.0})
+    p.handle("job.updated", {**JOB, "state": "done", "progress": 1.0})
     assert p.held == {}
-    assert [e["data"]["state"] for e in p.queue] == ["running", "verifying"]
+    assert [e["data"]["state"] for e in p.queue] == ["running", "done"]
 
 
 def test_flush_sends_one_publish_batch_and_keeps_events_after_a_failure():

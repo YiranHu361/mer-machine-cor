@@ -2,7 +2,9 @@
 
 Checked against official upstream documentation on October 22, 2026. This document distinguishes implemented adapters, local integration evidence, and missing live prerequisites. An adapter being configured is never reported as a successful live transaction or discovery.
 
-## Verified locally
+Current workflow: machine completion finishes production directly; Claude handles intake, design and machine identification.
+
+## Historical local checks
 
 October 23 overnight follow-up: the payment/Claude fixture suite now passes
 **25 tests**, with typecheck passing. Added cases preserve a known settlement
@@ -115,7 +117,7 @@ For Agentverse/ASI:One, additionally set `FABRARY_AGENT_SEED`, `FABRARY_AGENT_AL
 
 Sources: [official MCP adapter README](https://github.com/fetchai/uAgents/blob/main/python/uagents-adapter/README.md), [official adapter implementation](https://github.com/fetchai/uAgents/blob/main/python/uagents-adapter/src/uagents_adapter/mcp/adapter.py), [ASI:One Chat Protocol guide](https://uagents.fetch.ai/docs/examples/asi-1), [FastMCP in-process client](https://gofastmcp.com/clients/client).
 
-## Claude intake and visible-output checks
+## Claude image intake and design
 
 `integrations/src/claude.ts` uses the official HTTPS Messages API directly, with `x-api-key` and `anthropic-version: 2023-06-01`, and labeled base64 image blocks. No SDK dependency or remote image-fetch permission is needed. `ANTHROPIC_API_KEY` is required; `FABRARY_CLAUDE_MODEL` overrides the default **claude-sonnet-5-5**, the current Sonnet model documented on October 22, 2026. The request omits temperature and forced tools, which that model rejects.
 
@@ -123,9 +125,8 @@ Sources: [official MCP adapter README](https://github.com/fetchai/uAgents/blob/m
 
 `readMachine({description?,photo?})` reads the make and model from a photo of a machine, its label or its box. It only transcribes what is legible (brand, model designation, the label text relied on, whether it was readable); it never sees the supported list and never picks a model. `server/machine-identification.ts` then matches brand and model with fixed rules: exact supported models are selected, near relatives (plain M02, mini Link, full-size A1) ask for confirmation, and other models are named as unsupported. Text on paper or film packaging that lists compatible models is ignored. Typed names are matched locally without a Claude call; a photo that contradicts the typed name selects nothing. Photos are shrunk to JPEG in the browser, checked by their bytes and limited to 4 MiB. One live call on October 24, 2026 read a generated M02 Pro label correctly (claude-sonnet-5-5); no real label photo has been read yet.
 
-`verifyOutput({approvedArtifact,resultFrame,baselineFrame?,capturedAt,completionCredible,jobId,machineId,expected?})` requires credible machine completion, an independent result image and a frame no more than two minutes old. Invalid/future timestamps, identical artifact/result bytes, unavailable API, malformed results and contradictory pass observations become **review**. A pass also requires explicit usable-frame, visible-output and artwork-match observations. Claude is only a coarse visible-output check; it cannot establish dimensions, structural integrity, film development, pickup or delivery. The backend separately binds capture time, machine/job/attempt and source.
 
-`npm --prefix integrations run test:claude:live` is opt-in with `FABRARY_RUN_LIVE_CLAUDE=1`, `ANTHROPIC_API_KEY`, `FABRARY_CLAUDE_ARTIFACT_PATH`, `FABRARY_CLAUDE_RESULT_PATH`, `FABRARY_CLAUDE_CAPTURED_AT` and `FABRARY_CLAUDE_COMPLETION_CREDIBLE=1`. Missing prerequisites print **BLOCKED**, exit 2 and make no API call. The result is an observed model response, not proof of a hardware loop. **No live Claude response was obtained in this session.**
+`npm --prefix integrations run test:claude:live` is opt-in with `FABRARY_RUN_LIVE_CLAUDE=1`, `ANTHROPIC_API_KEY`, `FABRARY_CLAUDE_ARTIFACT_PATH`. Missing prerequisites print **BLOCKED**, exit 2 and make no API call. The result is an observed model response, not proof of a hardware loop. **No live Claude response was obtained in this session.**
 
 Sources: [official current Sonnet model](https://platform.claude.com/docs/en/models/sonnet-5-5/overview), [vision and image blocks](https://platform.claude.com/docs/en/build-with-claude/vision), [Messages API](https://platform.claude.com/docs/en/api/messages).
 

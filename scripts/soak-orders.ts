@@ -67,17 +67,6 @@ class ReceivingEnd implements NodeBoundary {
         completion_credible: true,
       };
     }
-    if (tool === "camera_snapshot")
-      return {
-        frame_url: "http://127.0.0.1:8788/frames/soak.png",
-        captured_at: new Date(Date.now() + 1).toISOString(),
-        completion_credible: input.phase === "result",
-        machine_id: input.machine_id,
-        job_id: input.job_id,
-        attempt_id: input.attempt_id,
-        source: machine?.mode === "simulation" ? "simulation" : "camera",
-        observation: "visible",
-      };
     if (tool === "get_status")
       return {
         machine_id: input.machine_id,
@@ -88,9 +77,6 @@ class ReceivingEnd implements NodeBoundary {
         completion_credible: true,
       };
     return { calibrated: true };
-  }
-  async fetchFrame() {
-    return Buffer.from("frame");
   }
 }
 

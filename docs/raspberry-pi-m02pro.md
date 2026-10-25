@@ -22,7 +22,7 @@ FABRARY_MODE=hardware
 
 ### On the Pi (once)
 
-Raspberry Pi OS 64-bit, with Bluetooth on, the M02 Pro charged and a camera (Camera Module or USB webcam) aimed at where stickers come out:
+Raspberry Pi OS 64-bit, with Bluetooth on, the M02 Pro charged:
 
 ```bash
 sudo apt update && sudo apt install -y bluez && curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -38,7 +38,6 @@ For a USB webcam, also `sudo apt install -y fswebcam`. Open a new shell afterwar
    - **Check this computer** runs on its own: Linux, Bluetooth serial support, `bluetoothctl` and `sdptool`.
    - **Allow a short Bluetooth search**: turn the printer on first. It looks for a device named M02; if it finds more than one, it asks you to turn the others off.
    - **Allow pairing**: pairs, trusts, and reads the printer's serial channel.
-   - **Take a test photo**: tries the Pi camera, then a USB webcam, and keeps the one that works.
    - **Confirm it is ready**: you confirm paper is loaded and the output area is clear.
    - The connector then saves the settings privately on the Pi and the workshop registers the machine.
 4. Calibrate: **Machine checks → Physical calibration job & inspection** (step 10 below explains it), then list and resume the machine.
@@ -60,7 +59,7 @@ Fabrary app  127.0.0.1:4318  ◄── SSH tunnel ──►  127.0.0.1:4318 (ass
              127.0.0.1:8789  ◄── SSH tunnel ──►  Fabrary node 127.0.0.1:8788
 SpacetimeDB  127.0.0.1:3002                       │ Bluetooth (RFCOMM)
 Local node   127.0.0.1:8788 (simulated others)    ▼
-                                                 Phomemo M02 Pro + camera
+                                                 Phomemo M02 Pro
 ```
 
 The app and node only listen on `127.0.0.1`. One SSH connection makes each side reachable from the other on localhost: the Mac reaches the Pi's node on port 8789, and the Pi downloads approved print files from the Mac's port 4318. Nothing is exposed on your network.
@@ -69,7 +68,6 @@ The app and node only listen on `127.0.0.1`. One SSH connection makes each side 
 
 - A Raspberry Pi with Bluetooth (Pi 3 B+, 4, 5 or Zero 2 W) running **Raspberry Pi OS 64-bit** (Bookworm or later), with SSH enabled and on the same network as your Mac.
 - The M02 Pro, charged, with a sticker roll loaded. Note the roll width: Fabrary supports 15, 25 and 53 mm.
-- A camera on the Pi pointed at where stickers come out: a Raspberry Pi Camera Module or a USB webcam. Fabrary needs a fresh photo of every result and of every calibration print.
 - Your Pi's login, written below as `pi@raspberrypi.local`. Replace it with your own user and host name (or IP address) everywhere.
 
 ### 1. Prepare the Pi
@@ -78,12 +76,6 @@ On the Pi:
 
 ```bash
 sudo apt update && sudo apt install -y bluez rsync
-```
-
-For a USB webcam, also install `fswebcam`:
-
-```bash
-sudo apt install -y fswebcam
 ```
 
 Install uv (the Python tool Fabrary uses), then open a new shell:
@@ -123,25 +115,7 @@ sdptool browse XX:XX:XX:XX:XX:XX
 
 Look for the **Serial Port** service and note its `Channel:` number. Fabrary never scans for this; you put it in the config file below.
 
-### 3. Check the camera
-
-The camera command must write exactly one image to standard output within 10 seconds (at most 10 MB). Try the one that matches your camera and confirm the result is an image:
-
-Camera Module:
-
-```bash
-rpicam-still -n -t 1000 --width 1280 --height 960 -e jpg -o - > /tmp/frame.jpg && file /tmp/frame.jpg
-```
-
-USB webcam:
-
-```bash
-fswebcam -q --no-banner -r 1280x720 --jpeg 90 - > /tmp/frame.jpg && file /tmp/frame.jpg
-```
-
-`file` should report `JPEG image data`. Open `/tmp/frame.jpg` and adjust the camera until the sticker output area is clearly in view.
-
-### 4. Copy the node to the Pi
+### 3. Copy the node to the Pi
 
 On the Mac, from the Fabrary folder:
 
@@ -149,7 +123,7 @@ On the Mac, from the Fabrary folder:
 cd /path/to/fabrary && rsync -a --exclude .venv --exclude .pytest_cache --exclude __pycache__ node/ pi@raspberrypi.local:~/fabrary/node/
 ```
 
-### 5. Install the node with the Pi's own Python
+### 4. Install the node with the Pi's own Python
 
 The repository pins a Python version that uv would download on its own, and that download may not include Bluetooth socket support. Use the Pi's system Python instead.
 
@@ -169,7 +143,7 @@ It must print `True True`. If not, see [Troubleshooting](#troubleshooting).
 
 The optional `hardware` extra is only for the Instax and Bambu adapters; the M02 Pro does not need it.
 
-### 6. Describe the printer: `machines.json`
+### 5. Describe the printer: `machines.json`
 
 On the Pi, create the private data folder:
 
@@ -190,8 +164,7 @@ Create `~/fabrary/.data/machines.json` with only the printer in it:
       "ownerReady": true,
       "bluetoothAddress": "XX:XX:XX:XX:XX:XX",
       "rfcommChannel": 1,
-      "maxJobSeconds": 120,
-      "cameraCommand": ["rpicam-still", "-n", "-t", "1000", "--width", "1280", "--height", "960", "-e", "jpg", "-o", "-"]
+      "maxJobSeconds": 120
     }
   ]
 }
@@ -207,11 +180,10 @@ Create `~/fabrary/.data/machines.json` with only the printer in it:
 | `bluetoothAddress` | The address from step 2. |
 | `rfcommChannel` | The `Channel:` number from step 2, as a number without quotes. |
 | `maxJobSeconds` | Longest allowed print. 120 is a safe start. |
-| `cameraCommand` | Your working command from step 3, split into a list of words. For a USB webcam: `["fswebcam", "-q", "--no-banner", "-r", "1280x720", "--jpeg", "90", "-"]`. |
 
-Changing the address, channel, model or camera command later invalidates calibration, and you will need to calibrate again. Changing `ownerReady` does not.
+Changing the address, channel or model later invalidates calibration, and you will need to calibrate again. Changing `ownerReady` does not.
 
-### 7. Give the Pi the node's credentials
+### 6. Give the Pi the node's credentials
 
 The Pi node must use the same node key and signing secret as the app on your Mac.
 
@@ -242,7 +214,7 @@ UV_PYTHON=/usr/bin/python3
 | Setting | Why |
 | --- | --- |
 | `FABRARY_NODE_HOST`, `FABRARY_NODE_PORT` | The node listens only on the Pi's localhost, port 8788. |
-| `FABRARY_NODE_URL` | The address the **Mac** uses to reach this node through the tunnel. Camera-photo links are built from it, and the app only accepts photos from the address it calls. |
+| `FABRARY_NODE_URL` | The address the **Mac** uses to reach this node through the tunnel. |
 | `FABRARY_ASSET_ORIGIN` | Where the node downloads approved print files. It must match the app exactly; the tunnel makes the Mac's port 4318 appear on the Pi. |
 | `FABRARY_NODE_DATA` | The node's job journal. Never delete it to clear a stuck print. |
 | `FABRARY_MACHINES_FILE` | The file from step 6. |
@@ -254,7 +226,7 @@ Lock both files down:
 chmod 600 ~/fabrary/.data/node.env ~/fabrary/.data/node-secrets.env ~/fabrary/.data/machines.json
 ```
 
-### 8. Point the Mac app at the Pi
+### 7. Point the Mac app at the Pi
 
 In the Fabrary folder on the Mac, edit `.env`:
 
@@ -265,7 +237,7 @@ Leave `FABRARY_PAYMENT_MODE=mock`.
 
 In hardware mode the simulated photo and 3D machines stop taking orders, and the browser test suite refuses to run. Switch back before running tests ([below](#back-to-simulation)).
 
-### 9. Start everything
+### 8. Start everything
 
 1. **Database (Mac).** If it isn't already running: `npm run spacetime`.
 2. **Tunnel (Mac).** In its own terminal tab:
@@ -291,7 +263,7 @@ In hardware mode the simulated photo and 3D machines stop taking orders, and the
 
    `401` is the expected answer: the Pi node is reachable and correctly refusing a request without its key. `000` means the tunnel or node isn't running.
 
-### 10. Register and calibrate in the provider workspace
+### 9. Register and calibrate in the provider workspace
 
 Open http://127.0.0.1:4318/owner and sign in.
 
@@ -302,13 +274,13 @@ Open http://127.0.0.1:4318/owner and sign in.
 5. **Calibrate.** **Machine checks** → **Physical calibration job & inspection**:
    - Choose a simple high-contrast test image as **Calibration artwork**, and set the width and height in mm (width no wider than your roll).
    - Tick **The device is supervised, the output area is clear and I am ready to start this physical calibration.** and click **Start physical calibration**. The Pi sends one print.
-   - The attempt ends as uncertain, because the printer can't confirm completion. Look at the sticker and the camera photo shown in Fabrary.
+   - The attempt completes when the adapter reports success. If the machine reports an uncertain result, reconcile that attempt without printing it again.
    - If it is good: tick **I inspected this device and the output state for this calibration attempt.** and write what you saw in **Calibration inspection reason** (at least 10 characters, for example "Full image printed, edges sharp, 53 mm wide"). Under **Resolve an uncertain calibration attempt**, choose **Completed · output observed** and **Record observed outcome**, then click **Confirm usable calibration**.
    - If it is missing or wrong: use **Reject calibration output**, fix the cause, and prepare a new supervised calibration. Nothing reprints on its own.
 6. **List it.** **Settings** → tick **List this machine for requester discovery** → **Save machine settings**.
 7. **Resume it.** **Machine checks** → tick **I inspected the output area, loaded media and cleared the machine.** → **Resume machine**.
 
-### 11. First real order
+### 10. First real order
 
 On the requester page, upload a picture. The recommendation shows the Sticker counter with "Hardware · owner readiness required". Preview, approve, pay (mock) and start production as usual.
 
@@ -329,13 +301,12 @@ When the print finishes, the order goes to **Needs a review**, because the print
 | The tunnel prints `remote port forwarding failed` or `Address already in use` | Something already uses port 4318 on the Pi or 8789 on the Mac. Stop it, or pick other ports and change them everywhere they appear in this guide. |
 | Registration says the node did not provide capabilities | The tunnel or the Pi node isn't running. Repeat the check in step 9.5. |
 | Registration says the node must be in the selected mode | `machines.json` must say `"mode": "hardware"` and you must choose **Hardware** in the form. |
-| Camera timeout or unusable image | The command must print one JPEG or PNG to standard output in under 10 seconds. Re-test step 3. |
 | Nothing prints, or the print is cut off | Check the channel, that the printer is on and paired, and the roll width. Record the failed attempt; never delete the node journal to retry. |
 
 ## Security notes
 
 - Keep `.data/` private on both machines. It holds the node key, signing secret and owner code, and `.gitignore` already excludes it.
 - The node and app never listen on your network; the encrypted SSH tunnel is the only path between them.
-- Every request to the node needs its key, and every print or capture needs a short-lived token signed for that exact order and file.
+- Every request to the node needs its key, and every print needs a short-lived token signed for that exact order and file.
 
 See [node-integration.md](node-integration.md) for the full node contract and recovery rules.

@@ -47,7 +47,6 @@ class Job(BaseModel):
     progress: float = 0.0
     eta_s: int | None = None
     escrow: str | None = None
-    verification: dict[str, Any] | None = None
 
 
 def now_iso() -> str:

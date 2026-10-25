@@ -37,7 +37,7 @@ async def main():
         registered=await owner.post('/api/owner/machines',json={'model':'instax-mini-link-3','mode':'simulation'});registered.raise_for_status()
         calibrated=await owner.post('/api/owner/machines/instax_01/calibrate',json={'inspected':True});calibrated.raise_for_status()
         resumed=await owner.patch('/api/owner/machines/instax_01',json={'listed':True,'paused':False,'inspected':True,'cleared':True,'hours':{'start':0,'end':24}});resumed.raise_for_status()
-        # A small bundled test PNG is just fixture data, not claimed camera evidence.
+        # A small bundled test PNG is just fixture data, not a physical output.
         import base64
         png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jv3kAAAAASUVORK5CYII=')
         upload=await http.post('/api/uploads',files=[('images',('fixture.png',png,'image/png'))]);upload.raise_for_status();asset=upload.json()['assets'][0]

@@ -1,5 +1,5 @@
 """Connector setup and relay, with fake commands and transports: no Bluetooth,
-camera or network I/O is performed."""
+device or network I/O is performed."""
 import base64
 import io
 import json
@@ -46,11 +46,6 @@ class FakeCommands:
         return 0, "Pairing successful"
 
 
-async def fake_capture(config):
-    assert config["cameraCommand"][0] == "rpicam-still"
-    return jpeg()
-
-
 def test_parsers_read_only_matching_devices_and_the_serial_channel():
     assert parse_devices("Device AA:BB:CC:DD:EE:01 M02 Pro\nDevice 11:22:33:44:55:66 Speaker", r"\bM0?2") == [
         ("AA:BB:CC:DD:EE:01", "M02 Pro")]
@@ -67,7 +62,7 @@ async def test_simulation_steps_wait_for_each_allowance_and_write_private_config
     assert checks["pair"]["status"] == "pending"
     assert agent.ready is False
     consents = {}
-    for step in ("search", "pair", "camera", "ready"):
+    for step in ("search", "pair", "ready"):
         consents[step] = f"2026-10-24T00:00:0{len(consents)}Z"
         await agent.advance(consents)
     assert agent.ready is True
@@ -76,20 +71,19 @@ async def test_simulation_steps_wait_for_each_allowance_and_write_private_config
     assert stat.S_IMODE((tmp_path / "machines.json").stat().st_mode) == 0o600
 
 
-async def test_hardware_m02_setup_finds_pairs_reads_channel_and_tests_the_camera(tmp_path):
+async def test_hardware_m02_setup_finds_pairs_reads_channel_without_a_capture_step(tmp_path):
     commands = FakeCommands()
     agent = SetupAgent({**PHOMEMO, "mode": "hardware"}, tmp_path, commands=commands,
-                       capture=fake_capture, platform="linux", bluetooth=True)
+                       platform="linux", bluetooth=True)
     consents = {}
     await agent.advance(consents)
-    for step in ("search", "pair", "camera", "ready"):
+    for step in ("search", "pair", "ready"):
         consents[step] = f"t-{step}"
         await agent.advance(consents)
     assert agent.ready is True
     machine = json.loads((tmp_path / "machines.json").read_text())["machines"][0]
     assert machine["bluetoothAddress"] == "AA:BB:CC:DD:EE:01"
     assert machine["rfcommChannel"] == 2
-    assert machine["cameraCommand"][0] == "rpicam-still"
     assert machine["mode"] == "hardware" and machine["paired"] is True and machine["ownerReady"] is True
     # Pairing touched only the one matching printer; nothing ran before its allowance.
     assert ["bluetoothctl", "pair", "AA:BB:CC:DD:EE:01"] in commands.calls
@@ -98,7 +92,7 @@ async def test_hardware_m02_setup_finds_pairs_reads_channel_and_tests_the_camera
 async def test_a_step_never_runs_without_its_allowance_and_retries_need_a_new_one(tmp_path):
     commands = FakeCommands(devices="Device AA:BB:CC:DD:EE:01 M02 Pro\nDevice AA:BB:CC:DD:EE:02 M02 Pro\n")
     agent = SetupAgent({**PHOMEMO, "mode": "hardware"}, tmp_path, commands=commands,
-                       capture=fake_capture, platform="linux", bluetooth=True)
+                       platform="linux", bluetooth=True)
     await agent.advance({})
     assert commands.calls == []
     await agent.advance({"search": "first"})
@@ -168,7 +162,7 @@ async def test_relay_forwards_allowed_requests_to_the_local_node_and_refuses_oth
         return httpx.Response(200, json={"accepted": True})
 
     agent = SetupAgent({**PHOMEMO, "mode": "simulation"}, tmp_path)
-    for step in ("search", "pair", "camera", "ready"):
+    for step in ("search", "pair", "ready"):
         await agent.advance({step: "x"})
     credentials = {"connectorId": "connector_1", "connectorKey": "k" * 64, "tokenSecret": "s" * 64,
                    "assetOrigin": "http://127.0.0.1:4318/assets", "nodeOrigin": "http://connector.invalid",

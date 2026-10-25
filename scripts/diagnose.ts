@@ -33,7 +33,7 @@ console.log(
         missing: configuredDevices
           ? []
           : [
-              "Private team-device config, paired links, media, cameras and explicit owner readiness",
+              "Private team-device config, paired links, media and explicit owner readiness",
             ],
       },
       notes:

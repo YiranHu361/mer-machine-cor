@@ -201,8 +201,6 @@ export interface Job {
   quote?: Quote;
   attemptId?: string;
   deviceCompletedAt?: string;
-  evidence?: any;
-  baseline?: any;
   pickup?: { code: string; expiresAt: string; redeemedAt?: string };
   pickupRenewals?: {
     key: string;

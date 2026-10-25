@@ -183,7 +183,7 @@ async def test_legacy_replay_still_requires_exact_authenticated_content_expiry_a
         for req, scope in ((tampered, "dispatch"),
                            (request_for(data, expires=int(time.time())-1), "dispatch"),
                            (request_for(data, parameters={**PARAMETERS, "quantity": 2}), "dispatch"),
-                           (request_for(data, scope="camera"), "dispatch"),
+                           (request_for(data, scope="abort"), "dispatch"),
                            (request_for(data, scope="calibration"), "calibration")):
             with pytest.raises(NodeError):
                 await service.run_job(**req, _scope=scope)
@@ -223,32 +223,23 @@ async def test_matching_durable_attempt_found_after_fetch_remains_read_only_acro
 
 
 @pytest.mark.asyncio
-async def test_camera_and_abort_require_current_signed_mode_before_any_new_side_effect(tmp_path, monkeypatch):
+async def test_abort_requires_current_signed_mode_before_any_new_side_effect(tmp_path, monkeypatch):
     service, fake, fetched, data = await node(tmp_path, "hardware")
-    captures = []
-    async def camera(config):
-        captures.append(config["id"])
-        return data
-    monkeypatch.setattr(service_module, "capture_camera", camera)
     try:
         req = request_for(data, "hardware")
         service.journal.accept(req, "pass", scope="dispatch")
         service.journal.update(req["attempt_id"], "running")
         before = service.journal.get(req["attempt_id"])
         context = {key: req[key] for key in ("machine_id", "job_id", "attempt_id")}
-        for scope in ("camera", "abort"):
+        for scope in ("abort",):
             for value in (MISSING, None, "simulation"):
                 payload = {**context, "scope": scope, "expires_at": int(time.time())+300}
                 if value is not MISSING:
                     payload["expected_mode"] = value
                 with pytest.raises(NodeError) as caught:
-                    if scope == "camera":
-                        await service.camera_snapshot(**context, token=sign_token(payload, KEY), phase="baseline")
-                    else:
-                        await service.abort(**context, token=sign_token(payload, KEY))
+                    await service.abort(**context, token=sign_token(payload, KEY))
                 assert caught.value.status == 403
                 assert "mode" in caught.value.message.lower()
-                assert captures == []
                 assert fake.executions == fake.stops == 0
                 assert service.journal.get(req["attempt_id"]) == before
     finally:
@@ -256,10 +247,10 @@ async def test_camera_and_abort_require_current_signed_mode_before_any_new_side_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('operation', ['baseline', 'result', 'abort'])
-async def test_restarted_old_attempt_cannot_capture_or_stop_replacement_same_mode(tmp_path, monkeypatch, operation):
+@pytest.mark.parametrize('operation', ['abort'])
+async def test_restarted_old_attempt_cannot_stop_replacement_same_mode(tmp_path, monkeypatch, operation):
     original = {'id': MID, 'model': 'Phomemo M02Pro', 'mode': 'hardware', 'paired': True,
-                'bluetoothAddress': 'old-device', 'cameraUrl': 'http://fake.invalid/old-camera'}
+                'bluetoothAddress': 'old-device'}
     service = NodeService(key=KEY, data_dir=tmp_path, machines=[original])
     data = artifact()
     request = request_for(data, 'hardware')
@@ -268,16 +259,11 @@ async def test_restarted_old_attempt_cannot_capture_or_stop_replacement_same_mod
     service.journal.update(request['attempt_id'], 'running')
     await service.close()
     service = NodeService(key=KEY, data_dir=tmp_path, machines=[dict(original,
-        bluetoothAddress='replacement-device', cameraUrl='http://fake.invalid/replacement-camera')])
+        bluetoothAddress='replacement-device')])
     fake = NoIoAdapter(service.adapters[MID].version)
     service.adapters[MID] = fake
-    captures = []
-    async def capture(config):
-        captures.append(config['cameraUrl'])
-        return data
-    monkeypatch.setattr(service_module, 'capture_camera', capture)
     context = {key: request[key] for key in ('machine_id', 'job_id', 'attempt_id')}
-    token = sign_token({**context, 'scope': 'abort' if operation == 'abort' else 'camera',
+    token = sign_token({**context, 'scope': 'abort',
                        'expected_mode': 'hardware', 'expires_at': int(time.time())+300}, KEY)
     try:
         before = service.journal.get(request['attempt_id'])
@@ -285,56 +271,11 @@ async def test_restarted_old_attempt_cannot_capture_or_stop_replacement_same_mod
         assert before['configuration_binding'] == old_binding
         assert old_binding != service.journal.machine(MID)['configurationBinding']
         with pytest.raises(NodeError) as caught:
-            if operation == 'abort':
-                await service.abort(**context, token=token)
-            else:
-                await service.camera_snapshot(**context, token=token, phase=operation)
+            await service.abort(**context, token=token)
         assert caught.value.status == 403
-        assert captures == []
         assert fake.executions == fake.stops == 0
         assert service.journal.get(request['attempt_id']) == before
-        assert service.journal.db.execute('SELECT count(*) FROM frames').fetchone()[0] == 0
     finally:
-        await service.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('movement', ['mode', 'configuration'])
-async def test_camera_rechecks_context_after_capture_before_publishing_old_attempt_metadata(tmp_path, monkeypatch, movement):
-    service, fake, fetched, data = await node(tmp_path, 'hardware')
-    request = request_for(data, 'hardware')
-    binding = service.journal.machine(MID)['configurationBinding']
-    service.journal.accept(request, 'pass', configuration_binding=binding)
-    service.journal.update(request['attempt_id'], 'running')
-    service.journal.update(request['attempt_id'], 'completed', credible=True)
-    entered, release = asyncio.Event(), asyncio.Event()
-    async def capture(config):
-        entered.set()
-        await release.wait()
-        return data
-    monkeypatch.setattr(service_module, 'capture_camera', capture)
-    context = {key: request[key] for key in ('machine_id', 'job_id', 'attempt_id')}
-    token = sign_token({**context, 'scope': 'camera', 'expected_mode': 'hardware',
-                       'expires_at': int(time.time())+300}, KEY)
-    pending = asyncio.create_task(service.camera_snapshot(**context, token=token))
-    try:
-        await entered.wait()
-        if movement == 'mode':
-            service.machines[MID] = dict(service.machines[MID], mode='simulation')
-        else:
-            state = service.journal.machine(MID)
-            state['configurationBinding'] = 'f'*64
-            service.journal.save_machine(MID, state)
-        release.set()
-        with pytest.raises(NodeError) as caught:
-            await pending
-        assert caught.value.status == 403
-        assert list(service.frames.iterdir()) == []
-        assert service.journal.db.execute('SELECT count(*) FROM frames').fetchone()[0] == 0
-        assert fake.executions == fake.stops == 0
-    finally:
-        release.set()
-        await asyncio.gather(pending, return_exceptions=True)
         await service.close()
 
 
@@ -356,53 +297,36 @@ async def test_queued_worker_cannot_start_after_private_configuration_binding_ch
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('scope', ['camera', 'abort'])
-async def test_legacy_unbound_attempt_cannot_authorize_new_capture_or_stop(tmp_path, monkeypatch, scope):
+@pytest.mark.parametrize('scope', ['abort'])
+async def test_legacy_unbound_attempt_cannot_authorize_stop(tmp_path, monkeypatch, scope):
     service, fake, fetched, data = await node(tmp_path, 'hardware')
     request = request_for(data, 'hardware')
     service.journal.accept(request, 'pass')
     service.journal.update(request['attempt_id'], 'running')
     service.journal.update(request['attempt_id'], 'uncertain')
-    captures=[]
-    async def capture(config):
-        captures.append(True)
-        return data
-    monkeypatch.setattr(service_module, 'capture_camera', capture)
     context={key:request[key] for key in ('machine_id','job_id','attempt_id')}
     token=sign_token({**context,'scope':scope,'expected_mode':'hardware','expires_at':int(time.time())+300},KEY)
     try:
         with pytest.raises(NodeError) as caught:
-            if scope=='camera': await service.camera_snapshot(**context,token=token)
-            else: await service.abort(**context,token=token)
+            await service.abort(**context,token=token)
         assert caught.value.status==403
-        assert captures==[] and fake.stops==0
         assert service.journal.get(request['attempt_id'])['status']=='uncertain'
     finally: await service.close()
 
 
 @pytest.mark.asyncio
-async def test_current_hardware_binding_allows_baseline_without_row_then_result_and_stop(tmp_path, monkeypatch):
+async def test_current_hardware_binding_allows_stop(tmp_path, monkeypatch):
     service, fake, fetched, data=await node(tmp_path,'hardware')
     request=request_for(data,'hardware')
     context={key:request[key] for key in ('machine_id','job_id','attempt_id')}
     def scoped(scope):
         return sign_token({**context,'scope':scope,'expected_mode':'hardware','expires_at':int(time.time())+300},KEY)
-    captures=[]
-    async def capture(config):
-        captures.append(True)
-        return data
-    monkeypatch.setattr(service_module,'capture_camera',capture)
     try:
-        baseline=await service.camera_snapshot(**context,token=scoped('camera'),phase='baseline')
-        assert baseline['source']=='camera' and service.journal.latest(MID) is None
         binding=service.journal.machine(MID)['configurationBinding']
         service.journal.accept(request,'pass',configuration_binding=binding)
         service.journal.update(request['attempt_id'],'running')
         stopped=await service.abort(**context,token=scoped('abort'))
         assert stopped['status']=='unknown' and fake.stops==1
-        frame=await service.camera_snapshot(**context,token=scoped('camera'))
-        assert frame['source']=='camera' and frame['attempt_id']==request['attempt_id']
-        assert len(captures)==2 and fake.executions==0
     finally: await service.close()
 
 

@@ -63,17 +63,17 @@ The requester can cancel before dispatch. Cancellation after payment but before 
 
 ### Owner flow
 
-1. Configure the node connection, credentials, pairing and camera in the private local setup. Open the provider workspace with the owner code; the browser does not ask for a node URL or claim to discover devices automatically.
+1. Configure the node connection, credentials and pairing in the private local setup. Open the provider workspace with the owner code; the browser does not ask for a node URL or claim to discover devices automatically.
 2. In **Machines → Add a machine**, confirm the supported model and simulation/hardware mode. Registration checks the app-configured connection and capabilities. Each machine shows its actual next step, with saved pairing/configuration facts under **Connection details**.
 3. Use **Settings** for loaded media, price card, hours, maximum job length, collection point and content policy. Open **Machine checks** to explicitly inspect/clear and calibrate. Physical calibration still requires supervision, a finite authorized attempt and inspection of the associated result; simulation remains labeled.
 4. List the machine and resume only after the required checks. The node accepts one authorized job at a time and enforces declared capabilities and owner limits locally. **Orders** defaults to actionable work; search, filters and pages reach the rest. Production updates automatically, while order status, evidence, payment recovery, trial measurements and history remain available through native disclosures. **Payments** shows the ledger separately.
-5. After each job, remove, label and store the output and clear the tray or bed. One deliberate checkbox attests all four completed actions, or **Record steps separately** retains individual progress. The app never infers those confirmations from a camera frame. Mark the stored item ready for pickup and resume availability separately; the next job does not wait for collection. Record handoff when its pickup code is redeemed. Enter media estimates by hand when the device cannot report them.
+5. After each job, remove, label and store the output and clear the tray or bed. One deliberate checkbox attests all four completed actions, or **Record steps separately** retains individual progress. The app never infers those confirmations from a completion report frame. Mark the stored item ready for pickup and resume availability separately; the next job does not wait for collection. Record handoff when its pickup code is redeemed. Enter media estimates by hand when the device cannot report them.
 The target is under five minutes of active setup for a supported device, after installation, pairing, credentials and media are ready. Calibration and print time are reported separately. Unfamiliar models follow a separate supervised workflow.
 
 ### Output specifications
 
 
-| Output | Requester approves | Preparation and verification boundary |
+| Output | Requester approves | Preparation and completion boundary |
 | --- | --- | --- |
 | Thermal sticker | Actual monochrome artwork, roll and printable width (15, 25 or 53 mm), dimensions, quantity | Crop, optional background removal and dither. Describe the loaded material without claiming waterproofing or durability |
 | Instax photo | Crop, orientation, the fixed Instax mini format, quantity | Prepare the JPEG the tested adapter needs; let the film develop before comparing |
@@ -86,8 +86,8 @@ Unsupported dimensions and materials are rejected before quoting, and content is
 
 ### Architecture
 
-One backend application holds modules for intake, assets, registry, matching, jobs, payments, verification and fulfillment, and each owner installs one node. Every node exposes the same five tools, so orchestration stays the same across machines while each adapter keeps its own preparation and handling steps.
-A requester moves from uploaded pictures to the production preview, quote, payment and explicit dispatch. Supporting settings and detailed states are disclosed when needed. The camera frame returns through the verifier, which decides whether the held test amount becomes payable, and fulfillment marks the item ready once the owner confirms preparation, then records collection after handoff.
+One backend application holds modules for intake, assets, registry, matching, jobs, payments, execution and fulfillment, and each owner installs one node. Every node exposes the same five tools, so orchestration stays the same across machines while each adapter keeps its own preparation and handling steps.
+A requester moves from uploaded pictures to the production preview, quote, payment and explicit dispatch. Supporting settings and detailed states are disclosed when needed. The machine completion report makes the held test amount payable, and fulfillment marks the item ready once the owner confirms preparation, then records collection after handoff.
 
 ### Components
 
@@ -108,7 +108,7 @@ SpacetimeDB subscriptions update clients, while the node connection carries comm
 
 ### Job data and approvals
 
-A job records the requester, machine, approved specification version, artifact hash, quote version and expiry, reservation, payment reference, execution attempt, evidence and fulfillment status.
+A job records the requester, machine, approved specification version, artifact hash, quote version and expiry, reservation, payment reference, execution attempt, completion status and fulfillment status.
 ```json
 {
   "job_id": "j_123",
@@ -129,7 +129,7 @@ A job records the requester, machine, approved specification version, artifact h
 
 The quote stores itemized integer minor-unit amounts, currency, payment mode, expiry and the approved specification hash. Changing the artifact, dimensions, material, quantity or price invalidates the matching approval. The sample budget is illustrative until measured costs replace it.
 The browser combines preview approval and quoting through `POST /api/jobs/:id/approve-and-quote`. Its body captures `artifactSha256`, positive `specVersion`, the exact `recommendedMachineId` (or `null` for a legacy unbound order) and optional boolean `autoAccept`. One store mutation validates that displayed identity and commits approval, reservation and quote together. A still-current replay preserves the live quote; stale identity or unavailable capacity fails without a partial approval. The endpoint neither pays nor dispatches. Quote acceptance by `autoAccept` remains conditional on the saved explicit budget mandate.
-The machine manifest lists adapter version, outputs, printable bounds, media, color modes, readiness, collection point, hours, handling requirements, price card, content policy, camera support and abort support, and reports unknown values explicitly.
+The machine manifest lists adapter version, outputs, printable bounds, media, color modes, readiness, collection point, hours, handling requirements, price card, content policy and abort support, and reports unknown values explicitly.
 
 ### Job lifecycle and recovery
 
@@ -151,23 +151,20 @@ Payment is tracked separately (unpaid, collection pending, held, release pending
 | get_capabilities | Authenticated caller context | Versioned machine manifest |
 | get_status | Authenticated caller context | Readiness, device state, current job and attempt, media estimate, error |
 | run_job | Signed job token, job and attempt IDs, approved artifact reference and hash, validated parameters | Accepted, rejected or already accepted, with recorded execution status |
-| camera_snapshot | Authorized job or calibration context | Frame reference, capture time, device and job identifiers |
 | abort | Authorized job token and attempt ID | Stop requested, stopped, unsupported or unknown |
 
-The token binds machine, job, attempt, artifact hash, approved parameters and expiry, and the node checks all of them against its policy before acting. Artifacts must come from the allowed asset store and match the approved hash. An abort acknowledgment is not proof that the machine stopped. Read-only discovery may see a reduced public manifest; camera access, private location, execution and abort stay authorized.
+The token binds machine, job, attempt, artifact hash, approved parameters and expiry, and the node checks all of them against its policy before acting. Artifacts must come from the allowed asset store and match the approved hash. An abort acknowledgment is not proof that the machine stopped. Read-only discovery may see a reduced public manifest; private location, execution and abort stay authorized.
 
 ### Payments and the test hold
 
 x402 collects testnet payment for an asynchronous job submission. Once settlement is confirmed, the platform returns the job ID and dispatches; production then reports through job status, so the payment request never stays open for a whole 3D print.
-Funds go to a platform-controlled test wallet, and the application ledger records a held amount per job. A passing output check makes it payable to the owner, and failed production makes it refundable to the requester, each with a recorded transaction and its pending or confirmed state.
+Funds go to a platform-controlled test wallet, and the application ledger records a held amount per job. Machine completion makes it payable to the owner, and failed production makes it refundable to the requester, each with a recorded transaction and its pending or confirmed state.
 We call this a platform-managed test payment hold. An independently enforced escrow contract is a separate stretch and is named only if it ships. x402's verification and settlement flow does not by itself define our release rules (x402 reference implementation).
 Demo wallets are preconfigured, and mock and testnet modes carry visible labels, including on receipts. A mock transaction cannot count for the x402 track, and wallet setup sits outside the two-minute requester onboarding target.
 
-### Camera verification and handling
+### Machine completion and handling
 
-Before a job starts, the node confirms the output area is ready and captures a baseline where useful. After the device reports completion, it captures fresh evidence and checks for a visible result consistent with the approved output, waiting for Instax film to develop first.
-A pass needs both a credible completion signal and usable fresh evidence. Missing output fails, while poor framing or ambiguity goes to review; the verifier records its reason, and any operator override shows in the job history.
-In this controlled demo the check can gate the test payout. It does not prove adhesion, exact dimensions or strength, or protect against a dishonest owner; a public marketplace would need its own disputes design. The owner still confirms handling before the item is ready and before the next job.
+A job is produced when its machine adapter reports completion. Machine failures remain failed, and uncertain outcomes require reconciliation of the existing attempt. Output handling remains separate: the owner removes and stores the item and clears the tray or build plate before the next job.
 
 ### Hardware adapters
 
@@ -176,7 +173,7 @@ In this controlled demo the check can gate the test payout. It does not prove ad
 | --- | --- | --- | --- |
 | Phomemo M02Pro | Bluetooth adapter on a tested phomemo_printer or CatLabel path | Print the intended sticker from the actual laptop or Pi and verify printable width | Use the tested Pi or Linux node, since macOS restricts classic Bluetooth serial |
 | Instax Mini Link 3 | A tested InstaxBLE-based or compatible adapter; film costs about $0.92 a sheet | Print from code on this exact device, checking discovery, image size, orientation and completion | Time-box compatibility work; otherwise show a recording or a clearly labeled manual bridge |
-| Bambu Lab A1 mini | A tested local-network adapter for prepared files, such as mcp-3d-printer-server's print_3mf | Confirm firmware settings, credentials, upload, start, progress, built-in camera view and stop | Show a recorded run and a prepared object |
+| Bambu Lab A1 mini | A tested local-network adapter for prepared files, such as mcp-3d-printer-server's print_3mf | Confirm firmware settings, credentials, upload, start, progress, completion report and stop | Show a recorded run and a prepared object |
 
 InstaxBLE's supported list does not include the Link 3, and its issue tracker has Link 3 protocol and BLE-service reports (issue 21, issue 24), so an early physical test is essential. For the A1 mini, community servers report needing LAN Only and Developer Mode and a limit on concurrent MQTT clients; we test the actual unit, pick one control path and record what we observe.
 
@@ -215,7 +212,7 @@ A request runs across the top and back along the middle; the owner side undernea
 | Cartesia, Best Use of Cartesia | Special prize | Spoken request and spoken quote | P2; text entry keeps working without it |
 | Atlassian, Agentic Challenge | AirPods Max | An owner issue opened on failure and closed after recovery | P2; one complete issue lifecycle |
 | Capital One, Best Use of Nessie | Track prize | A mock payout record linked to an owner job | P2; labeled as mock |
-| Anthropic, Claude for Public Benefit | $5,000 Claude credits and a year of Max 20x | Claude intake and verification serving a validated, named community | Uses core behavior; needs a concrete, consenting community example |
+| Anthropic, Claude for Public Benefit | $5,000 Claude credits and a year of Max 20x | Claude intake and design serving a validated, named community | Uses core behavior; needs a concrete, consenting community example |
 | Creao AI, Best AI-First Disruptor or Best One-Person Company | $3,000 / $1,500 / $500 plus an internship interview | Only a contribution that qualifies under their rules | Rules check before work |
 | Figma track | $5K in Amazon gift cards | Requester and owner designs with a usable developer handoff | Rules check |
 | Mana | $5,000 for the best project | Depends on required Mana usage | Rules check before work |
@@ -238,7 +235,6 @@ Anthropic's judges want a named community, a real problem, a tool that works, an
 Where Claude could go wrong, and our guard for each:
 - It misreads size or crop, so the requester approves a preview before paying.
 - It misjudges whether artwork is allowed, so unclear permission or content goes to operator review.
-- It misreads a camera frame, so ambiguity becomes review and overrides stay visible.
 - It writes a faulty adapter during onboarding, so generated adapters stay review candidates until a maintainer approves them.
 
 ## Feasibility and delivery plan
@@ -251,11 +247,10 @@ The requester flow and control of known devices are feasible in 36 hours. Onboar
 | Capability | Feasibility | Acceptance target |
 | --- | --- | --- |
 | Sticker flow | High on Linux or a Pi, medium on macOS | Ten consecutive jobs with no duplicate print or silent failure. Record upload-to-ready time and owner interventions; target a median under 60 seconds and publish the measured result |
-| Instax flow | Medium until the Link 3 passes a test | Three consecutive end-to-end jobs on the actual Link 3, timing transfer, ejection, development and verification separately. Target under two minutes if measurements support it |
+| Instax flow | Medium until the Link 3 passes a test | Three consecutive end-to-end jobs on the actual Link 3, timing transfer, ejection, development and completion separately. Target under two minutes if measurements support it |
 | 3D flow | Medium to high for a prepared file | One full recorded completion through the system and a short prepared job started live. Claim completion during judging only if rehearsal shows it fits |
 | Onboarding | High for known devices | A teammate registers a supported, already connected machine in under five minutes of active setup; calibration time reported separately |
 | Recovery | Medium | Rejected unpaid dispatch, repeated checkout without duplicate collection, duplicate dispatch without a second print, and a disconnect that becomes a visible review state |
-| Verification | Medium | A pass, a missing-output failure and an ambiguous-image review, each with its resulting payment state |
 | Payment | Medium | Testnet collection, release and refund with references; repeated callbacks create no repeated ledger actions |
 | Agent discovery | Medium to high | Discovery through ASI:One and one invocation through the authorized job flow |
 | Fulfillment | High | The owner confirms readiness, a pickup code works once, and collection is recorded |
@@ -267,8 +262,7 @@ These are targets, not results. Each physical loop gets a clearly identified bac
 - [ ] Confirm which pre-event setup the rules allow
 - [ ] Pair the Phomemo M02Pro from the Mac and from a Pi, print the intended sticker and check printable width
 - [ ] Print from code on the exact Instax Mini Link 3, checking discovery, image size, orientation and completion
-- [ ] On the A1 mini, confirm firmware settings, credentials, upload, start, progress, camera view and stop with one prepared file
-- [ ] Time one job per device and fix camera positions for the two Bluetooth printers
+- [ ] On the A1 mini, confirm firmware settings, credentials, upload, start, progress, completion and stop with one prepared file
 - [ ] Buy media: Instax mini twin pack ($18.49 at Target), Phomemo sticker rolls, PLA
 - [ ] Set up credentials: Claude, a Coinbase developer account with a funded Base Sepolia wallet, Fetch.ai Agentverse; Meshy only for the photo-to-3D stretch
 - [ ] Name owners for hardware, application flow, integrations and the pitch
@@ -280,7 +274,7 @@ Hours are relative to the planned 36-hour build; confirm the actual coding windo
 | Time | Main deliverable | Parallel work and exit condition |
 | --- | --- | --- |
 | Hours 0 to 2 | Confirm rules; prove one programmatic job per device | Smoke-test x402, Fetch.ai and SpacetimeDB; record blockers and fallback choices |
-| Hours 2 to 10 | Complete sticker flow with labeled mock payment | Approved preview, node journal, state updates, result evidence, pickup readiness |
+| Hours 2 to 10 | Complete sticker flow with labeled mock payment | Approved preview, node journal, state updates, machine completion, pickup readiness |
 | Hours 10 to 16 | Repeatable sticker flow and Instax integration | Reservation, real pricing, dashboard, known-device onboarding; start prepared 3D integration |
 | Hours 16 to 20 | x402 testnet and Fetch.ai paths through the working app | Prove release and refund logic, finish 3D control, run one complete 3D job |
 | Hour 20 checkpoint | Decide the final live feature set from measured evidence | Stop adding dependencies to the physical loop; select at most two add-ons |
@@ -297,7 +291,7 @@ For every completed trial, record consumables, machine minutes, owner handling m
 ### Decisions to close early
 
 1. Confirm the build window start, the per-project track limit, and sponsor requirements (a Visa API, Coinbase's two x402 tracks, Creao and Mana platform use, Fetch.ai judging notes).
-2. Settle the working OS, adapter, firmware, connection and camera path for each device, starting with the Instax Link 3.
+2. Settle the working OS, adapter, firmware, connection path for each device, starting with the Instax Link 3.
 3. Confirm how testnet collection and the payment hold are implemented, and use the word escrow only for what ships.
 4. Choose one real requester scenario, collection point, supported materials and a measured price card.
 5. Assign workstream owners and the hour-20 fallback decisions before add-ons start.

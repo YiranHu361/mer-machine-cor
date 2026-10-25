@@ -106,8 +106,7 @@ const evidence: any = {
     "After shared artwork upload: POST /jobs through scripted owner preparation and resume; not upload-to-ready or physical timing.",
   ownerActionsScope:
     "Two scripted software handling calls per job, not measured owner labor.",
-  physicalAcceptance:
-    "BLOCKED: no devices, cameras or owner readiness configured",
+  physicalAcceptance: "BLOCKED: no devices or owner readiness configured",
 };
 async function order(outputType = "sticker") {
   const start = performance.now();

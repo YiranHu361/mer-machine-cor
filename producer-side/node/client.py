@@ -2,7 +2,7 @@
 
 load manifest -> dial /ws/node, send hello -> heartbeat every 5 s -> on job.offer check
 local policy, accept or reject -> download asset -> adapter.prepare -> adapter.run,
-streaming job.progress -> capture a frame -> verify -> job.result.
+streaming job.progress -> machine completion -> job.result.
 
 Run:  python -m node.client --machine node/machines/m_sticker_01.json --hub http://localhost:8000
 """
@@ -24,7 +24,7 @@ import httpx
 from pydantic import ValidationError
 from websockets.asyncio.client import ClientConnection, connect
 
-from . import policy, verify
+from . import policy
 from .env import load_dotenv
 from .adapters import AdapterError, make_adapter
 from .protocol import (
@@ -46,7 +46,7 @@ from .protocol import (
 log = logging.getLogger("node")
 
 # Keys in node/machines/<id>.json that configure this node only and never go to the hub.
-LOCAL_KEYS = ("adapter", "camera")
+LOCAL_KEYS = ("adapter",)
 
 
 class NodeClient:
@@ -54,7 +54,6 @@ class NodeClient:
         self.manifest = manifest
         self.machine_id: str = manifest["machine_id"]
         self.adapter = make_adapter(manifest)
-        self.camera = manifest.get("camera")
         self.hub = hub_url.rstrip("/")
         u = urlparse(self.hub)
         self.ws_url = f"{'wss' if u.scheme == 'https' else 'ws'}://{u.netloc}{u.path}/ws/node"
@@ -215,15 +214,12 @@ class NodeClient:
             async for p in self.adapter.run(job, native):
                 self.send(JOB_PROGRESS, {"job_id": jid, "state": p.state, "progress": p.progress,
                                          "eta_s": p.eta_s, "message": p.message})
-            self.send(JOB_PROGRESS, {"job_id": jid, "state": "verifying", "progress": 1.0, "eta_s": 0})
-            photo_url, verification = await verify.verify_job(http, self.hub, self.machine_id, job, self.camera)
-            log.info("done %s photo=%s verification=%s", jid, photo_url, verification)
-            self.send(JOB_RESULT, {"job_id": jid, "ok": True, "photo_url": photo_url, "verification": verification})
+            log.info("machine finished %s", jid)
+            self.send(JOB_RESULT, {"job_id": jid, "ok": True})
         except Exception as e:
             reason = "cancelled" if jid in self.cancelled else str(e) or type(e).__name__
             log.error("job %s failed: %s", jid, reason)
-            self.send(JOB_RESULT, {"job_id": jid, "ok": False, "photo_url": None,
-                                   "verification": None, "error": reason})
+            self.send(JOB_RESULT, {"job_id": jid, "ok": False, "error": reason})
 
     async def _worker(self) -> None:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as http:

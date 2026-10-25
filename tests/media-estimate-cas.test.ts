@@ -27,8 +27,6 @@ async function fixture() {
         expires_at: Math.floor(Date.now() / 1000) + 300,
       }),
       async call(tool) {
-        if (tool === "camera_snapshot")
-          throw Error("No camera in isolated CAS fixture");
         calls++;
         return {
           machine_id: mid,
@@ -325,8 +323,6 @@ for (const action of ["reject", "resolve", "finalize"] as const)
         });
         let counter = 99;
         f.service.node.call = async (tool) => {
-          if (tool === "camera_snapshot")
-            throw Error("No physical camera in isolated retirement fixture");
           return {
             machine_id: mid,
             job_id: cid,

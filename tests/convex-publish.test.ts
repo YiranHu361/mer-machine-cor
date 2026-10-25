@@ -43,7 +43,10 @@ test("published jobs carry §4 states and never requester ids, pickup codes or s
   const text = JSON.stringify(data);
   for (const secret of ["requester_secret", "PICKUP-SECRET", "SIGNED"])
     assert.ok(!text.includes(secret), secret);
-  assert.equal(jobState(job({ productionState: "needs_review" })), "verifying");
+  assert.equal(
+    jobState(job({ productionState: "needs_review" })),
+    "needs_review",
+  );
   assert.equal(jobState(job({ productionState: "dispatched" })), "offered");
   assert.equal(
     jobState(
@@ -110,10 +113,11 @@ test("the mirror publishes only what changed after each committed write", async 
     });
   try {
     await settled();
-    assert.deepEqual(
-      published.map((e) => e.data.machine_id).sort(),
-      ["bambu_01", "instax_01", "phomemo_01"],
-    );
+    assert.deepEqual(published.map((e) => e.data.machine_id).sort(), [
+      "bambu_01",
+      "instax_01",
+      "phomemo_01",
+    ]);
     published.length = 0;
     const next = settled();
     await mutate(store, (s) => {
@@ -132,7 +136,10 @@ test("the mirror publishes only what changed after each committed write", async 
 });
 
 test("the deployment URL comes from CONVEX_URL or the name in the deploy key", () => {
-  assert.equal(convexUrl({ CONVEX_URL: "http://127.0.0.1:3210" }), "http://127.0.0.1:3210");
+  assert.equal(
+    convexUrl({ CONVEX_URL: "http://127.0.0.1:3210" }),
+    "http://127.0.0.1:3210",
+  );
   assert.equal(
     convexUrl({ CONVEX_DEPLOY_KEY: "dev:happy-animal-123|eyJ2" }),
     "https://happy-animal-123.convex.cloud",

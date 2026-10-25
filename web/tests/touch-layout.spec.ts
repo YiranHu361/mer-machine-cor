@@ -353,7 +353,6 @@ test("long collection and machine status text remains readable under touch and 2
       ".collection-line strong",
       "The entire collection reference",
     );
-    await readable(page, ".evidence > p", "The entire saved evidence reason");
     await expect(page.locator(".public-machine")).toHaveCount(0);
     await page.locator(".collection-line").scrollIntoViewIfNeeded();
     await page.screenshot({
@@ -371,7 +370,7 @@ test("long collection and machine status text remains readable under touch and 2
   await context.close();
 });
 
-test("long owner evidence and machine reasons remain readable and disclosures accept touch", async ({
+test("long owner status and machine reasons remain readable and disclosures accept touch", async ({
   browser,
   browserName,
   baseURL,
@@ -397,8 +396,7 @@ test("long owner evidence and machine reasons remain readable and disclosures ac
     { width: 320, height: 500 },
   ]) {
     await page.setViewportSize(viewport);
-    await reflow(page, `${viewport.width}px owner evidence`);
-    await readable(page, ".evidence-review p", "The entire evidence reason");
+    await reflow(page, `${viewport.width}px owner status`);
     const summary = page.getByText("Recovery & order history", { exact: true });
     const target = await summary.boundingBox();
     expect(
