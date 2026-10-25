@@ -48,6 +48,8 @@ export interface Config {
   paymentMode: "mock" | "testnet";
   storeMode: string;
   assetOrigin: string;
+  /** The app's public address (for example a forwarding domain); browsers there may act too. */
+  publicOrigin?: string;
   secret: string;
   quoteMs: number;
   pickupMs: number;

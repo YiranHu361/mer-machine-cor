@@ -1,0 +1,7 @@
+# Vercel builds only the website; nothing else (and no .env or .data) is uploaded.
+/*
+!/web
+!/scripts
+!/vercel.json
+/web/node_modules
+/web/dist

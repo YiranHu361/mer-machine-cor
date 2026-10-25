@@ -83,6 +83,34 @@ test("configured local application port and Vite remain accepted; other hosts an
     f.close();
   }
 });
+test("the configured public address may act; look-alike addresses still reject without mutation", async () => {
+  const f = fixture();
+  f.service.config.publicOrigin = "https://fabyn.vercel.app";
+  try {
+    await request(f.app)
+      .post("/api/session")
+      .set("Origin", "https://fabyn.vercel.app")
+      .send({ role: "requester" })
+      .expect(200);
+    const before = await f.store.read();
+    for (const origin of [
+      "http://fabyn.vercel.app",
+      "https://fabyn.vercel.app:8443",
+      "https://fabyn.vercel.app.outside.invalid",
+      "https://other.vercel.app",
+    ]) {
+      const response = await request(f.app)
+        .post("/api/session")
+        .set("Origin", origin)
+        .send({ role: "requester" })
+        .expect(403);
+      assert.equal(response.body.error.code, "ORIGIN_REJECTED");
+      assert.deepEqual(await f.store.read(), before);
+    }
+  } finally {
+    f.close();
+  }
+});
 test("an actual configured dynamic loopback app accepts its browser origin and rejects a different port", async () => {
   const f = fixture(),
     server = f.app.listen(0, "127.0.0.1");
