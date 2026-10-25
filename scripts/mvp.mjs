@@ -19,6 +19,13 @@
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import { spawn, spawnSync } from "node:child_process";
+// The same programs the seller page's Connections panel starts.
+import {
+  PRODUCER_PYTHON,
+  hubArgs,
+  nodeArgs,
+  producerHubUrl,
+} from "../server/mvp-plan.ts";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -27,9 +34,7 @@ const modelMachine = process.env.FABYN_MVP_3D_MACHINE ?? "bambu_01";
 const modelProducer = process.env.FABYN_MVP_3D_PRODUCER_MACHINE ?? "m_fdm_01";
 const port = Number(process.env.PORT ?? 4318);
 const app = `http://127.0.0.1:${port}`;
-const hub = (
-  process.env.FABYN_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+const hub = producerHubUrl();
 const producerMachine =
   process.env.FABYN_MVP_PRODUCER_MACHINE ?? "m_sticker_01";
 const ourMachine = process.env.FABYN_MVP_MACHINE ?? "phomemo_01";
@@ -52,7 +57,7 @@ const env = {
   FABYN_AUTO_PREPARE_PRINTS: process.env.FABYN_AUTO_PREPARE_PRINTS ?? "1",
   ...(convexUrl ? { CONVEX_URL: convexUrl } : {}),
 };
-const python = "producer-side/.venv/bin/python";
+const python = PRODUCER_PYTHON;
 
 if (!args.includes("--no-build")) {
   console.log("• Building the web app");
@@ -73,32 +78,19 @@ const start = (name, command, argv, options = {}, onExit) => {
   });
   children.push(child);
 };
-const hubPort = new URL(hub).port || "8000";
-start(
-  "The producer side's hub",
-  "../" + python,
-  ["-m", "hub.dev_server", "--host", "127.0.0.1", "--port", hubPort],
-  { cwd: "producer-side" },
-);
+start("The producer side's hub", "../" + python, hubArgs(hub), {
+  cwd: "producer-side",
+});
 // A printer that does not answer is tried again every minute, so it joins as
 // soon as it is switched on; the app then returns it to service by itself.
 const startNode = (theirs) =>
   start(
     `The ${theirs} node`,
     "../" + python,
-    [
-      "-m",
-      "node.client",
-      "--machine",
-      `node/machines/${theirs}.json`,
-      "--hub",
-      hub,
-      // --probe connects to the printer once (printing nothing) before going online.
-      ...(dryRun ? ["--transport", "file"] : ["--probe"]),
-      ...(theirs === modelProducer && args.includes("--plate-cleared")
-        ? ["--plate-cleared"]
-        : []),
-    ],
+    nodeArgs(theirs, hub, {
+      dryRun,
+      plateCleared: theirs === modelProducer && args.includes("--plate-cleared"),
+    }),
     { cwd: "producer-side" },
     () => {
       if (!missing.has(theirs))

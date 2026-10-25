@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import { checkPrinter, checkedAgo } from "./printers";
 import { MachineViewport } from "./MachineViewport";
+import { Connections } from "./Connections";
 import { JobActions, type Act } from "./JobActions";
 import { estimateJob, formatEta, type JobEstimate } from "./estimate";
 import { finished, intakeOf, jobStateLabel, jobTitle, machineStatus, MACHINE_LABEL, needsHandling, needsMaker, onLine, stopReason, supplyOf, viaAgent, waitingPickup, type MachineKey } from "./status";
@@ -13,19 +14,26 @@ const MODE_LABEL = { simulation: "runs on the workshop node", hardware: "connect
 const ORDER_PRIORITY = (j: OwnerJob) => (["dispatched", "running", "verifying"].includes(j.productionState) ? 0 : needsMaker(j) ? 1 : 2);
 
 export function Machines({ machines, jobs, connectors, printers = [], busy, act, now }: { machines: OwnerMachine[]; jobs: OwnerJob[]; connectors: Connector[]; printers?: PrinterStatusRow[]; busy: string; act: Act; now: number }) {
+  const connections = <Connections act={act} busy={busy} now={now} />;
   if (machines.length === 0)
     return (
-      <div className="sl-panel">
-        <h2 className="sl-h2">No machines yet.</h2>
-        <p className="sl-lede">Add a machine to start taking orders.</p>
-      </div>
+      <>
+        {connections}
+        <div className="sl-panel">
+          <h2 className="sl-h2">No machines yet.</h2>
+          <p className="sl-lede">Add a machine to start taking orders.</p>
+        </div>
+      </>
     );
   return (
-    <div className="sl-machines">
-      {machines.map((m) => (
-        <MachineCard key={m.id} machine={m} jobs={jobs} connector={connectors.find((c) => c.machineId === m.id)} printer={printers.find((p) => p.id === m.id)} busy={busy} act={act} now={now} />
-      ))}
-    </div>
+    <>
+      {connections}
+      <div className="sl-machines">
+        {machines.map((m) => (
+          <MachineCard key={m.id} machine={m} jobs={jobs} connector={connectors.find((c) => c.machineId === m.id)} printer={printers.find((p) => p.id === m.id)} busy={busy} act={act} now={now} />
+        ))}
+      </div>
+    </>
   );
 }
 
