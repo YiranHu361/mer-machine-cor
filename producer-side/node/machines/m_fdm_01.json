@@ -21,7 +21,7 @@
   "adapter": {
     "type": "bambu_a1mini",
     "transport": "lan",
-    "host": "172.20.10.3",
+    "host": "172.20.10.8",
     "serial": "0300CA661802587",
     "access_code_env": "BAMBU_ACCESS_CODE",
     "printer_model": "Bambu Lab A1 mini",

@@ -1,13 +1,16 @@
 """Bambu A1 mini: G-code inspection, 3MF wrapping, pre-flight, and the adapter on the dry-run transport."""
 import asyncio
+import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
 import pytest
 
 from node.adapters import AdapterError, make_adapter
-from node.adapters.bambu.adapter import preflight
+from node.adapters.bambu import slicer
+from node.adapters.bambu.adapter import file_kind, preflight
 from node.adapters.bambu.gcode import (GcodeInfo, build_gcode_3mf, inspect_gcode, parse_duration,
                                        read_3mf_gcode)
 from node.adapters.bambu.transport import cn_from_der
@@ -167,9 +170,104 @@ def test_adapter_refuses_wrong_material_without_uploading(tmp_path):
     asyncio.run(go())
 
 
-def test_prepare_rejects_stl(tmp_path):
-    adapter = make_adapter(manifest())
+CUBE_STL = "solid cube\n" + "".join(
+    f"facet normal 0 0 0\nouter loop\n" + "".join(f"vertex {x} {y} {z}\n" for x, y, z in tri) + "endloop\nendfacet\n"
+    for tri in [((0, 0, 0), (20, 20, 0), (20, 0, 0)), ((0, 0, 0), (0, 20, 0), (20, 20, 0)),
+                ((0, 0, 4), (20, 0, 4), (20, 20, 4)), ((0, 0, 4), (20, 20, 4), (0, 20, 4)),
+                ((0, 0, 0), (20, 0, 0), (20, 0, 4)), ((0, 0, 0), (20, 0, 4), (0, 0, 4)),
+                ((0, 20, 0), (20, 20, 4), (20, 20, 0)), ((0, 20, 0), (0, 20, 4), (20, 20, 4)),
+                ((0, 0, 0), (0, 0, 4), (0, 20, 4)), ((0, 0, 0), (0, 20, 4), (0, 20, 0)),
+                ((20, 0, 0), (20, 20, 0), (20, 20, 4)), ((20, 0, 0), (20, 20, 4), (20, 0, 4))]) + "endsolid cube\n"
+HAS_SLICER = Path(slicer.APP_BINARY).is_file() or bool(os.environ.get("BAMBU_STUDIO_CLI"))
+
+
+def test_file_kind_reads_names_then_first_bytes(tmp_path):
+    named = {"a.gcode.3mf": b"PK\x03\x04", "b.3mf": b"x", "c.gcode": b"x", "d.stl": b"x"}
+    for name, data in named.items():
+        (tmp_path / name).write_bytes(data)
+    assert [file_kind(tmp_path / n) for n in named] == ["3mf", "3mf", "gcode", "stl"]
+    anonymous = {"zip": (b"PK\x03\x04" + b"\0" * 100, "3mf"), "gc": (b"; HEADER_BLOCK_START\n", "gcode"),
+                 "ascii": (CUBE_STL.encode(), "stl"), "binary": (b"\0" * 80 + (1).to_bytes(4, "little") + b"\0" * 50, "stl"),
+                 "png": (b"\x89PNG\r\n" + b"\0" * 100, "unknown")}
+    for name, (data, kind) in anonymous.items():
+        (tmp_path / name).write_bytes(data)
+        assert file_kind(tmp_path / name) == kind, name
+
+
+def test_flatten_merges_parents_then_templates_then_own_keys(tmp_path):
+    machine = tmp_path / "machine"
+    machine.mkdir()
+    for preset in ({"name": "common", "machine_start_gcode": "generic", "speed": 1, "accel": 1},
+                   {"name": "tpl", "instantiation": "false", "machine_start_gcode": ";== machine: A1 mini"},
+                   {"name": "A1 mini", "inherits": "common", "include": ["tpl"], "speed": 2, "instantiation": "true"}):
+        (machine / f"{preset['name']}.json").write_text(json.dumps(preset))
+    flat = slicer.flatten(tmp_path, "machine", "A1 mini")
+    assert flat["machine_start_gcode"] == ";== machine: A1 mini" and flat["speed"] == 2 and flat["accel"] == 1
+    assert flat["name"] == "A1 mini" and "inherits" not in flat and "include" not in flat
+    with pytest.raises(AdapterError, match="no machine preset"):
+        slicer.flatten(tmp_path, "machine", "P1S")
+
+
+def test_check_gcode_refuses_generic_defaults_and_accepts_the_real_sample():
+    sample = (ROOT / "samples/yiran_PLA_11m11s.gcode").read_text()
+    assert slicer.check_gcode(sample, inspect_gcode(sample), slicer.DEFAULT_PROFILE) == []
+    generic = GCODE.replace("Textured PEI Plate", "Cool Plate").replace("M104 S220", "M104 S255").replace(
+        "nozzle_temperature = 255,245,220", "nozzle_temperature = 255,255,255")
+    problems = " ".join(slicer.check_gcode(generic, inspect_gcode(generic), slicer.DEFAULT_PROFILE))
+    for reason in ("start sequence", "255 °C", "flow limit", "Cool Plate"):
+        assert reason in problems
+
+
+def test_prepare_slices_an_unsliced_model_without_an_extension(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_slice(model, work, config):
+        seen["model"] = model
+        work.mkdir()
+        (work / "plate_1.gcode").write_text(GCODE)
+        return work / "plate_1.gcode"
+    monkeypatch.setattr("node.adapters.bambu.adapter.slice_model", fake_slice)
+    asset = tmp_path / "asset_abc123"  # how the app's signed asset links arrive
+    asset.write_bytes(_model_3mf())
+    native = asyncio.run(make_adapter(manifest()).prepare(_job(), asset))
+    assert seen["model"].name == "job_1_model.3mf" and seen["model"].read_bytes() == asset.read_bytes()
+    assert native.name == "job_1.gcode.3mf" and read_3mf_gcode(native) == GCODE.encode()
+
+
+def test_prepare_without_a_slicer_says_so(tmp_path, monkeypatch):
+    monkeypatch.delenv("BAMBU_STUDIO_CLI", raising=False)
+    monkeypatch.setattr(slicer, "APP_BINARY", str(tmp_path / "missing"))
     stl = tmp_path / "part.stl"
-    stl.write_text("solid x\nendsolid x\n")
-    with pytest.raises(AdapterError, match="sliced"):
-        asyncio.run(adapter.prepare(_job(), stl))
+    stl.write_text(CUBE_STL)
+    with pytest.raises(AdapterError, match="slicer_unavailable"):
+        asyncio.run(make_adapter(manifest(slicer_path=None)).prepare(_job(), stl))
+
+
+@pytest.mark.skipif(not HAS_SLICER, reason="needs Bambu Studio")
+def test_bambu_studio_slices_with_the_full_a1_mini_profile(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # the node's work folder is relative (.work/...)
+    stl = Path("cube.stl")
+    stl.write_text(CUBE_STL)
+    native = asyncio.run(make_adapter(manifest()).prepare(_job(), stl))
+    text = read_3mf_gcode(native).decode()
+    info = inspect_gcode(text)
+    assert info.printer_model == "Bambu Lab A1 mini" and info.filament_type == "PLA" and info.weight_g > 0
+    assert info.bed_type == "Textured PEI Plate" and info.nozzle_temp_c == 220 and info.filament_color == "#FFFFFF"
+    assert slicer.check_gcode(text, info, slicer.DEFAULT_PROFILE) == []
+
+
+def test_probe_reports_a_part_left_on_the_plate():
+    async def go(**adapter):
+        a = make_adapter(manifest(dry_run_state="FINISH", **adapter))
+        await a.probe()
+        return await a.status()
+    st = asyncio.run(go())
+    assert st["state"] == "error" and st["detail"].startswith("plate_not_cleared")
+    assert asyncio.run(go(plate_clear_at_start=True))["state"] == "idle"
+
+
+def _model_3mf() -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("3D/3dmodel.model", "<model/>")
+    return buf.getvalue()

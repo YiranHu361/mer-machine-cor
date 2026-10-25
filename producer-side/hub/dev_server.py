@@ -9,6 +9,7 @@ Serves the real gateway plus just enough to push jobs by hand:
     curl localhost:8000/dev/events
     curl -X POST localhost:8000/dev/approve -d '{"machine_id":"m_sticker_01","job_id":"job_dev_0001"}' \
          -H 'content-type: application/json'
+    curl -X POST localhost:8000/dev/plate-cleared -d '{"machine_id":"m_fdm_01"}' -H 'content-type: application/json'
 """
 from __future__ import annotations
 
@@ -63,6 +64,10 @@ class JobRef(BaseModel):
 
 class ApproveIn(JobRef):
     reason: str | None = None
+
+
+class MachineRef(BaseModel):
+    machine_id: str
 
 
 def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
@@ -144,6 +149,14 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
             return await gw.approve_manually(body.machine_id, body.job_id, body.reason)
         except LookupError:
             raise HTTPException(404, "unknown job")
+
+    @app.post("/dev/plate-cleared")
+    async def plate_cleared(body: MachineRef) -> dict[str, str]:
+        try:
+            await gw.plate_cleared(body.machine_id)
+        except LookupError as e:
+            raise HTTPException(409, str(e))
+        return {"ok": "sent"}
 
     @app.get("/dev/events")
     def get_events(limit: int = 50) -> list[dict[str, Any]]:

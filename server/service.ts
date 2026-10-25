@@ -1776,10 +1776,13 @@ export class Service {
     if (j.productionState === "verifying") await this.verify(jobId);
     if (j.productionState === "failed" && j.paymentState === "held")
       await this.transfer(jobId, "refund");
+    // A 3D print stays on the build plate until someone takes it off, so the
+    // owner always finishes it ("Printed fine" also tells the printer the plate is clear).
     if (
       execution === "completed" &&
       j.productionState === "needs_review" &&
       this.config.autoAcceptHubPrints &&
+      j.spec.outputType !== "3d" &&
       (await this.read()).machines[j.machineId!]?.producerHub
     )
       try {
