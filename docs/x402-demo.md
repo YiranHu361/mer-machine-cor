@@ -113,6 +113,21 @@ duplicate requests, restart recovery, unknown settlement, and wallet consent.
 They do not prove that a live testnet transaction occurred. Run the one-cent command
 above with faucet-funded credentials to obtain that evidence.
 
+## Recorded live testnet evidence (October 24, 2026)
+
+- Standalone **0.01 test USDC** x402 collection: [confirmed transaction](https://sepolia.basescan.org/tx/0x3c9ba0582feeb5051b3c62998acd704e45e60d51cfcd71bf683893439502e879), block `49880174`.
+- Chrome **Pay & make**, **0.66 test USDC**: [confirmed transaction](https://sepolia.basescan.org/tx/0x69280ee7e3cf0da0bb445a1bb6f8b5f2ac5d57aa51f6263eae5e713d15fa6690), block `49880939`.
+- Both transfers were independently checked through Base Sepolia RPC for the exact
+  expected USDC sender, recipient, amount, successful receipt and confirmation count.
+- The browser checkout authorized and dispatched the prepared cat-sticker job after
+  payment. Fabrication failed because the Phomemo could not be found over BLE.
+  Payment confirmation remains visible with its transaction link.
+- A prior facilitator settlement attempt returned no transaction. Its authorization
+  was checked on-chain as unused after expiry before another attempt was made.
+
+Private receipt journals are under ignored `.data/` and
+`/tmp/fabrary-live-payment-receipts.jsonl`. No real-value tokens were used.
+
 References: [Coinbase x402](https://docs.cdp.coinbase.com/x402/seller/quickstart),
 [x402 SDK](https://github.com/x402-foundation/x402),
 [Circle faucet](https://faucet.circle.com/).

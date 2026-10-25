@@ -274,7 +274,11 @@ export function MakeApp() {
           className="make-request make-nametag"
           onSubmit={(e) => {
             e.preventDefault();
-            void start("best_single", `A name tag that says "${tagName.trim()}"`, false);
+            void start(
+              "best_single",
+              `A name tag that says "${tagName.trim()}"`,
+              false,
+            );
           }}
         >
           <label htmlFor="make-name">Or make a name tag</label>
@@ -401,9 +405,13 @@ export function MakeApp() {
               ? "Payment failed; production has not started."
               : plan.status === "needs_review"
                 ? "The workshop needs to review this order."
-                : plan.status === "done"
-                  ? "All done."
-                  : "Your order is under way.")}
+                : plan.status === "cancelled"
+                  ? "Production stopped."
+                  : plan.status === "partial"
+                    ? "Some items could not be made."
+                    : plan.status === "done"
+                      ? "All done."
+                      : "Your order is under way.")}
       </p>
       {limited && (
         <p className="make-limit" role="alert">
