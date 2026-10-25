@@ -134,10 +134,15 @@ const childLine = (a: Assignment) => {
   return "Preparing";
 };
 const key = () => `${Date.now().toString(36)}-${crypto.randomUUID()}`;
+// What the name tag template can engrave (server/orchestration/intent.ts tagText).
+const nameTagOk = (name: string) =>
+  /^[A-Za-z0-9À-ÖØ-öø-ÿ .,'&!?+-]{1,16}$/.test(name.trim()) &&
+  /[A-Za-z0-9À-ÖØ-öø-ÿ]/.test(name);
 
 export function MakeApp() {
   const [order, setOrder] = useState<OrderView | null>(null);
   const [text, setText] = useState("");
+  const [tagName, setTagName] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -185,10 +190,14 @@ export function MakeApp() {
       setBusy("");
     }
   };
-  const start = (experience: "best_single" | "gift") =>
+  const start = (
+    experience: "best_single" | "gift",
+    requestText = text,
+    withPhotos = true,
+  ) =>
     run("start", async () => {
       let photoAssetIds: string[] = [];
-      if (files.length) {
+      if (withPhotos && files.length) {
         const form = new FormData();
         files.forEach((f) => form.append("images", f));
         const { assets } = await api<{ assets: { id: string }[] }>(
@@ -199,7 +208,7 @@ export function MakeApp() {
       }
       const { order } = await api<{ order: OrderView }>(
         "/orders",
-        { requestText: text, photoAssetIds, experience },
+        { requestText, photoAssetIds, experience },
         "POST",
         { headers: { "Idempotency-Key": key() } },
       );
@@ -256,6 +265,38 @@ export function MakeApp() {
               onClick={() => void start("gift")}
             >
               Make a three-piece gift instead
+            </button>
+          </div>
+        </form>
+        <form
+          className="make-request make-nametag"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void start("best_single", `A name tag that says "${tagName.trim()}"`, false);
+          }}
+        >
+          <label htmlFor="make-name">Or make a name tag</label>
+          <input
+            id="make-name"
+            value={tagName}
+            maxLength={16}
+            placeholder="Your name"
+            autoComplete="off"
+            aria-describedby="make-name-help"
+            onChange={(e) => setTagName(e.target.value.replace(/\s+/g, " "))}
+          />
+          <p id="make-name-help" className="fine-print">
+            {tagName.trim() && !nameTagOk(tagName)
+              ? "Use up to 16 letters, digits, spaces and . , ' & ! ? + -"
+              : "Engraved into a 3D-printed tag with a keyring hole, one colour."}
+          </p>
+          <div className="make-actions">
+            <button
+              className="secondary"
+              type="submit"
+              disabled={!!busy || !nameTagOk(tagName)}
+            >
+              Make a name tag
             </button>
           </div>
         </form>

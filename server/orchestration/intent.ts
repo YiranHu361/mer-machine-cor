@@ -10,13 +10,33 @@ export const SINGLE_PROCESSES: Process[] = [
   "photo_print",
   "fdm_print",
 ];
-const TEXT_TAG = /^[A-Z0-9 !?&+-]{1,10}$/;
+// The producer's name tag template (node/fabrary_node/nametag.py) takes the same characters.
+const LETTER = "A-Za-z0-9À-ÖØ-öø-ÿ";
+const TEXT_TAG = new RegExp(`^[${LETTER} .,'&!?+-]{1,16}$`);
 export const NEUTRAL_TAG_TEXT = "FOR YOU";
 
-/** Keychain text the producer's template accepts, or the neutral default. */
+/** Name tag text as written, when the template can engrave it, or the neutral default. */
 export function tagText(raw: string | null | undefined) {
-  const text = (raw ?? "").toUpperCase().trim().replace(/\s+/g, " ");
-  return TEXT_TAG.test(text) ? text : NEUTRAL_TAG_TEXT;
+  const text = (raw ?? "").trim().replace(/\s+/g, " ");
+  return TEXT_TAG.test(text) && new RegExp(`[${LETTER}]`).test(text)
+    ? text
+    : NEUTRAL_TAG_TEXT;
+}
+/**
+ * The name for a name tag: double-quoted text, or what follows "says",
+ * "named", "with the name" and the like. Null when the request gives none.
+ */
+export function nameFromRequest(text: string): string | null {
+  const quoted = /["“]([^"“”]{1,16})["”]/.exec(text)?.[1];
+  const said =
+    /\b(?:that says|saying|says|reads|named|called|with (?:the |my )?name|(?:my )?name is)\s*:?\s*(.+)$/i.exec(
+      text,
+    )?.[1];
+  for (const candidate of [quoted, said]) {
+    const name = candidate?.trim().replace(/[.,;:]+$/, "");
+    if (name && tagText(name) === name) return name;
+  }
+  return null;
 }
 /** The thing to draw: "I want a cat sticker" gives "cat". */
 export function drawableSubject(text: string) {
@@ -37,7 +57,8 @@ export function asksForColour(text: string) {
 }
 export function requestedProcess(text: string): Process | null {
   const t = text.toLowerCase();
-  if (/\b(keychain|key chain|3d|charm|tag)\b/.test(t)) return "fdm_print";
+  if (/\b(keychain|key chain|3d|charm|tag|name ?tags?|name-tags?)\b/.test(t))
+    return "fdm_print";
   if (/\b(sticker|stickers|label|labels|decal)\b/.test(t))
     return "sticker_print";
   if (
@@ -47,10 +68,6 @@ export function requestedProcess(text: string): Process | null {
   )
     return "photo_print";
   return null;
-}
-/** Quoted text in the request, e.g. keychain that says "MAYA". */
-function quotedText(text: string) {
-  return /["“']([^"”']{1,10})["”']/.exec(text)?.[1] ?? null;
 }
 export interface PhotoFacts {
   assetId: string;
@@ -113,7 +130,7 @@ export function localIntent(
       quantity: 1,
       creation: "generate",
       photoAssetIds: [],
-      text: tagText(quotedText(text)),
+      text: tagText(nameFromRequest(text)),
       colorImportant: false,
     });
     return {
@@ -138,12 +155,12 @@ export function localIntent(
     process === "fdm_print"
       ? {
           process,
-          name: "A keychain",
-          why: "Requested as a keychain.",
+          name: /\bname[ -]?tags?\b/i.test(text) ? "A name tag" : "A keychain",
+          why: `“${tagText(nameFromRequest(text))}” engraved in one colour, with a keyring hole.`,
           quantity: 1,
           creation: "generate",
           photoAssetIds: [],
-          text: tagText(quotedText(text)),
+          text: tagText(nameFromRequest(text)),
           colorImportant: false,
         }
       : {

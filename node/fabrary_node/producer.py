@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
-from . import svg_subset, text_tag
+from . import nametag, svg_subset
 from .prepare import MAX_PIXELS, _load as load_image
 
 COMPILER_VERSION = "producer-prepare/1"
@@ -527,7 +527,7 @@ def _fdm(job: Job) -> dict:
         return _text_tag(job)
     if kind == "catalog_model":
         return _catalog_model(job)
-    raise Outcome("design_unsupported", "3D prints need the text tag template or a vetted catalog model")
+    raise Outcome("design_unsupported", "3D prints need the name tag template or a vetted catalog model")
 
 
 def _single_filament(job: Job) -> None:
@@ -536,16 +536,19 @@ def _single_filament(job: Job) -> None:
 
 
 def _text_tag(job: Job) -> dict:
+    """The name tag: OpenSCAD engraves the text into a plate with a keyring hole (nametag.scad)."""
     text = job.design.get("text")
     if not isinstance(text, str):
         raise _invalid("design.text must be a string")
     _require(job, "material_density_g_cm3")
     _single_filament(job)
     try:
-        tag = text_tag.build(text)
-    except text_tag.TemplateError as exc:
+        tag = nametag.render(text)
+    except nametag.TemplateError as exc:
         raise Outcome("template_charset", str(exc)) from exc
-    dims = [_round(tag.length_mm), _round(tag.width_mm), _round(tag.height_mm)]
+    except nametag.GeneratorUnavailable as exc:
+        raise Outcome("generator_unavailable", str(exc)) from exc
+    dims = [_round(value) for value in tag.size_mm]
     volume = job.profile["build_volume_mm"]
     flat_fit = volume and ((dims[0] <= volume[0] and dims[1] <= volume[1]) or (dims[0] <= volume[1] and dims[1] <= volume[0]))
     if volume and (not flat_fit or dims[2] > volume[2]):
@@ -554,19 +557,20 @@ def _text_tag(job: Job) -> dict:
     params = job.params
     if abs(params["width_mm"] - dims[0]) > 0.5 or abs(params["height_mm"] - dims[1]) > 0.5:
         job.warnings.append(f"Tag size is set by its text: {dims[0]} x {dims[1]} mm")
-    artifact = _emit(job.out, f"{job.prep_id}_tag.3mf", text_tag.three_mf(tag), "model/3mf")
-    image = text_tag.preview(tag)
+    artifact = _emit(job.out, f"{job.prep_id}_nametag.3mf", tag.model, "model/3mf")
+    image = tag.preview
     preview = _emit(job.out, f"{job.prep_id}_preview.png", _png(image), "image/png")
     density = job.profile["material_density_g_cm3"]
-    grams = round(tag.volume_cm3 * density, 2)
+    grams = round(tag.volume_cm3 * density * nametag.FILL, 2)
     return {"artifact": artifact, "recipe": None, "preview": _preview(preview, image.size, "mono"),
             "parameters": {**params, "width_mm": dims[0], "height_mm": dims[1], "dpi": None, "raster_px": None,
-                           "text": tag.text, "model_size_mm": dims, "material_density_g_cm3": density,
-                           "slicing": "receiver"},
+                           "text": tag.name, "model_size_mm": dims, "text_size": tag.text_size,
+                           "material_density_g_cm3": density, "slicing": "receiver"},
             "estimates": {"material": {"amount": _round(grams * params["quantity"], 2), "unit": "g"},
-                          "minutes_per_unit": _round(4 + grams * 2.2, 1), "setup_minutes": 3, "basis": "estimated"},
+                          "minutes_per_unit": _round(grams * nametag.MINUTES_PER_GRAM, 1),
+                          "setup_minutes": nametag.SETUP_MINUTES, "basis": "estimated"},
             # The receiving end slices with its own printer profile; our estimates come from the volume.
-            "handling": ["Unsliced 3MF: the receiving end slices it for the printer; estimates come from its volume"
+            "handling": ["Unsliced 3MF: the printer's node slices it with its own profile; estimates come from its volume"
                          if job.mode == "hardware" else
                          "Simulated 3D run: the 3MF is unsliced template geometry; estimates come from its volume"]}
 

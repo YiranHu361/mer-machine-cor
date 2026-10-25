@@ -23,6 +23,7 @@ JOB_RESULT = "job.result"
 WELCOME = "welcome"
 JOB_OFFER = "job.offer"
 JOB_CANCEL = "job.cancel"
+PLATE_CLEARED = "plate.cleared"  # a person took the last print off the machine
 
 HEARTBEAT_INTERVAL_S = 5
 OFFLINE_AFTER_S = 15

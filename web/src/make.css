@@ -34,6 +34,14 @@
 .make-request label:not(:first-child) {
   margin-top: 8px;
 }
+.make-nametag {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.make-nametag .fine-print {
+  margin: 0;
+}
 .make-actions {
   display: flex;
   flex-wrap: wrap;

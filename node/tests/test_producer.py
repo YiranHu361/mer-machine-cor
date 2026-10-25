@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw
-from fabrary_node import producer, svg_subset, text_tag
+from fabrary_node import nametag, producer, svg_subset
 
 NS = "http://www.w3.org/2000/svg"
 CAT = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -29,6 +29,12 @@ PHOTO = {**BASE_PROFILE, "version": "instax-mini-link3/1", "raster_px": [600, 80
          "printable_area_mm": [46, 62], "seconds_per_unit": 75}
 FDM = {**BASE_PROFILE, "version": "a1-mini-pla/1", "build_volume_mm": [180, 180, 180], "material_density_g_cm3": 1.24,
        "setup_seconds": 180}
+try:
+    nametag.openscad()
+    HAS_OPENSCAD = True
+except nametag.GeneratorUnavailable:
+    HAS_OPENSCAD = False
+needs_openscad = pytest.mark.skipif(not HAS_OPENSCAD, reason="OpenSCAD renders the name tag")
 ITEM = {"id": "cot-sheet", "name": "Fitted cot sheet", "unit": "sheet", "setup_seconds": 120, "seconds_per_unit": 540,
         "material_per_unit": 1.6, "material_unit": "m fabric"}
 
@@ -131,56 +137,44 @@ def test_photo_cover_crop_keeps_subject(tmp_path):
     assert reds(photo(tmp_path, box=False, marker=True, name="centre.png"))[1] == 0  # a centre crop would lose it
 
 
-def test_text_tag_simulation_is_deterministic_closed_3mf(tmp_path):
-    result = assert_deterministic(tmp_path, lambda out: request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "FAB & CO!"}, FDM, out=out,
+@needs_openscad
+def test_name_tag_is_a_reproducible_closed_3mf(tmp_path):
+    result = assert_deterministic(tmp_path, lambda out: request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "Zoë & Co!"}, FDM, out=out,
                                                                  params={"material": "pla-white"}))
     assert result["artifact"]["media_type"] == "model/3mf" and result["recipe"] is None
-    assert result["parameters"]["model_size_mm"] == [86, 18, 3.6]
+    length, height, thickness = result["parameters"]["model_size_mm"]
+    assert 50 < length < 100 and (height, thickness) == (20, 3.2) and result["parameters"]["text"] == "Zoë & Co!"
     with zipfile.ZipFile(result["artifact"]["path"]) as archive:
         assert archive.testzip() is None
         names = archive.namelist()
-        assert names == sorted(names) == ["3D/3dmodel.model", "[Content_Types].xml", "_rels/.rels"]
+        assert names == sorted(names) and "3D/3dmodel.model" in names
         assert {info.date_time for info in archive.infolist()} == {(1980, 1, 1, 0, 0, 0)}
         model = ET.fromstring(archive.read("3D/3dmodel.model"))
     ns = {"m": "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"}
     assert model.get("unit") == "millimeter" and len(model.findall(".//m:object", ns)) == 1
-    vertices = [tuple(float(v.get(axis)) for axis in "xyz") for v in model.iterfind(".//m:vertex", ns)]
     triangles = [tuple(int(t.get(k)) for k in ("v1", "v2", "v3")) for t in model.iterfind(".//m:triangle", ns)]
-    parent = list(range(len(vertices)))
-
-    def find(i):
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
+    edges, directed = Counter(), Counter()
     for a, b, c in triangles:
-        for other in (b, c):
-            parent[find(other)] = find(a)
-    shells = defaultdict(list)
-    for tri in triangles:
-        shells[find(tri[0])].append(tri)
-    assert len(shells) > 4
-    total = 0.0
-    for tris in shells.values():
-        edges, directed = Counter(), Counter()
-        for a, b, c in tris:
-            for u, v in ((a, b), (b, c), (c, a)):
-                edges[frozenset((u, v))] += 1
-                directed[(u, v)] += 1
-        assert set(edges.values()) == {2} and set(directed.values()) == {1}
-        volume = sum(sum(p * q for p, q in zip(vertices[a], (vertices[b][1] * vertices[c][2] - vertices[b][2] * vertices[c][1],
-                                                               vertices[b][2] * vertices[c][0] - vertices[b][0] * vertices[c][2],
-                                                               vertices[b][0] * vertices[c][1] - vertices[b][1] * vertices[c][0])))
-                     for a, b, c in tris) / 6
-        assert volume > 0  # outward winding
-        total += volume
-    grams = total / 1000 * 1.24
+        for u, v in ((a, b), (b, c), (c, a)):
+            edges[frozenset((u, v))] += 1
+            directed[(u, v)] += 1
+    assert set(edges.values()) == {2} and set(directed.values()) == {1}  # closed, consistently wound
+    grams = nametag.volume_cm3(Path(result["artifact"]["path"]).read_bytes()) * 1.24 * nametag.FILL
     estimates = result["estimates"]
     assert abs(estimates["material"]["amount"] - grams * 2) < 0.02 and estimates["material"]["unit"] == "g"
-    assert abs(estimates["minutes_per_unit"] - (4 + grams * 2.2)) <= 0.06
-    assert estimates["setup_minutes"] == 3 and estimates["basis"] == "estimated"
+    assert abs(estimates["minutes_per_unit"] - grams * nametag.MINUTES_PER_GRAM) <= 0.06
+    assert estimates["setup_minutes"] == nametag.SETUP_MINUTES and estimates["basis"] == "estimated"
     with Image.open(result["preview"]["path"]) as image:
-        assert image.width == 600 and image.getextrema()[0] < 80
+        assert image.width == 600 and image.convert("L").getextrema()[0] < 80
+
+
+def test_name_tag_without_openscad_is_a_typed_rejection(tmp_path, monkeypatch):
+    monkeypatch.setenv("FABRARY_OPENSCAD", str(tmp_path / "missing"))
+    monkeypatch.setattr(nametag.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(nametag, "APP_BINARY", str(tmp_path / "missing"))
+    result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "Maya"}, FDM))
+    assert result["status"] == "rejected" and result["code"] == "generator_unavailable"
+    assert "OpenSCAD" in result["reason"]
 
 
 def test_sim_item_is_deterministic_recipe_without_artifact(tmp_path):
@@ -196,7 +190,7 @@ def test_sim_item_is_deterministic_recipe_without_artifact(tmp_path):
 
 def test_catalog_model_is_copied_and_verified(tmp_path):
     model = tmp_path / "clip.3mf"
-    model.write_bytes(text_tag.deterministic_zip({"3D/3dmodel.model": "<model/>", "Metadata/plate_1.gcode": "G28"}))
+    model.write_bytes(nametag.deterministic_zip({"3D/3dmodel.model": "<model/>", "Metadata/plate_1.gcode": "G28"}))
     preview = tmp_path / "clip.png"
     Image.new("RGB", (64, 48), "orange").save(preview)
     design = {"kind": "catalog_model", "catalog_model": {"path": str(model), "sha256": hashlib.sha256(model.read_bytes()).hexdigest(),
@@ -353,23 +347,25 @@ def test_sticker_parameter_rejections(tmp_path, params, code):
     assert result["status"] == "rejected" and result["code"] == code
 
 
-@pytest.mark.parametrize("text", ["hello", "TOO LONG TAG", "A#B", "", "   ", "ÄBC"])
+@pytest.mark.parametrize("text", ["A#B", "", "   ", " Maya", "Ma  ya", "x" * 17, "...", "日本", 'a"b'])
 def test_text_tag_charset(tmp_path, text):
     result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": text}, FDM))
     assert result["status"] == "rejected" and result["code"] == "template_charset"
 
 
-def test_hardware_text_tag_is_unsliced_for_the_receiver(tmp_path):
+@needs_openscad
+def test_hardware_name_tag_is_unsliced_for_the_receiver(tmp_path):
     result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "CAT"}, FDM, mode="hardware"))
     assert result["status"] == "ready" and result["execution_mode"] == "hardware"
     assert result["artifact"]["media_type"] == "model/3mf"
     assert result["parameters"]["slicing"] == "receiver"
-    assert "receiving end slices" in result["handling"][0]
+    assert "node slices it" in result["handling"][0]
     with zipfile.ZipFile(result["artifact"]["path"]) as archive:
         assert not any(name.endswith(".gcode") for name in archive.namelist())
 
 
-def test_text_tag_build_volume(tmp_path):
+@needs_openscad
+def test_name_tag_build_volume(tmp_path):
     profile = {**FDM, "build_volume_mm": [60, 60, 60]}
     result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "FABRARY 10"}, profile))
     assert result["code"] == "exceeds_build_volume"
@@ -452,8 +448,9 @@ def test_cli_round_trip(tmp_path):
         rejected = run_cli(payload)
         assert rejected.returncode == 0
         assert json.loads(rejected.stdout)["code"] == "invalid_request"
-    hardware = run_cli(json.dumps(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "CAT"}, FDM, mode="hardware")).encode())
-    assert hardware.returncode == 0 and json.loads(hardware.stdout)["parameters"]["slicing"] == "receiver"
+    if HAS_OPENSCAD:
+        hardware = run_cli(json.dumps(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "CAT"}, FDM, mode="hardware")).encode())
+        assert hardware.returncode == 0 and json.loads(hardware.stdout)["parameters"]["slicing"] == "receiver"
 
 
 # ---------------------------------------------------------------- fitting the file to the picture
