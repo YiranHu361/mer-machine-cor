@@ -562,10 +562,12 @@ test("live subscription updates the open owner dashboard with polling disabled",
   });
   const health = await (await operator.request.get("/api/health")).json();
   expect(health.mode).toBe("simulation");
+  const expectedStore = process.env.FABYN_BROWSER_STORE ?? "spacetimedb";
+  expect(["spacetimedb", "sqlite-development"]).toContain(expectedStore);
   expect(
     health.store,
-    "This check requires the authoritative SpacetimeDB path",
-  ).toBe("spacetimedb");
+    "Live-update acceptance must use the explicitly selected persistent store",
+  ).toBe(expectedStore);
   const credentials = JSON.parse(
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
@@ -592,8 +594,7 @@ test("live subscription updates the open owner dashboard with polling disabled",
   let restoreRequired = false;
   const probe = () =>
     page.evaluate(
-      () =>
-        (window as Window & { fabynLiveProbe: LiveProbe }).fabynLiveProbe,
+      () => (window as Window & { fabynLiveProbe: LiveProbe }).fabynLiveProbe,
     );
   try {
     await page.goto("/owner");
