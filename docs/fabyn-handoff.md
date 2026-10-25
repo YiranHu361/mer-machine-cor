@@ -8,15 +8,15 @@ Branch `UI/UX` (Henry's UI/web branch) holds the latest `origin/main` plus the n
 |---|---|---|
 | App shell | `web/src/main.tsx` loads `web/src/fabyn/FabynApp.tsx` for `/fabyn*` and the legacy app for everything else. `server/app.ts` serves `/fabyn`, `/fabyn/order` and `/fabyn/seller`. | Done |
 | Home `/fabyn` | `web/src/fabyn/home/`: a React and three.js port of the approved hero (the HENRY keychain, the YIRAN sticker, the fabyn logo photo, the SF map). START DEMO opens the consumer / seller chooser. | Done |
-| Consumer `/fabyn/order` | `web/src/fabyn/consumer/`: "tell us what you want to build", the agent understands, it matches a machine type, an SF map of makers, the Palace of Fine Arts machine (owner, current job, queue), a preview before ordering (picture drafts, the real OpenSCAD keychain render, photo), add to queue, checkout (x402 test wallet), printing tiles, delivery or pickup on the map, and my orders. | v1 verified end to end. v2 (map, machine, checkout steps): see "Left to do" |
-| Seller `/fabyn/seller` | `web/src/fabyn/seller/`: owner sign-in, then the Overview, Machines (3D models, status lights, printer check, A1 plate approval), Map, Orders (tagged by source, including ASI:One), Delivery (call a courier or pickup code), Income (owner ledger and x402 receipts) and Supplies (耗材 refill) tabs. | v1 verified end to end. v2 tabs: see "Left to do" |
+| Consumer `/fabyn/order` | `web/src/fabyn/consumer/`: "tell us what you want to build", the agent understands, it matches a machine type, an SF map of makers, the Palace of Fine Arts machine (owner, current job, queue), a preview before ordering (picture drafts, the real OpenSCAD keychain render, photo), add to queue, checkout (x402 test wallet), printing tiles, delivery or pickup on the map, and my orders. | v2 verified end to end on desktop for name, cat and photo, each with a real wallet payment, a BaseScan receipt and a pickup code. On phone, photo passed; name was blocked by a held A1 and cat was not run. |
+| Seller `/fabyn/seller` | `web/src/fabyn/seller/`: owner sign-in, then the Overview, Machines (3D models, status lights, printer check, A1 plate approval), Map, Orders (tagged by source, including ASI:One), Delivery (call a courier or pickup code), Income (owner ledger and x402 receipts) and Supplies (耗材 refill) tabs. | v2 verified with real clicks on desktop and phone, every tab. The A1 plate approval has not been clicked on a fresh paid print yet. |
 | Shared 3D | `web/src/fabyn/shared/three/`: faithful A1 mini, M02 Pro and instax models (`build(THREE, kit)`). | Done |
 | Convex store | `FABYN_STORE=convex` (`server/convex-store.ts`, `convex/state.ts`): all app state lives in Convex, in an atomic compare-and-set across chunked documents. SpacetimeDB and SQLite stay in the code but are not used. | Done (tests pass) |
 | Live machines API | `GET /api/machines/live` (public): location, owner name, status, current job and queue. | Done |
 | Printer check | `POST /api/owner/machines/:id/check` → `{ok, detail, checkedAt}`. | Done |
 | Order source | `order.source` / `job.source` = `"web"` or `"asi1"`. The ASI:One agent sends `"asi1"`. | Done |
-| Built-in test wallet | `GET /api/payments/config` and `POST /api/orders/:id/test-wallet-pay`. The server pays the x402 Base Sepolia payment with `FABYN_TEST_PAYER_PRIVATE_KEY`, so no MetaMask is needed. Only testnet, chain 84532, a capped amount and payTo = `FABYN_TREASURY_ADDRESS`. Spec: x402 section below. | Done (tests pass, no live payment run yet) |
-| Simulated machines charged on testnet | Henry's decision: on testnet, the three local simulated machines charge and issue pickup codes like hardware. | In progress, see below |
+| Built-in test wallet | `GET /api/payments/config` and `POST /api/orders/:id/test-wallet-pay`. The server pays the x402 Base Sepolia payment with `FABYN_TEST_PAYER_PRIVATE_KEY`, so no MetaMask is needed. Only testnet, chain 84532, a capped amount and payTo = `FABYN_TREASURY_ADDRESS`. Spec: x402 section below. | Done. Live Base Sepolia payments confirmed. |
+| Simulated machines charged on testnet | Henry's decision: on testnet, the three local simulated machines charge and issue pickup codes like hardware. On by default in testnet; `FABYN_CHARGE_SIMULATED=0` turns it off. | Done |
 
 Merged upstream: `origin/main` up to `788cb9a` (the Fabyn rebrand, x402 testnet checkout, machine-status completion with the camera check removed, the Instax adapter, picture drafts, printer checks, Lucas's name tags via OpenSCAD, and Yiran's ASI:One agent). Merge conflicts were resolved by keeping both sides. When main resolved the same conflicts later, main's version was taken.
 
@@ -62,7 +62,7 @@ Prerequisites:
    - http://127.0.0.1:4317/fabyn/seller (seller; owner code)
 7. **ASI:One agent:** `npm run agent`. It needs `ASI1_API_KEY` and `FABYN_AGENT_SEED`, and connects to Agentverse through its mailbox. Before you run it, check with Yiran that nobody else is running an agent with the same seed.
 
-Checks: `npm run typecheck`, `npm test` (349/349 at the last run), `npm --prefix web run typecheck`.
+Checks: `npm run typecheck`, `npm test` (350 tests), `npm --prefix web run typecheck`. On a heavily loaded machine, the integration tests that start an isolated Python node can time out ("Isolated simulation node failed to start"). They pass when run on their own with `--test-concurrency=1`.
 
 ## x402 checkout (web)
 
@@ -76,12 +76,13 @@ Checks: `npm run typecheck`, `npm test` (349/349 at the last run), `npm --prefix
 
 ## Left to do
 
-1. **Simulated machines charged on testnet** (`server/orchestration/orchestrator.ts` `chargeable()`):
-   - Done: the charge, behind `FABYN_CHARGE_SIMULATED=1` for now.
-   - Still to do: make it the default on testnet, issue pickup codes to charged simulated children after the owner prepares the item, and update the two tests that encode the old rule ("testnet mode does not ask for a wallet…" and "x402 order HTTP challenge… mixed plan").
-2. **Consumer v2** (`Find.tsx`, `Order.tsx`, `After.tsx`, `checkout.ts`, `machines.ts`, `steps.ts`): typecheck passes, but the full v2 flow has not been verified end to end in a browser. The name, cat and photo paths each need a real click-through on desktop and phone.
-3. **Seller v2** (`Orders.tsx`, `MapTab.tsx`, `Delivery.tsx`, `Income.tsx`, `Supplies.tsx`, `deliveries.ts`): typecheck passes, but these have not been verified end to end. The courier choice is stored in the browser only, because no delivery service is connected yet.
-4. **One live testnet payment:** run one through the built-in wallet (the payer had 19.98 test USDC) and check the BaseScan receipt and the pickup code.
-5. **Real AI keys:** every test so far used fixture drafts. The first live run with the keys costs money (images about $0.03–0.04 each, three per round).
-6. **Design conflict to agree as a team:** the docs describe Convex as a read-only mirror that never sits on the order path. With `FABYN_STORE=convex` it is the authoritative store, so a Convex outage stops orders.
-7. **Real-time print progress:** later. Today progress and ETA come from `estimate.ts`, and the delivery courier is display-only.
+1. **A stuck payment holds its machine:** a testnet payment stayed on "Checking your payment" for over 2.5 minutes and kept the A1 mini, so new keychain orders were refused ("the machine is finishing another order").
+2. **Local Convex write limit:** two orders at once hit `TooManyWrites` (4 MiB/s) on the local Convex backend, and one order failed with "Something stopped the plan".
+3. **Owner payouts fail:** the Income tab shows failed "Paid out to you" rows. Customer payments are confirmed.
+4. **Pickup codes reach the seller's browser:** the owner dashboard API sends each job's pickup code. The UI never shows it, but the seller does not need the customer's code.
+5. **Courier or pickup choice is browser-only:** it is kept in localStorage, because no delivery service is connected yet.
+6. **Phone checks still open:** the name path (blocked by the held A1) and the cat path. Also click the A1 plate approval on a fresh paid print.
+7. **Real AI keys:** every test so far used fixture drafts. The first live run with the keys costs money (images about $0.03–0.04 each, three per round).
+8. **Real hardware:** nothing has printed on the real machines through the new web flow yet.
+9. **Design conflict to agree as a team:** the docs describe Convex as a read-only mirror that never sits on the order path. With `FABYN_STORE=convex` it is the authoritative store, so a Convex outage stops orders.
+10. **Real-time print progress:** later. Today progress and ETA come from `estimate.ts`, and the delivery courier is display-only.
