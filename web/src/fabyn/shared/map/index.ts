@@ -11,7 +11,13 @@
      selectedId?={string}
      onSelect?={(id) => …}    // only pins with interactive: true call it
      label="accessible name"
+     onPick?={(at) => …}      // tap-to-set: a tap off the pins gives that spot's lat/lng
    />
+
+   boundsAround(points, { minKm?, pad?, within? }) frames points inside the city;
+   a pin outside the bounds is drawn on the map edge with an arrow toward it.
+   where.ts: areaOf(p) / areaLabel(p) name the neighbourhood offline (nearest of
+   AREAS inside SF_SHORE), "outside San Francisco" otherwise.
 
    Labels, pins and the route keep the same size on screen at any map width
    (the map measures itself), so the same map reads on a phone and a desktop.
@@ -21,11 +27,13 @@
    (makes something else), "courier".
 
    World data (world.ts):
-   - PALACE, HOME (Henry in Cow Hollow), ROUTE_PALACE_TO_HOME (real streets)
+   - PALACE; HOME and ROUTE_PALACE_TO_HOME are a fixed stand-in the seller pages still
+     use. The consumer uses the person's real location (consumer/location.ts) instead.
    - WORLD_MACHINES: display-only makers around SF (individuals, makerspaces,
      factories). Never orderable; the real machines come from the backend.
    - fitFor(machine, process, from) → { fit: free|busy|offline|far|type, note, km }
    - distanceKm, pathLengthKm, pointAlong, formatKm, PROCESS_LABEL, TOO_FAR_KM
 */
-export { SFMap, BOUNDS, type MapPin, type PinTone, type Bounds, type SFMapProps } from "./SFMap";
+export { SFMap, BOUNDS, boundsAround, inBounds, type MapPin, type PinTone, type Bounds, type SFMapProps } from "./SFMap";
 export * from "./world";
+export * from "./where";

@@ -16,10 +16,11 @@ import {
 import { itemTitle, kindForWait, matchedMachine, orderTitle, phaseOf, prepareCalls, preparedSize } from "./phase";
 import { addSuggestion, changeRequest, describeError, REFRESH_CODES } from "./orders";
 import { KIND_OF_PROCESS, MACHINE_NAME, PLACE, PLACE_SHORT, machineLabel, type OrderView } from "./model";
-import { COURIER, RIDE_SECONDS, mmss } from "./estimate";
+import { COURIER, mmss, rideSecondsFor } from "./estimate";
 import { hasBrowserWallet, isTestnet, payOrder, paymentConfig, walletMessage, type PayMethod, type PaymentConfig } from "./checkout";
 import { readHandoff, saveHandoff, type Handoff } from "./profile";
-import { HOME } from "../shared/map";
+import { PALACE, areaLabel, formatKm } from "../shared/map";
+import { deliveryFor, spotOf, useStreetRoute, useWhere } from "./location";
 
 /* Steps 4–6: the preview (drafts, or the real prepared file), the machine's
    queue with this order joining it, and checkout. Nothing is ordered until
@@ -259,7 +260,12 @@ export function CheckoutStep({ order, setOrder, reload, run, busy, error, go }: 
   const plan = order.plan!;
   const { left, expired } = useOfferClock(order);
   const [permission, setPermission] = useState(false);
-  const [handoff, setHandoff] = useState<Handoff["mode"] | null>(() => readHandoff(order.id)?.mode ?? null);
+  const spot = spotOf(useWhere());
+  const reach = deliveryFor(spot);
+  const route = useStreetRoute(PALACE, reach.ok ? spot : null);
+  const [picked, setHandoff] = useState<Handoff["mode"] | null>(() => readHandoff(order.id)?.mode ?? null);
+  // delivery only within the courier's reach of the person's real spot
+  const handoff = picked === "delivery" && !reach.ok ? null : picked;
   const [config, setConfig] = useState<PaymentConfig | null>(null);
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState("");
@@ -345,16 +351,35 @@ export function CheckoutStep({ order, setOrder, reload, run, busy, error, go }: 
           <fieldset className="cs-choice">
             <legend>How do you get it?</legend>
             <div className="cs-choice-row">
-              <button type="button" className={`cs-btn ${handoff === "delivery" ? "is-on" : ""}`} aria-pressed={handoff === "delivery"} onClick={() => setHandoff("delivery")}>
+              <button
+                type="button"
+                className={`cs-btn ${handoff === "delivery" ? "is-on" : ""}`}
+                aria-pressed={handoff === "delivery"}
+                disabled={!reach.ok}
+                onClick={() => setHandoff("delivery")}
+              >
                 deliver to me
               </button>
               <button type="button" className={`cs-btn ${handoff === "pickup" ? "is-on" : ""}`} aria-pressed={handoff === "pickup"} onClick={() => setHandoff("pickup")}>
                 I&apos;ll pick it up
               </button>
             </div>
-            {handoff === "delivery" && (
+            {!reach.ok && (
               <p className="cs-note">
-                {COURIER.name} on an {COURIER.vehicle} brings it to {HOME.label}, about {Math.round(RIDE_SECONDS / 60)} min after Lucas hands it over.
+                {reach.why}{" "}
+                {!spot && (
+                  <button type="button" className="cs-link" onClick={() => go("map")}>
+                    set it on the map
+                  </button>
+                )}
+              </p>
+            )}
+            {handoff === "delivery" && spot && (
+              <p className="cs-note">
+                {COURIER.name} on an {COURIER.vehicle} brings it to you in {areaLabel(spot)}
+                {route
+                  ? `: ${formatKm(route.km)}${route.streets ? " over the streets" : " in a straight line"}, about ${Math.round(rideSecondsFor(route.km) / 60)} min after Lucas hands it over.`
+                  : ", once Lucas hands it over. Working out the route…"}
               </p>
             )}
             {handoff === "pickup" && <p className="cs-note">Collect it from Lucas at the {PLACE}.</p>}

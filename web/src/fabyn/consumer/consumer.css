@@ -1409,3 +1409,32 @@ button.cs-maker:focus-visible {
     width: 100%;
   }
 }
+
+/* the person's spot on the map step */
+.cs-spot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  margin: 0 0 16px;
+  padding: 8px 14px;
+  border-left: 2px solid var(--line);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.cs-spot b {
+  color: var(--txt);
+  font-weight: 400;
+}
+.cs-spot.is-found {
+  border-left-color: var(--txt);
+}
+.cs-spot.is-missing,
+.cs-spot.is-picking {
+  border-left-color: var(--acc);
+  color: var(--txt);
+}
+.cs-deliver-line {
+  margin: 4px 0 0;
+}

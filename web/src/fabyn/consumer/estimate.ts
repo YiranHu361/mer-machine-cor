@@ -85,9 +85,10 @@ export function mmss(seconds: number | null) {
 
 /* ---------- delivery (display only) ----------
 
-   There is no courier service behind fabyn yet. The courier, the ride time and
-   the moving marker are display-only; the route is the real street path in
-   shared/map/world.ts. The ride starts when the owner hands the item over. */
+   There is no courier service behind fabyn yet. The courier and the moving
+   marker are display-only; the route and its length come from the street
+   route to the person's real spot (location.ts). The ride starts when the
+   owner hands the item over. */
 
 export const COURIER = {
   name: "Rosa M.",
@@ -96,14 +97,17 @@ export const COURIER = {
   contact: "Rosa · (415) 555-0142",
 };
 
-/** How long the ride from the Palace to Henry plays, in seconds. */
-export const RIDE_SECONDS = 240;
+/** City e-bike speed, km/h, including stops. */
+export const COURIER_KMH = 15;
 
-export function rideProgress(startedAt: number | null, now: number): { t: number; etaSeconds: number | null; arrived: boolean } {
+/** How long the ride over a route of this length takes, in seconds. */
+export const rideSecondsFor = (km: number) => Math.max(60, Math.round((km / COURIER_KMH) * 3600));
+
+export function rideProgress(startedAt: number | null, now: number, rideSeconds: number): { t: number; etaSeconds: number | null; arrived: boolean } {
   if (startedAt === null) return { t: 0, etaSeconds: null, arrived: false };
   const elapsed = Math.max(0, (now - startedAt) / 1000);
-  const t = clamp(elapsed / RIDE_SECONDS, 0, 1);
-  return { t, etaSeconds: t >= 1 ? 0 : Math.ceil(RIDE_SECONDS - elapsed), arrived: t >= 1 };
+  const t = clamp(elapsed / rideSeconds, 0, 1);
+  return { t, etaSeconds: t >= 1 ? 0 : Math.ceil(rideSeconds - elapsed), arrived: t >= 1 };
 }
 
 /** Walking time for a distance, at about 5 km/h. */

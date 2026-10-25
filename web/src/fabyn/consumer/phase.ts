@@ -2,7 +2,7 @@
 
 import type { Assignment, OrderItem, OrderView, MachineKind, Process } from "./model";
 import { KIND_OF_PROCESS, LABEL_OF_PROCESS, MATCH_OF_PROCESS, machineLabel } from "./model";
-import { WORLD_MACHINES, distanceKm, formatKm, HOME, PROCESS_LABEL } from "../shared/map";
+import { WORLD_MACHINES, areaLabel, distanceKm, formatKm, PROCESS_LABEL, type LatLng } from "../shared/map";
 import type { LiveMachine } from "./machines";
 
 export type Phase =
@@ -121,8 +121,9 @@ export function matchedMachine(o: OrderView, machines: LiveMachine[] | null): Li
   return found ?? realMachinesFor(machines, mainProcess(o))[0] ?? null;
 }
 
-/** Steps 1–3: read the request, match the machine type, search the map. */
-export function findCalls(o: OrderView, machines: LiveMachine[] | null): ToolCall[] {
+/** Steps 1–3: read the request, match the machine type, search the map. Distances are from
+   the person's spot, when they have shared or set one. */
+export function findCalls(o: OrderView, machines: LiveMachine[] | null, from: LatLng | null): ToolCall[] {
   const understood = o.events.some((e) => e.type === "draft.understood") || !!o.intent || !!o.plan;
   const processes = processesOf(o);
   const what = processes.map((p) => LABEL_OF_PROCESS[p]).join(" + ");
@@ -147,10 +148,10 @@ export function findCalls(o: OrderView, machines: LiveMachine[] | null): ToolCal
     },
     {
       fn: "search_nearby_machines",
-      arg: process ? `${PROCESS_LABEL[process]}, near ${HOME.short.toLowerCase()}` : "…",
+      arg: process ? `${PROCESS_LABEL[process]}, near ${from ? areaLabel(from) : "San Francisco"}` : "…",
       result:
         process && machines
-          ? `${world.length + real.length} in San Francisco · ${free.length ? `${free.length} free now` : "none free now"}${nearest ? ` · ${nearest.place.split(",")[0]}, ${formatKm(distanceKm(HOME, nearest.at))}` : ""}`
+          ? `${world.length + real.length} in San Francisco · ${free.length ? `${free.length} free now` : "none free now"}${nearest ? ` · ${nearest.place.split(",")[0]}${from ? `, ${formatKm(distanceKm(from, nearest.at))} from you` : ""}` : ""}`
           : "",
       done: !!process && !!machines,
     },
