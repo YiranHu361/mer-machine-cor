@@ -287,10 +287,21 @@ function suggest(
   }
   return out.slice(0, 3);
 }
+/** Why things can't be made, each reason once; printers that are all off read as one sentence. */
+function offReasons(availability: Record<ProductId, Availability>) {
+  const reasons = [
+    ...new Set(
+      PRODUCT_IDS.filter((id) => !PRODUCTS[id].needsPhoto && !availability[id].available).map((id) => availability[id].reason ?? ""),
+    ),
+  ].filter(Boolean);
+  const off = reasons.filter((r) => /^No .* is switched on/.test(r));
+  return off.length > 1
+    ? ["None of the printers is switched on and taking orders right now.", ...reasons.filter((r) => !off.includes(r))]
+    : reasons;
+}
 function faq(text: string, availability: Record<ProductId, Availability>, order: Order | undefined) {
   const ready = PRODUCT_IDS.filter((id) => availability[id].available).map(aProduct);
-  const off = PRODUCT_IDS.filter((id) => !availability[id].available && !PRODUCTS[id].needsPhoto);
-  const offLine = off.length ? ` ${PRODUCTS[off[0]].title}s aren't available right now: ${availability[off[0]].reason}` : "";
+  const offLine = offReasons(availability).map((r) => ` ${r}`).join("");
   if (order && /\b(?:status|where|when|ready|done|progress|order)\b/i.test(text)) return orderLine(order);
   if (/colou?r|black and white|b ?& ?w|mono/i.test(text))
     return `Stickers print in black and white; colour prints come out in full colour on instax mini film; name tags are one colour of PLA.${offLine}`;
@@ -362,13 +373,19 @@ function localDecide(
   if ((QUESTION.test(text) && !wantsIdeas) || (order && !c.offered.length))
     return local({ message: faq(text, availability, order), action: "answer" });
   const offer = suggest(memory, availability, c.photoAssetIds.length);
-  if (!offer.length)
+  if (!offer.length) {
+    if (!memory.recipient && !memory.interests.length)
+      return local({ message: "Who is it for, and what do they love? I can make a name tag, a drawn sticker or a colour print.", action: "clarify" });
+    // nothing can be made now: still say what would suit, once the printers are back
+    const ifOn = Object.fromEntries(
+      PRODUCT_IDS.map((id) => [id, /^No .* is switched on|has not checked in|is busy/.test(availability[id].reason ?? "") ? { available: true } : availability[id]]),
+    ) as Record<ProductId, Availability>;
+    const ideas = suggest(memory, ifOn, c.photoAssetIds.length);
     return local({
-      message: memory.recipient || memory.interests.length
-        ? faq("", availability, undefined)
-        : "Who is it for, and what do they love? I can make a name tag, a drawn sticker or a colour print.",
+      message: `${faq("", availability, undefined)}${ideas.length ? ` When they're back, I'd suggest ${list(ideas.map((o) => lower(o.title)))}.` : ""}`,
       action: "clarify",
     });
+  }
   return local({
     message: `You could get ${memory.recipient ?? "them"} ${list(offer.map((o) => lower(o.title)))}. Which would you prefer?`,
     action: "offer",

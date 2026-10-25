@@ -432,6 +432,22 @@ test("a printer that goes offline after the offer is checked again before anythi
   }
 });
 
+test("with every printer off, the local rules say so once and still name the ideas for later", async () => {
+  const f = fixture();
+  try {
+    let view: View = await f.orchestrator.conversations.start(yiran, { text: BIRTHDAY }, "start-key-0009");
+    const reply = view.conversation.turns.at(-1)!.text;
+    assert.match(reply, /^Nothing can be made right now\. None of the printers is switched on and taking orders right now\./);
+    assert.match(reply, /When they're back, I'd suggest a name tag that says “Yiran” or a chicken nuggets sticker with “Yiran” under it\./);
+    assert.equal(view.conversation.offered.length, 0);
+    view = await f.orchestrator.conversations.send(yiran, view.conversation.id, msg(view, "Can it print in colour?"));
+    assert.match(view.conversation.turns.at(-1)!.text, /one colour of PLA\. None of the printers is switched on/);
+    assert.equal((await f.orders()).length, 0);
+  } finally {
+    f.close();
+  }
+});
+
 test("a hub printer counts only while its producer's heartbeat is fresh", async () => {
   const s = initialState();
   const at = Date.parse("2026-10-25T18:00:00Z");
