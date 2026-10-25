@@ -1,9 +1,9 @@
 import asyncio
 
-from order_agent import Conversation, FabraryError, pick
+from order_agent import Conversation, FabynError, pick
 
 
-class FakeFabrary:
+class FakeFabyn:
     """The app's order API with canned stages: drafts, then an offer, then printing."""
 
     def __init__(self):
@@ -13,7 +13,7 @@ class FakeFabrary:
 
     async def new_session(self):
         self.calls.append("session")
-        return "fabrary_session=s1"
+        return "fabyn_session=s1"
 
     async def create(self, cookie, text):
         self.calls.append(f"create:{text}")
@@ -76,9 +76,9 @@ def convo(api):
 
 
 def test_a_chat_goes_from_request_to_drafts_to_offer_to_pickup_code():
-    api, state = FakeFabrary(), {}
+    api, state = FakeFabyn(), {}
     c = convo(api)
-    assert "Fabrary" in run(c, state, "hi")[0]
+    assert "Fabyn" in run(c, state, "hi")[0]
 
     drafts = run(c, state, "a cute cat sticker")
     assert api.calls[:2] == ["session", "create:a cute cat sticker"]
@@ -102,7 +102,7 @@ def test_a_number_inside_a_new_request_is_not_a_draft_choice():
 
 
 def test_requests_are_capped_per_person_per_day():
-    api, state = FakeFabrary(), {}
+    api, state = FakeFabyn(), {}
     c = convo(api)
     run(c, state, "a cat")
     run(c, state, "a dog")
@@ -111,25 +111,25 @@ def test_requests_are_capped_per_person_per_day():
 
 
 def test_an_expired_session_starts_fresh_instead_of_failing():
-    api, state = FakeFabrary(), {"cookie": "old", "order": "ord_gone"}
+    api, state = FakeFabyn(), {"cookie": "old", "order": "ord_gone"}
     known = api.order
 
     async def gone(cookie, order_id):
         if order_id == "ord_gone":
-            raise FabraryError("Order not found")
+            raise FabynError("Order not found")
         return await known(cookie, order_id)
     api.order = gone
     c = convo(api)
-    assert "Fabrary" in run(c, state, "hello")[0]
+    assert "Fabyn" in run(c, state, "hello")[0]
     run(c, state, "status")  # no order any more: treated as a new request, with a new session
     assert "session" in api.calls
 
 
 def test_the_asi_one_mention_in_front_of_each_message_is_ignored():
-    api, state = FakeFabrary(), {}
+    api, state = FakeFabyn(), {}
     c = convo(api)
     at = "@agent1qtntl30zudzgdsjgke4jyjdknkrerr92n4ncl9askhn6mu788exhswdc4vy"
-    assert "Fabrary" in run(c, state, f"{at} hi")[0]
+    assert "Fabyn" in run(c, state, f"{at} hi")[0]
     assert not any(call.startswith("create:") for call in api.calls), "a greeting makes no order"
     run(c, state, f"{at} a cute cat sticker")
     assert "create:a cute cat sticker" in api.calls

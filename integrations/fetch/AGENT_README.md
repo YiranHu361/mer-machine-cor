@@ -1,9 +1,9 @@
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
-# Fabrary: turn a sentence into a real printed thing
+# Fabyn: turn a sentence into a real printed thing
 
-Tell Fabrary what you'd like made and it gets made on a real printer near you.
+Tell Fabyn what you'd like made and it gets made on a real printer near you.
 
 **What it does**
 - Draws three original designs for your request (AI image generation).

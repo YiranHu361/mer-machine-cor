@@ -1,11 +1,11 @@
-"""Fabrary on Agentverse: chat in ASI:One to have something made on a real printer.
+"""Fabyn on Agentverse: chat in ASI:One to have something made on a real printer.
 
 The agent speaks the Agent Chat Protocol. Each person who chats gets their own
-requester session on the Fabrary app, and the conversation drives the same order
+requester session on the Fabyn app, and the conversation drives the same order
 flow as /make: describe it -> choose one of three drafts when new art is drawn ->
 confirm the exact offer (mock payment) -> printing -> pickup code.
 
-It runs next to the app (it calls FABRARY_API_ORIGIN, http://127.0.0.1:4318 by
+It runs next to the app (it calls FABYN_API_ORIGIN, http://127.0.0.1:4318 by
 default) and reaches Agentverse through its mailbox, so nothing here is public.
 
     integrations/fetch/.venv/bin/python integrations/fetch/order_agent.py
@@ -25,11 +25,11 @@ import httpx
 ROOT = Path(__file__).resolve().parents[2]
 README = Path(__file__).with_name("AGENT_README.md")
 DESCRIPTION = (
-    "Describe something and Fabrary draws it, picks the best free real printer "
+    "Describe something and Fabyn draws it, picks the best free real printer "
     "(a sticker printer or an Instax photo printer) and makes it, then gives you a pickup code."
 )
 INTRO = (
-    "Hi! I'm **Fabrary**. Tell me what you'd like made, for example *a cute cat sticker* "
+    "Hi! I'm **Fabyn**. Tell me what you'd like made, for example *a cute cat sticker* "
     "or *a colourful dragon print*. I'll draw a few options, pick the best free real printer "
     "and give you a pickup code. Payment is a mock: nothing is charged."
 )
@@ -42,11 +42,11 @@ ORDINALS = {"first": 1, "second": 2, "third": 3, "one": 1, "two": 2, "three": 3}
 SETTLED = {"awaiting_design_choice", "proposed", "unavailable", "failed", "needs_clarification", "superseded"}
 
 
-class FabraryError(Exception):
+class FabynError(Exception):
     pass
 
 
-class Fabrary:
+class Fabyn:
     """The app's order API as one requester; every rule is still the backend's."""
 
     def __init__(self, origin: str, transport: httpx.AsyncBaseTransport | None = None):
@@ -63,14 +63,14 @@ class Fabrary:
         r = await self._call(method, path, cookie, body, headers)
         data = r.json() if r.content else {}
         if r.status_code >= 400:
-            raise FabraryError((data.get("error") or {}).get("message") or f"HTTP {r.status_code}")
+            raise FabynError((data.get("error") or {}).get("message") or f"HTTP {r.status_code}")
         return data
 
     async def new_session(self) -> str:
         r = await self._call("POST", "/api/session", body={"role": "requester"})
         cookie = r.headers.get("set-cookie", "").split(";")[0]
         if r.status_code >= 400 or not cookie:
-            raise FabraryError("could not open a session")
+            raise FabynError("could not open a session")
         return cookie
 
     async def order(self, cookie: str, order_id: str) -> dict:
@@ -122,7 +122,7 @@ def pick(text: str, count: int) -> int | None:
 class Conversation:
     """One person's chat as an order. `state` is saved per sender between messages."""
 
-    def __init__(self, api: Fabrary, public_origin: str, daily_orders: int = 5, poll_s: float = 2.0,
+    def __init__(self, api: Fabyn, public_origin: str, daily_orders: int = 5, poll_s: float = 2.0,
                  settle_s: float = 150, track_s: float = 300):
         self.api, self.public = api, public_origin.rstrip("/")
         self.daily_orders, self.poll_s, self.settle_s, self.track_s = daily_orders, poll_s, settle_s, track_s
@@ -131,7 +131,7 @@ class Conversation:
         """Previews are private to this person's session; a signed link opens anywhere for 10 minutes."""
         try:
             path = await self.api.share(await self._cookie(state), path)
-        except FabraryError:
+        except FabynError:
             pass
         return f"{self.public}{path}"
 
@@ -145,7 +145,7 @@ class Conversation:
             return None
         try:
             return await self.api.order(await self._cookie(state), state["order"])
-        except FabraryError:
+        except FabynError:
             state.pop("order", None)  # an expired session or a deleted order: start fresh
             state.pop("cookie", None)
             return None
@@ -290,13 +290,13 @@ def build_agent():
     )
 
     load_dotenv(ROOT / ".env")  # fills only what the shell has not set
-    seed = os.environ.get("FABRARY_AGENT_SEED")
+    seed = os.environ.get("FABYN_AGENT_SEED")
     if not seed:
-        raise SystemExit("FABRARY_AGENT_SEED is missing in .env: it keeps the agent's address the same.")
-    origin = os.environ.get("FABRARY_API_ORIGIN", "http://127.0.0.1:4318")
-    convo = Conversation(Fabrary(origin), os.environ.get("FABRARY_PUBLIC_ORIGIN", origin),
-                         daily_orders=int(os.environ.get("FABRARY_AGENT_DAILY_ORDERS", "5")))
-    agent = Agent(name="Fabrary", seed=seed, port=int(os.environ.get("FABRARY_AGENT_PORT", "8011")),
+        raise SystemExit("FABYN_AGENT_SEED is missing in .env: it keeps the agent's address the same.")
+    origin = os.environ.get("FABYN_API_ORIGIN", "http://127.0.0.1:4318")
+    convo = Conversation(Fabyn(origin), os.environ.get("FABYN_PUBLIC_ORIGIN", origin),
+                         daily_orders=int(os.environ.get("FABYN_AGENT_DAILY_ORDERS", "5")))
+    agent = Agent(name="Fabyn", seed=seed, port=int(os.environ.get("FABYN_AGENT_PORT", "8011")),
                   mailbox=True, description=DESCRIPTION, readme_path=str(README),
                   publish_agent_details=True, handle_messages_concurrently=True)
     chat = Protocol(spec=chat_protocol_spec)
@@ -316,7 +316,7 @@ def build_agent():
             async for reply in convo.handle(state, text):
                 await say(ctx, sender, reply)
                 ctx.storage.set(sender, state)
-        except (FabraryError, httpx.HTTPError) as e:
+        except (FabynError, httpx.HTTPError) as e:
             ctx.logger.warning(f"order flow failed for {sender[:16]}…: {e}")
             await say(ctx, sender, f"Sorry, the workshop didn't answer ({e}). Try again in a minute.")
         finally:

@@ -68,7 +68,7 @@ Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press
 
 | | |
 | --- | --- |
-| Agent name | **Fabrary** |
+| Agent name | **Fabyn** |
 | Agent address | `agent1qtntl30zudzgdsjgke4jyjdknkrerr92n4ncl9askhn6mu788exhswdc4vy` |
 | Protocol | Agent Chat Protocol 0.3.0 (manifest published to Agentverse) |
 | Code | [integrations/fetch/order_agent.py](integrations/fetch/order_agent.py), listing text in [AGENT_README.md](integrations/fetch/AGENT_README.md) |
@@ -79,10 +79,10 @@ It runs beside the app and reaches Agentverse through its mailbox, so the agent 
 
 ```sh
 npm run mvp -- --photo                     # the app, hub and printers
-npm run agent                              # the agent; FABRARY_AGENT_SEED in .env keeps its address
+npm run agent                              # the agent; FABYN_AGENT_SEED in .env keeps its address
 ```
 
-Connect it once: open the "Agent inspector" link the agent prints, sign in to Agentverse, and choose **Connect → Mailbox**. Draft previews are private links to this app; for people chatting from elsewhere, publish the app (for example `cloudflared tunnel --url http://127.0.0.1:4318`) and start the agent with `FABRARY_PUBLIC_ORIGIN` set to that address. Preview links are signed and last ten minutes.
+Connect it once: open the "Agent inspector" link the agent prints, sign in to Agentverse, and choose **Connect → Mailbox**. Draft previews are private links to this app; for people chatting from elsewhere, publish the app (for example `cloudflared tunnel --url http://127.0.0.1:4318`) and start the agent with `FABYN_PUBLIC_ORIGIN` set to that address. Preview links are signed and last ten minutes.
 
 ## Convex live state
 
