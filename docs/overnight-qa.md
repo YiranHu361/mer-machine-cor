@@ -4,9 +4,9 @@ Requested October 23, 2026, shortly after midnight Pacific. The user selected a 
 
 ## Continuation and boundaries
 
-- Heartbeat automation: `overnight-fabrary-quality-checks`, hourly on the hour, ending at `2026-10-23T16:00:00Z` (9:00 a.m. PDT). The final run should disable the heartbeat after producing the morning handoff. Preserve the existing chat.
+- Heartbeat automation: `overnight-fabyn-quality-checks`, hourly on the hour, ending at `2026-10-23T16:00:00Z` (9:00 a.m. PDT). The final run should disable the heartbeat after producing the morning handoff. Preserve the existing chat.
 - A temporary idle-sleep inhibitor (PID 35225) runs only until the same cutoff; no persistent power settings changed. The desktop app must remain running. The inhibitor does not override a deliberate sleep, shutdown or closed laptop lid.
-- Work only in this writable `fabrary/` directory. Parent `AGENTS.md` applies; synced reference files and `sources/` remain read-only.
+- Work only in this writable `fabyn/` directory. Parent `AGENTS.md` applies; synced reference files and `sources/` remain read-only.
 - Preserve ignored `.env`, `.data`, local publishing identity, assets, state and journals. Never print or commit credentials.
 - Use simulation and mock payment fixtures. No hardware work, API-credit spending, live payments, external registration, public deployment, account changes or external messages overnight.
 - Live hardware, funded wallets, Claude and ASI/Agentverse acceptance remain blocked until supplied configuration and readiness. Preparing `.env` did not configure those services.

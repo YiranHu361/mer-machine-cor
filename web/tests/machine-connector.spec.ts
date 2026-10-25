@@ -32,7 +32,7 @@ const checks = (consented: string[]) => {
     ["system", "Check this computer", null],
     ["search", "Find your M02 Pro", "Allow a short Bluetooth search"],
     ["pair", "Pair and read its serial channel", "Allow pairing"],
-    ["camera", "Take a test photo", "Take a test photo"],
+    ["ready", "Media loaded and output area clear", "Confirm it is ready"],
   ] as const;
   let blocked = false;
   return steps.map(([id, label, consent]) => {
@@ -110,7 +110,7 @@ async function workshop(page: Page) {
     );
     if (consent) {
       state.consented.push(request.postDataJSON().check);
-      if (state.consented.includes("camera")) state.registered = true;
+      if (state.consented.includes("ready")) state.registered = true;
       return json({ connector: {} });
     }
     if (path === "/api/owner/dashboard") {
@@ -230,14 +230,14 @@ test("a provider connects a machine with one command and allows each setup step"
   for (const name of [
     "Allow a short Bluetooth search",
     "Allow pairing",
-    "Take a test photo",
+    "Confirm it is ready",
   ]) {
     await setup.getByRole("button", { name, exact: true }).click();
     await expect(setup.getByRole("button", { name, exact: true })).toHaveCount(
       0,
     );
   }
-  expect(state.consented).toEqual(["search", "pair", "camera"]);
+  expect(state.consented).toEqual(["search", "pair", "ready"]);
   // Registered: the checklist gives way to the machine card's connection facts.
   await expect(setup).toHaveCount(0);
   const card = page.locator(".owner-machine");

@@ -4,8 +4,8 @@ import sqlite3
 import time
 import httpx
 import pytest
-from fabrary_node.service import NodeService
-from fabrary_node.security import NodeError,sign_token
+from fabyn_node.service import NodeService
+from fabyn_node.security import NodeError,sign_token
 from .test_mode_binding import node,request_for,KEY,MID,PARAMETERS
 from .test_cancellation import cancellation,ConnectionProxy
 

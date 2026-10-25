@@ -157,7 +157,7 @@ export async function localAnalysis(assets: Asset[]): Promise<ImageAnalysis> {
       resolve("node"),
       "python",
       "-m",
-      "fabrary_node.image_analysis",
+      "fabyn_node.image_analysis",
       "--",
       ...assets.map((asset) => asset.path),
     ],

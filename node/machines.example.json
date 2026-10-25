@@ -8,8 +8,7 @@
       "ownerReady": false,
       "bluetoothAddress": "",
       "rfcommChannel": null,
-      "maxJobSeconds": 120,
-      "cameraCommand": []
+      "maxJobSeconds": 120
     },
     {
       "id": "instax_01",
@@ -24,8 +23,7 @@
       "compatibilityValidated": false,
       "flipVertical": true,
       "developmentSeconds": 90,
-      "maxJobSeconds": 240,
-      "cameraCommand": []
+      "maxJobSeconds": 240
     },
     {
       "id": "bambu_01",
@@ -35,11 +33,10 @@
       "ownerReady": false,
       "host": "",
       "serial": "",
-      "accessCodeEnv": "FABRARY_BAMBU_ACCESS_CODE",
+      "accessCodeEnv": "FABYN_BAMBU_ACCESS_CODE",
       "lanOnly": false,
       "developerMode": false,
       "maxJobSeconds": 900,
-      "cameraCommand": [],
       "catalog": []
     }
   ]

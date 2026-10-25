@@ -73,7 +73,7 @@ async function fixture(
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.routeWebSocket(/.*/, (socket) => socket.close());
   await page.addInitScript((id) => {
-    localStorage.setItem("fabrary-current-job", id);
+    localStorage.setItem("fabyn-current-job", id);
     const callbacks: Array<() => void> = [];
     class FixtureEvents {
       onopen: (() => void) | null = null;
@@ -343,7 +343,7 @@ test("an unreadable saved-order quote snapshot keeps the last good view and reco
   await expect(approve).toBeEnabled();
   await expect(page.locator(".order-row")).toHaveCount(1);
   expect(
-    await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
   ).toBe(initial.id);
   expect(pageErrors).toEqual([]);
   expect(state.actions).toEqual([]);

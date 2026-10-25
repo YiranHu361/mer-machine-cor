@@ -75,16 +75,11 @@ class ProducerHub implements NodeBoundary {
     }
     if (tool === "get_status")
       return { execution_status: "running", completion_credible: false };
-    if (tool === "camera_snapshot")
-      throw new Error("The producer side has no camera yet.");
     return { calibrated: true };
-  }
-  async fetchFrame(): Promise<Buffer> {
-    throw new Error("No frames from the producer side yet.");
   }
 }
 
-const work = mkdtempSync(join(tmpdir(), "fabrary-print-one-"));
+const work = mkdtempSync(join(tmpdir(), "fabyn-print-one-"));
 const store = new SqliteStore(join(work, "state.sqlite"), initialState());
 const bridge = new ProducerHub(async (sha) => {
   const asset = Object.values((await store.read()).data.assets).find(
@@ -196,8 +191,7 @@ while (Date.now() < deadline && !final) {
       console.log(
         `  producer side: ${e.data.state}${e.data.progress != null ? ` ${Math.round(e.data.progress * 100)}%` : ""}${e.data.reason ? ` (${e.data.reason})` : ""}`,
       );
-    if (["rejected", "verifying", "done", "failed"].includes(e.data.state))
-      final = e.data;
+    if (["rejected", "done", "failed"].includes(e.data.state)) final = e.data;
   }
   seen = mine.length;
   if (!final) await new Promise((r) => setTimeout(r, 700));
@@ -205,8 +199,8 @@ while (Date.now() < deadline && !final) {
 if (!final)
   throw new Error("No outcome from the producer side within 2 minutes.");
 step(
-  final.state === "verifying" || final.state === "done"
-    ? `Printed. Waiting for a check (${final.verification?.reason ?? "no camera yet, needs a person to approve"}).`
+  final.state === "done"
+    ? "Printed. The machine reported completion."
     : `Not printed: ${final.state} ${final.reason ?? final.error ?? ""}`,
 );
 store.close();

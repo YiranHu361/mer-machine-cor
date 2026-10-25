@@ -1,4 +1,12 @@
 import type { Job, Operation, Machine } from "./model.ts";
+import type { PaymentQuote } from "../integrations/src/payments.ts";
+/** A job or an entire approved order, with its server-bound payment resource. */
+export interface PaymentTarget {
+  id: string;
+  quote?: PaymentQuote;
+  requesterAddress?: string;
+  paymentResourcePath?: string;
+}
 export interface PaymentResult {
   status: "pending" | "confirmed" | "failed";
   reference: string;
@@ -9,15 +17,23 @@ export interface PaymentResult {
 }
 export interface PaymentBoundary {
   mode: "mock" | "testnet";
-  challenge?(job: Job): Promise<any>;
-  collect(job: Job, op: Operation, payload?: any): Promise<PaymentResult>;
+  challenge?(job: PaymentTarget): Promise<any>;
+  collect(
+    job: PaymentTarget,
+    op: Operation,
+    payload?: any,
+  ): Promise<PaymentResult>;
   transfer(job: Job, machine: Machine, op: Operation): Promise<PaymentResult>;
-  reconcile(job: Job, machine: Machine, op: Operation): Promise<PaymentResult>;
+  reconcile(
+    job: PaymentTarget,
+    machine: Machine,
+    op: Operation,
+  ): Promise<PaymentResult>;
 }
 export class MockPayment implements PaymentBoundary {
   mode = "mock" as const;
   async collect(
-    job: Job,
+    job: PaymentTarget,
     op: Operation,
     payload?: any,
   ): Promise<PaymentResult> {
@@ -44,7 +60,7 @@ export class MockPayment implements PaymentBoundary {
     };
   }
   async reconcile(
-    job: Job,
+    job: PaymentTarget,
     machine: Machine,
     op: Operation,
   ): Promise<PaymentResult> {

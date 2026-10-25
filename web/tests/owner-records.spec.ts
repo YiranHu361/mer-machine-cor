@@ -838,7 +838,7 @@ test("requester identity changes discard private artwork, drafts and saved order
   ).toBeVisible();
   await expect
     .poll(() =>
-      page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     )
     .toBe("private_order_A");
   await page
@@ -859,7 +859,7 @@ test("requester identity changes discard private artwork, drafts and saved order
   expect(opened).toBe(0);
   await expect
     .poll(() =>
-      page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     )
     .toBeNull();
   await reopen.click();
@@ -1055,7 +1055,7 @@ for (const deferredOperation of ["upload", "create"] as const) {
       page.getByRole("button", { name: "Open requester session", exact: true }),
     ).toHaveCount(0);
     expect(
-      await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     ).toBeNull();
   });
 }

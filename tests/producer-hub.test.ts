@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +22,7 @@ import { cliRunner } from "../server/orchestration/producer.ts";
 function fakeHub() {
   const offers: any[] = [];
   const approvals: any[] = [];
+  const plateCleared: string[] = [];
   const events: { type: string; data: any }[] = [];
   const machines = [
     {
@@ -35,6 +37,12 @@ function fakeHub() {
       status: "idle",
       simulated: true,
     },
+    {
+      machine_id: "m_fdm_live",
+      process: "fdm_print",
+      status: "idle",
+      simulated: false,
+    } as { [key: string]: unknown },
   ];
   const server: Server = createServer((req, res) => {
     let body = "";
@@ -59,6 +67,10 @@ function fakeHub() {
         return reply(200, job);
       }
       if (req.url === "/dev/cancel") return reply(200, { ok: "sent" });
+      if (req.url === "/dev/plate-cleared") {
+        plateCleared.push(JSON.parse(body).machine_id);
+        return reply(200, { ok: "sent" });
+      }
       if (req.url === "/dev/approve") {
         const ref = JSON.parse(body);
         approvals.push(ref);
@@ -71,14 +83,20 @@ function fakeHub() {
   });
   const report = (job: any, change: Record<string, unknown>) =>
     events.push({ type: "job.updated", data: { ...job, ...change } });
-  return { server, offers, approvals, events, machines, report };
+  return { server, offers, approvals, plateCleared, events, machines, report };
 }
 
 const ready = existsSync(
-  join(process.cwd(), "node", ".venv", "bin", "fabrary-producer"),
+  join(process.cwd(), "node", ".venv", "bin", "fabyn-producer"),
 )
   ? false
   : "the node project environment is not installed";
+const openscad =
+  ready ||
+  (spawnSync("openscad", ["--version"]).status === 0 ||
+  existsSync("/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
+    ? false
+    : "OpenSCAD is not installed");
 
 test("hub states map to our node vocabulary", () => {
   assert.deepEqual(
@@ -89,18 +107,9 @@ test("hub states map to our node vocabulary", () => {
   const printed = hubStatus({
     job_id: "j",
     machine_id: "m",
-    state: "verifying",
-    verification: {
-      pass: null,
-      reason: "no camera frame; needs manual approval",
-    },
+    state: "done",
   });
   assert.equal(printed.execution_status, "completed");
-  assert.equal(
-    printed.completion_credible,
-    false,
-    "an unchecked print is never credible on its own",
-  );
   assert.equal(
     hubStatus({
       job_id: "j",
@@ -123,7 +132,7 @@ test(
     const hub = fakeHub();
     await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
     const address = hub.server.address() as { port: number };
-    const dir = mkdtempSync(join(tmpdir(), "fabrary-hub-"));
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-hub-"));
     const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
     const config: Config = {
       mode: "simulation",
@@ -232,7 +241,7 @@ test(
         [
           offer.params.width_mm,
           offer.params.sha256,
-          offer.params.fabrary_job_id,
+          offer.params.fabyn_job_id,
         ],
         [48, a.artifactSha256, a.child!.id],
       );
@@ -247,7 +256,7 @@ test(
         a.artifactSha256,
       );
 
-      // Printed but unchecked: the owner reviews it here.
+      // The machine report completes the job; handling stays separate.
       hub.report(offer, { state: "running", progress: 0.5 });
       await service.reconcile(a.child!.id);
       assert.equal(
@@ -255,23 +264,19 @@ test(
         "running",
       );
       hub.report(offer, {
-        state: "verifying",
+        state: "done",
         progress: 1,
-        verification: {
-          pass: null,
-          reason: "no camera frame; needs manual approval",
-        },
       });
       await service.reconcile(a.child!.id);
       const printed = (await service.read()).jobs[a.child!.id];
-      assert.equal(printed.productionState, "needs_review");
+      assert.equal(printed.productionState, "produced");
       assert.equal(
         printed.paymentState,
-        "held",
-        "nothing is released before the owner's check",
+        "released",
+        "machine completion releases the payment",
       );
 
-      // Until the owner checks it, a new order hears the printer is busy.
+      // Until handling clears it, a new order hears the printer is busy.
       const waiting = await orchestrator.createOrder(
         requester,
         { requestText: "I want a cat sticker" },
@@ -289,23 +294,16 @@ test(
       assert.equal(w.draft.stage, "unavailable");
       assert.match(w.draft.reason!, /finishing another order/);
 
-      // No camera on the producer side: the owner's own check approves the
-      // print, records handling and frees the printer in one step.
+      // Handling frees the printer independently of completion.
       const approve = (body: object) =>
-        owner.post(`/api/owner/jobs/${a.child!.id}/approve-print`).send(body);
+        owner.post(`/api/owner/jobs/${a.child!.id}/clear-print`).send(body);
       await approve({}).expect(422);
-      await approve({ checked: true }).expect(200);
+      await approve({ cleared: true }).expect(200);
       const approved = (await service.read()).jobs[a.child!.id];
       assert.equal(approved.productionState, "produced");
       assert.equal(approved.fulfillmentState, "ready_for_pickup");
-      assert.equal(approved.evidence.source, "owner_inspection");
-      assert.equal(approved.evidence.manual, true);
       assert.ok(
         ["release_pending", "released"].includes(approved.paymentState),
-      );
-      assert.deepEqual(
-        hub.approvals.map(({ machine_id, job_id }) => ({ machine_id, job_id })),
-        [{ machine_id: "m_sticker_live", job_id: offer.job_id }],
       );
       const freed = (await service.read()).machines.phomemo_01;
       assert.deepEqual(
@@ -313,23 +311,18 @@ test(
         [true, false, null],
       );
 
-      // With the camera check off, a finished print completes the order and
-      // frees the printer by itself, labeled as accepted without inspection.
-      config.autoAcceptHubPrints = true;
+      // Self-ejecting sticker output can be handled automatically.
+      config.autoPrepareHubPrints = true;
       const auto = await order("hub-order-auto");
       const autoJob = auto.plan!.assignments[0].child!.id;
       hub.report(hub.offers.at(-1), {
-        state: "verifying",
+        state: "done",
         progress: 1,
-        verification: { pass: null, reason: "no camera frame" },
       });
       await service.reconcile(autoJob);
       const accepted = (await service.read()).jobs[autoJob];
       assert.equal(accepted.productionState, "produced");
       assert.equal(accepted.fulfillmentState, "ready_for_pickup");
-      assert.equal(accepted.evidence.source, "accepted_unchecked");
-      assert.equal(accepted.evidence.manual, false);
-      assert.match(hub.approvals.at(-1).reason, /without inspection/);
       const free = (await service.read()).machines.phomemo_01;
       assert.deepEqual(
         [free.ready, free.paused, free.activeJobId],
@@ -337,7 +330,7 @@ test(
       );
 
       // A declined job is refunded and never retried by itself; failures
-      // still wait for the owner even with the camera check off.
+      // still wait for recovery.
       const second = await order("hub-order-2");
       const declined = hub.offers.at(-1);
       hub.report(declined, {
@@ -371,6 +364,144 @@ test(
         .expect(200);
       assert.equal(back.body.machine.producerHub, undefined);
       assert.equal(back.body.machine.listed, false);
+    } finally {
+      hub.server.close();
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "a name tag goes to the A1 mini as a model to slice and waits for the owner to clear the plate",
+  { skip: openscad, timeout: 120_000 },
+  async () => {
+    const hub = fakeHub();
+    await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
+    const address = hub.server.address() as { port: number };
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-nametag-"));
+    const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
+    const config: Config = {
+      mode: "simulation",
+      paymentMode: "mock",
+      storeMode: "sqlite-development",
+      assetOrigin: "http://127.0.0.1:4318/assets",
+      secret: "test-secret",
+      quoteMs: 120_000,
+      pickupMs: 86_400_000,
+      ownerCode: "test-owner-code",
+      dataDir: dir,
+      nodeUrl: "http://127.0.0.1:9",
+      allowedModes: ["hardware"],
+      autoPrepareHubPrints: true,
+    };
+    const service = new Service(
+      store,
+      new RoutingNode(
+        new HttpNode(config.nodeUrl, "key", config.secret),
+        new ConnectorRelay(),
+        config.secret,
+        new ProducerHubNode(`http://127.0.0.1:${address.port}`),
+      ),
+      new MockPayment(),
+      config,
+    );
+    const orchestrator = new Orchestrator(service, {
+      producer: cliRunner(join(process.cwd(), "node")),
+      designProvider: "fixture",
+      understand: async () => {
+        throw new Error("a stated name needs no reading");
+      },
+    });
+    const app = createApp(service, undefined, { orchestrator });
+    try {
+      const owner = request.agent(app);
+      await owner
+        .post("/api/session")
+        .send({ role: "owner", accessCode: "test-owner-code" })
+        .expect(200);
+      await owner
+        .post("/api/owner/machines/bambu_01/producer-hub")
+        .send({ producerMachineId: "m_fdm_live", confirmTestPrint: true })
+        .expect(200);
+
+      const requester = { id: "requester_tag", role: "requester" };
+      const { order } = await orchestrator.createOrder(
+        requester,
+        { requestText: 'A name tag that says "Zoë Li"' },
+        "nametag-order-1",
+      );
+      await orchestrator.settle(order.id);
+      const o = await orchestrator.view(requester, order.id);
+      assert.equal(o.draft.stage, "proposed", o.draft.reason ?? "");
+      assert.equal(o.intent!.provider, "local");
+      const [item] = o.plan!.items;
+      assert.deepEqual(
+        [item.name, item.design.kind, item.design.text],
+        ["A name tag", "text_tag", "Zoë Li"],
+      );
+      const confirmed = await orchestrator.confirm(requester, order.id, {
+        offerId: o.offer!.id,
+        planVersion: o.plan!.version,
+        planDigest: o.plan!.digest,
+        permission: true,
+        consent: { payment: true, production: true },
+        idempotencyKey: "nametag-order-1-confirm",
+      });
+      const [a] = confirmed.plan!.assignments;
+      assert.equal(a.executionMode, "hardware");
+      const offer = hub.offers[0];
+      assert.equal(offer.machine_id, "m_fdm_live");
+      assert.equal(offer.process, "fdm_print");
+      assert.ok(offer.params.width_mm > 40 && offer.params.height_mm === 20);
+      // The A1 mini's node receives the unsliced model (a 3MF zip) and slices it.
+      const link = new URL(offer.asset_url);
+      const model = await request(app)
+        .get(link.pathname + link.search)
+        .buffer(true)
+        .parse((res, done) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (c: Buffer) => chunks.push(c));
+          res.on("end", () => done(null, Buffer.concat(chunks)));
+        })
+        .expect(200);
+      assert.equal(model.body.subarray(0, 4).toString("latin1"), "PK\x03\x04");
+
+      // A 3D job completes from the machine report, then waits for plate clearance.
+      hub.report(offer, { state: "done", progress: 1 });
+      await service.reconcile(a.child!.id);
+      assert.equal(
+        (await service.read()).jobs[a.child!.id].productionState,
+        "produced",
+      );
+      assert.deepEqual(hub.plateCleared, []);
+      await owner
+        .post(`/api/owner/jobs/${a.child!.id}/clear-print`)
+        .send({ cleared: true })
+        .expect(200);
+      assert.equal(
+        (await service.read()).jobs[a.child!.id].fulfillmentState,
+        "ready_for_pickup",
+      );
+      assert.deepEqual(hub.plateCleared, ["m_fdm_live"]);
+
+      // A part left on the plate pauses the machine with the node's reason;
+      // resuming after inspecting and clearing it clears the plate too.
+      Object.assign(hub.machines[2], {
+        status: "error",
+        detail: "plate_not_cleared: the printer's last print ended FINISH",
+      });
+      await service.probeAvailability();
+      const paused = (await service.read()).machines.bambu_01;
+      assert.equal(paused.paused, true);
+      assert.match(paused.reason!, /plate_not_cleared/);
+      Object.assign(hub.machines[2], { status: "idle", detail: null });
+      await owner
+        .patch("/api/owner/machines/bambu_01")
+        .send({ paused: false, inspected: true, cleared: true })
+        .expect(200);
+      assert.deepEqual(hub.plateCleared, ["m_fdm_live", "m_fdm_live"]);
+      assert.equal((await service.read()).machines.bambu_01.ready, true);
     } finally {
       hub.server.close();
       store.close();

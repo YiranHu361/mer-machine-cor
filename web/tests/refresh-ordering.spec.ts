@@ -196,7 +196,7 @@ test("an old requester refresh cannot roll a newer order back when its row is se
     entered = false,
     returned = false;
   await page.addInitScript(
-    (id) => localStorage.setItem("fabrary-current-job", id),
+    (id) => localStorage.setItem("fabyn-current-job", id),
     state.id,
   );
   await fixtures(page, "requester", async (route, path) => {
@@ -319,7 +319,7 @@ test("authoritative revisions win when an earlier request reads the newer snapsh
     returned = false;
   const delayed = deferred();
   await page.addInitScript(
-    (id) => localStorage.setItem("fabrary-current-job", id),
+    (id) => localStorage.setItem("fabyn-current-job", id),
     initial.id,
   );
   await fixtures(page, "requester", async (route, path) => {
@@ -393,7 +393,7 @@ for (const failure of [
     let lookups = 0,
       replacements = 0;
     await page.addInitScript(
-      (id) => localStorage.setItem("fabrary-current-job", id),
+      (id) => localStorage.setItem("fabyn-current-job", id),
       original.id,
     );
     await fixtures(page, "requester", async (route, path) => {

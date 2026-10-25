@@ -4,12 +4,15 @@
 // counter onto the hub. Every screen's live view comes from Convex when the
 // .env names a deployment (see npm run convex:push).
 //
-// Usage: npm run mvp [-- --dry-run] [-- --no-build] [-- --photo]
+// Usage: npm run mvp [-- --dry-run] [-- --no-build] [-- --photo] [-- --no-3d] [-- --plate-cleared]
 //   --dry-run   the node writes the printer bytes and a preview under
 //               producer-side/.work/ instead of printing
 //   --no-build  reuse the existing web build
 //   --photo     also start the Instax mini Link node (m_photo_01) and move
 //               the Photo counter onto the hub, so colour photos print in colour
+//
+//   --no-3d     leave the A1 mini out
+//   --plate-cleared  confirm the A1 mini build plate is empty at startup
 //
 // Moving the machine onto the hub records the owner's confirmation of a good
 // test print (node.tools.run_job, see producer-side/README.md). Run one first.
@@ -19,17 +22,21 @@ import { spawn, spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const with3d = !args.includes("--no-3d");
+const modelMachine = process.env.FABYN_MVP_3D_MACHINE ?? "bambu_01";
+const modelProducer = process.env.FABYN_MVP_3D_PRODUCER_MACHINE ?? "m_fdm_01";
 const port = Number(process.env.PORT ?? 4318);
 const app = `http://127.0.0.1:${port}`;
 const hub = (
-  process.env.FABRARY_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000"
+  process.env.FABYN_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 const producerMachine =
-  process.env.FABRARY_MVP_PRODUCER_MACHINE ?? "m_sticker_01";
-const ourMachine = process.env.FABRARY_MVP_MACHINE ?? "phomemo_01";
+  process.env.FABYN_MVP_PRODUCER_MACHINE ?? "m_sticker_01";
+const ourMachine = process.env.FABYN_MVP_MACHINE ?? "phomemo_01";
 // [our machine, the producer side's machine] for each printer this run drives.
 const printers = [[ourMachine, producerMachine]];
 if (args.includes("--photo")) printers.push(["instax_01", "m_photo_01"]);
+if (with3d) printers.push([modelMachine, modelProducer]);
 const deployment = /^(?:dev|prod):([a-z0-9-]+)\|/.exec(
   process.env.CONVEX_DEPLOY_KEY ?? "",
 )?.[1];
@@ -39,10 +46,10 @@ const convexUrl =
 const env = {
   ...process.env,
   // Real machines only: an order never lands on a simulated machine.
-  FABRARY_ALLOWED_MODES: process.env.FABRARY_ALLOWED_MODES ?? "hardware",
-  FABRARY_PRODUCER_HUB_URL: hub,
-  // No camera check yet: a finished print completes the order and frees the printer.
-  FABRARY_AUTO_ACCEPT_PRINTS: process.env.FABRARY_AUTO_ACCEPT_PRINTS ?? "1",
+  FABYN_ALLOWED_MODES: process.env.FABYN_ALLOWED_MODES ?? "hardware",
+  FABYN_PRODUCER_HUB_URL: hub,
+  // Handle self-ejected paper and film after completion; clear 3D plates separately.
+  FABYN_AUTO_PREPARE_PRINTS: process.env.FABYN_AUTO_PREPARE_PRINTS ?? "1",
   ...(convexUrl ? { CONVEX_URL: convexUrl } : {}),
 };
 const python = "producer-side/.venv/bin/python";
@@ -88,6 +95,9 @@ const startNode = (theirs) =>
       hub,
       // --probe connects to the printer once (printing nothing) before going online.
       ...(dryRun ? ["--transport", "file"] : ["--probe"]),
+      ...(theirs === modelProducer && args.includes("--plate-cleared")
+        ? ["--plate-cleared"]
+        : []),
     ],
     { cwd: "producer-side" },
     () => {
@@ -113,6 +123,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => stop());
 
 const wait = async (what, check, seconds = 60) => {
   for (let i = 0; i < seconds * 2; i++) {
+    if (stopping) throw new Error(what);
     try {
       if (await check()) return;
     } catch {}
@@ -137,7 +148,7 @@ for (const [, theirs] of printers)
 const answering = printers.filter(([, theirs]) => !missing.has(theirs));
 const { ownerCode } = JSON.parse(
   await readFile(
-    `${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json`,
+    `${process.env.FABYN_DATA_DIR ?? ".data"}/local-credentials.json`,
     "utf8",
   ),
 );
@@ -146,7 +157,7 @@ const login = await fetch(`${app}/api/session`, {
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
     role: "owner",
-    accessCode: process.env.FABRARY_OWNER_CODE ?? ownerCode,
+    accessCode: process.env.FABYN_OWNER_CODE ?? ownerCode,
   }),
 });
 const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
@@ -185,20 +196,23 @@ for (const [mine, theirs] of answering) {
   );
   if (waiting.length)
     console.log(
-      `• ${waiting.length} print${waiting.length > 1 ? "s are" : " is"} waiting for your check on ${mine}, so it takes no new order yet.\n` +
-        `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
-        `  and press "Printed fine · approve and free the printer".`,
+      `• ${waiting.length} print${waiting.length > 1 ? "s are" : " is"} waiting for reconciliation on ${mine}, so it takes no new order yet.\n` +
+        `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABYN_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
+        `  and use "Reconcile saved outcome" in its recovery actions.`,
     );
 }
 console.log(
   `\nReady. Open ${app}/make, type "i want a sticker", add a picture and press Start.\n` +
-    (printers.length > 1
+    (args.includes("--photo")
       ? `For a colour photo print, add a photo with no words and press Start.\n`
       : "") +
-    `Tick the permission box, then "Pay & make" (mock payment).\n` +
-    (env.FABRARY_AUTO_ACCEPT_PRINTS === "1"
-      ? `Camera check is off: a finished print completes the order and frees the printer.`
-      : `After each print, approve it in ${app}/owner so the printer takes the next order.`) +
+    `Tick the permission box, then "Pay & make" (${env.FABYN_PAYMENT_MODE === "testnet" ? "x402 · Base Sepolia test USDC" : "mock payment"}).\n` +
+    (env.FABYN_AUTO_PREPARE_PRINTS === "1"
+      ? `A finished print completes the order and frees the printer.`
+      : `After each print, record handling in ${app}/owner so the printer takes the next order.`) +
+    (with3d
+      ? `\nName tags: type a name in ${app}/make. After the job finishes, remove the item and press "Item removed · clear the printer" in ${app}/owner.`
+      : "") +
     (convexUrl
       ? `\nLive view from Convex: ${app}/live`
       : `\nLive view is off: set CONVEX_URL or the full CONVEX_DEPLOY_KEY in .env, then npm run convex:push.`),

@@ -54,7 +54,7 @@ for (const context of [
       release = resolve;
     });
     await page.addInitScript(
-      (id) => localStorage.setItem("fabrary-current-job", id),
+      (id) => localStorage.setItem("fabyn-current-job", id),
       jobs[0].id,
     );
     await page.route("**/fixture-preview-*.png", async (route) => {

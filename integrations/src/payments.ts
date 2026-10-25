@@ -16,6 +16,8 @@ export interface PaymentReceipt {
 }
 export interface PaymentOperation {
   jobId: string; operationId: string; quote: PaymentQuote; payload?: unknown;
+  /** Server-generated route binding for whole-order payments. Never taken from the payer. */
+  resourcePath?: string;
   requesterAddress?: string; ownerAddress?: string; receipt?: PaymentReceipt;
   onSubmitted?: (receipt: PaymentReceipt) => Promise<void>;
 }
@@ -52,7 +54,7 @@ function canonical(value: any): string {
 export class MockPaymentAdapter implements PaymentAdapter {
   readonly mode = 'mock' as const;
   async challenge(op: PaymentOperation): Promise<PaymentChallenge> {
-    return {status:402,headers:{},body:{x402Version:2,resource:{url:`mock://fabrary/${op.jobId}`},accepts:[],error:'Explicit mock adapter; no blockchain payment'}};
+    return {status:402,headers:{},body:{x402Version:2,resource:{url:`mock://fabyn/${op.jobId}`},accepts:[],error:'Explicit mock adapter; no blockchain payment'}};
   }
   private receipt(op: PaymentOperation, kind: 'collection'|'release'|'refund'): PaymentReceipt {
     return {mode:this.mode,kind,status:'confirmed',reference:`mock:${kind}:${fingerprint([op.jobId,op.operationId])}`,amountCents:kind==='release'?op.quote.ownerCents:op.quote.totalCents};
@@ -93,13 +95,13 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     return {scheme:'exact',network:BASE_SEPOLIA_NETWORK,asset:BASE_SEPOLIA_USDC,amount:cents(op.quote.totalCents).toString(),payTo:this.treasury,maxTimeoutSeconds,extra:{name:'USDC',version:'2'}};
   }
   private resource(op: PaymentOperation) {
-    return new URL(`/api/jobs/${encodeURIComponent(op.jobId)}/checkout?quote=${encodeURIComponent(op.quote.id)}`,this.options.resourceOrigin).href;
+    return new URL(op.resourcePath ?? `/api/jobs/${encodeURIComponent(op.jobId)}/checkout?quote=${encodeURIComponent(op.quote.id)}`,this.options.resourceOrigin).href;
   }
   async challenge(op: PaymentOperation): Promise<PaymentChallenge> {
     const expiry = Date.parse(op.quote.expiresAt);
     if (!Number.isFinite(expiry) || expiry <= Date.now() + 1000) throw new Error('QUOTE_EXPIRED');
     const timeout = Math.max(1, Math.min(300, Math.floor((expiry - Date.now()) / 1000) - 2));
-    const body: PaymentRequired = {x402Version:2,resource:{url:this.resource(op),description:`Fabrary approved quote ${op.quote.id}`,mimeType:'application/json'},accepts:[this.requirements(op, timeout)]};
+    const body: PaymentRequired = {x402Version:2,resource:{url:this.resource(op),description:`Fabyn approved quote ${op.quote.id}`,mimeType:'application/json'},accepts:[this.requirements(op, timeout)]};
     return {status:402,headers:{'PAYMENT-REQUIRED':Buffer.from(JSON.stringify(body)).toString('base64'),'Access-Control-Expose-Headers':'PAYMENT-REQUIRED, PAYMENT-RESPONSE'},body};
   }
   async collect(op: PaymentOperation): Promise<PaymentReceipt> {
@@ -193,9 +195,9 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
   }
 }
 export function createPaymentAdapter(env: NodeJS.ProcessEnv = process.env): PaymentAdapter {
-  if ((env.FABRARY_PAYMENT_MODE ?? 'mock')==='mock') return new MockPaymentAdapter();
-  if (env.FABRARY_PAYMENT_MODE!=='testnet') throw new Error('PAYMENT_MODE_INVALID');
-  const missing = ['FABRARY_TREASURY_ADDRESS','FABRARY_BASE_SEPOLIA_RPC','FABRARY_PUBLIC_ORIGIN'].filter(name=>!env[name]);
+  if ((env.FABYN_PAYMENT_MODE ?? 'mock')==='mock') return new MockPaymentAdapter();
+  if (env.FABYN_PAYMENT_MODE!=='testnet') throw new Error('PAYMENT_MODE_INVALID');
+  const missing = ['FABYN_TREASURY_ADDRESS','FABYN_BASE_SEPOLIA_RPC','FABYN_PUBLIC_ORIGIN'].filter(name=>!env[name]);
   if (missing.length) throw new Error(`X402_BLOCKED: missing ${missing.join(', ')}`);
-  return new BaseSepoliaPaymentAdapter({treasuryAddress:env.FABRARY_TREASURY_ADDRESS!,rpcUrl:env.FABRARY_BASE_SEPOLIA_RPC!,resourceOrigin:env.FABRARY_PUBLIC_ORIGIN!,treasuryPrivateKey:env.FABRARY_TREASURY_PRIVATE_KEY as Hex|undefined,facilitatorUrl:env.FABRARY_X402_FACILITATOR});
+  return new BaseSepoliaPaymentAdapter({treasuryAddress:env.FABYN_TREASURY_ADDRESS!,rpcUrl:env.FABYN_BASE_SEPOLIA_RPC!,resourceOrigin:env.FABYN_PUBLIC_ORIGIN!,treasuryPrivateKey:env.FABYN_TREASURY_PRIVATE_KEY as Hex|undefined,facilitatorUrl:env.FABYN_X402_FACILITATOR});
 }

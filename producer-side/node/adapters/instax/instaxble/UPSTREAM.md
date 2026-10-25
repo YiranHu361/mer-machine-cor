@@ -1,8 +1,8 @@
 MIT-licensed InstaxBLE files from
 `javl/InstaxBLE@804dca8cfaba5db48bc5f961aab106006e600303`, copied unmodified from
-`node/fabrary_node/instaxble/` so the producer-side node needs nothing outside `producer-side/`.
+`node/fabyn_node/instaxble/` so the producer-side node needs nothing outside `producer-side/`.
 Source: https://github.com/javl/InstaxBLE/tree/804dca8cfaba5db48bc5f961aab106006e600303
-License: LICENSE.md in this directory. Fabrary's changes live in `../link.py`, not here.
+License: LICENSE.md in this directory. Fabyn's changes live in `../link.py`, not here.
 
 SHA256:
 - InstaxBLE.py: 26ecaeaf09b507094a7447e3a1b79e06d0a8004222fe6a2aebf62752b201c780

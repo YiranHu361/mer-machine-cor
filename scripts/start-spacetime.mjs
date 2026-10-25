@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 const runtime = resolve(".data/spacetime-runtime");
 const local = resolve(runtime, "spacetime");
 const binary =
-  process.env.FABRARY_SPACETIME_CLI ??
+  process.env.FABYN_SPACETIME_CLI ??
   (existsSync(local) ? local : "spacetime");
 const args = [
   ...(binary === local ? [`--root-dir=${runtime}`] : []),

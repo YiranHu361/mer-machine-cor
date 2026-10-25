@@ -16,7 +16,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 async function fixture(testnet = false, preparedModel = false) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-checkout-prerequisites-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-checkout-prerequisites-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const counts = { challenge: 0, collect: 0 };
   const outcome = { pending: false };

@@ -1,6 +1,6 @@
 /**
  * Deterministic stand-in drafts for tests and isolated end-to-end runs
- * (FABRARY_DESIGN_PROVIDER=fixture). They are labelled as fixture drafts and
+ * (FABYN_DESIGN_PROVIDER=fixture). They are labelled as fixture drafts and
  * never presented as generated artwork.
  */
 const svg = (body: string) =>

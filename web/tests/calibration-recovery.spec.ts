@@ -240,32 +240,7 @@ test("calibration numeric fields can be cleared and retyped without replacing bl
   expect(state.starts[0].ownerReady).toBe(true);
 });
 
-test("unavailable calibration evidence has an image-only retry without starting or confirming hardware (offline fixture)", async ({
-  page,
-}) => {
-  const state = await fixture(page);
-  const imageArea = page.locator(".calibration-evidence");
-  await expect(imageArea.getByRole("status")).toContainText(
-    "The result image could not be displayed.",
-  );
-  state.imageAvailable = true;
-  await imageArea
-    .getByRole("button", { name: "Retry result image", exact: true })
-    .click();
-  await expect(imageArea.getByRole("img")).toBeVisible();
-  await expect
-    .poll(() =>
-      imageArea
-        .getByRole("img")
-        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
-    )
-    .toBeGreaterThan(0);
-  await expect(imageArea).toContainText("Calibration evidence");
-  expect(state.mutations).toEqual([]);
-  expect(state.starts).toEqual([]);
-});
-
-for (const changed of ["attempt", "frame", "adapter"] as const)
+for (const changed of ["attempt", "adapter"] as const)
   test(`calibration inspection cannot carry to a different ${changed}, while the same outcome retains its draft (offline fixture)`, async ({
     page,
   }) => {
@@ -287,15 +262,6 @@ for (const changed of ["attempt", "frame", "adapter"] as const)
       "Inspected only the first fixture attempt",
     );
     if (changed === "attempt") state.calibration = calibration("two");
-    else if (changed === "frame")
-      state.calibration = {
-        ...calibration(),
-        evidence: {
-          ...calibration().evidence,
-          url: "/fixture-calibration-new-frame.png",
-          capturedAt: "2026-10-23T10:31:00.000Z",
-        },
-      };
     else {
       state.machine.adapterVersion = "offline-fixture-v2";
       state.revision++;

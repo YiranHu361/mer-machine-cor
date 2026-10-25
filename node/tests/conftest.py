@@ -4,8 +4,8 @@ import time
 import httpx
 import pytest
 from PIL import Image, ImageDraw
-from fabrary_node.service import NodeService
-from fabrary_node.security import sign_token
+from fabyn_node.service import NodeService
+from fabyn_node.security import sign_token
 
 KEY = "node-test-secret-at-least-32-bytes"
 PARAMS = {"outputType": "sticker", "widthMm": 53, "heightMm": 50, "quantity": 1, "material": "thermal-paper", "crop": "contain", "specVersion": 1}

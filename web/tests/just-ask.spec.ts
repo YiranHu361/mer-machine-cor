@@ -13,7 +13,7 @@ import { resolve } from "node:path";
    payments or a live design model. */
 
 async function ownerCode() {
-  if (process.env.FABRARY_OWNER_CODE) return process.env.FABRARY_OWNER_CODE;
+  if (process.env.FABYN_OWNER_CODE) return process.env.FABYN_OWNER_CODE;
   const credentials = JSON.parse(
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
@@ -25,7 +25,7 @@ async function requireSimulation(request: APIRequestContext) {
   expect(health.paymentMode, "Payments must be labeled mocks").toBe("mock");
   test.skip(
     health.integrations?.design !== "fixture",
-    "Run with FABRARY_DESIGN_PROVIDER=fixture so no live model is called",
+    "Run with FABYN_DESIGN_PROVIDER=fixture so no live model is called",
   );
 }
 async function audit(page: Page, state: string) {

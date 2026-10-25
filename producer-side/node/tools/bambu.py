@@ -16,11 +16,11 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
 from ..adapters import AdapterError, make_adapter
+from ..env import load_dotenv
 from ..adapters.bambu.adapter import loaded_material, preflight
 from ..adapters.bambu.gcode import inspect_gcode, read_3mf_gcode
 from ..adapters.bambu.transport import discover, make_transport, stop_cmd, version_cmd
@@ -28,17 +28,6 @@ from ..protocol import Job
 
 ROOT = Path(__file__).parents[2]
 DEFAULT_MACHINE = ROOT / "node/machines/m_fdm_01.json"
-
-
-def load_dotenv(path: Path) -> None:
-    """KEY=VALUE lines into os.environ, without overriding what is already set."""
-    if not path.is_file():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
 def load_manifest(a: argparse.Namespace) -> dict:

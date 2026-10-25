@@ -121,7 +121,7 @@ test("missing wallet explains how to continue and never fabricates collection", 
     /browser wallet.*No payment was signed or collected/,
   );
 });
-test("wrong wallet chain is rejected before requesting an account or signature", async () => {
+test("an ignored wallet network switch cannot reach signing", async () => {
   const methods: string[] = [];
   await assert.rejects(
     () =>
@@ -130,13 +130,82 @@ test("wrong wallet chain is rejected before requesting an account or signature",
         provider: {
           request: async ({ method }) => {
             methods.push(method);
-            return "0x1";
+            if (method === "eth_requestAccounts") return [offline.address];
+            if (method === "eth_chainId") return "0x1";
+            if (method === "wallet_switchEthereumChain") return null;
+            throw new Error("No signing is allowed on the wrong network");
           },
         },
       }),
-    /Switch your wallet to Base Sepolia/,
+    /wallet has not switched to Base Sepolia/,
   );
-  assert.deepEqual(methods, ["eth_chainId"]);
+  assert.deepEqual(methods, [
+    "eth_requestAccounts",
+    "eth_chainId",
+    "wallet_switchEthereumChain",
+    "eth_chainId",
+  ]);
+});
+test("checkout asks the wallet to add and select Base Sepolia before signing", async () => {
+  const methods: string[] = [];
+  let chain = "0x1",
+    added = false;
+  const signer = provider();
+  const wallet: WalletProvider = {
+    request: async (args) => {
+      methods.push(args.method);
+      if (args.method === "eth_chainId") return chain;
+      if (args.method === "wallet_switchEthereumChain") {
+        assert.deepEqual(args.params, [{ chainId: "0x14a34" }]);
+        if (!added)
+          throw Object.assign(new Error("unknown network"), { code: 4902 });
+        chain = "0x14a34";
+        return null;
+      }
+      if (args.method === "wallet_addEthereumChain") {
+        const network = args.params![0] as any;
+        assert.equal(network.chainId, "0x14a34");
+        assert.deepEqual(network.rpcUrls, ["https://sepolia.base.org"]);
+        added = true;
+        return null;
+      }
+      return signer.request(args);
+    },
+  };
+  const fetcher = (async (_path, init) =>
+    new Headers(init?.headers).has("PAYMENT-SIGNATURE")
+      ? response({ job: { paymentState: "held" } })
+      : response(challenge(), 402)) as typeof fetch;
+  const result = await checkoutWithWallet<any>(context(), {
+    provider: wallet,
+    fetcher,
+  });
+  assert.equal(result.job.paymentState, "held");
+  assert.ok(
+    methods.indexOf("wallet_addEthereumChain") <
+      methods.indexOf("eth_signTypedData_v4"),
+  );
+});
+test("declining a testnet switch never signs or submits a payment", async () => {
+  let signs = 0;
+  const signer = provider();
+  await assert.rejects(
+    () =>
+      checkoutWithWallet(context(), {
+        fetcher: required,
+        provider: {
+          request: async (args) => {
+            if (args.method === "eth_chainId") return "0x1";
+            if (args.method === "wallet_switchEthereumChain")
+              throw Object.assign(new Error("declined"), { code: 4001 });
+            if (args.method === "eth_signTypedData_v4") signs++;
+            return signer.request(args);
+          },
+        },
+      }),
+    /Wallet approval was declined/,
+  );
+  assert.equal(signs, 0);
 });
 test("wallet rejection is a recoverable state with no success claim", async () => {
   await assert.rejects(
@@ -503,4 +572,58 @@ test("cleared session storage cannot erase an ambiguous authorization claim in t
     /earlier wallet authorization may still be pending/,
   );
   assert.equal(signatures, 1);
+});
+
+test("whole-order checkout binds the offer and plan digest and replays the exact consent with the signed payment", async () => {
+  const c = {
+    ...context(),
+    quote: { ...context().quote, totalCents: 175 },
+    jobId: "order_wallet",
+    order: { planVersion: 3, planDigest: "approved-plan-digest" },
+  };
+  const required = challenge();
+  required.accepts[0].amount = "1750000";
+  required.resource.url = `http://127.0.0.1:4318/api/orders/${c.jobId}/pay?offer=${c.quote.id}&plan=${c.order.planDigest}`;
+  for (const resource of [
+    required.resource.url.replace("approved-plan-digest", "different-plan"),
+    required.resource.url.replace("quote_browser", "other-offer"),
+  ]) {
+    assert.throws(
+      () => validateChallenge({ ...required, resource: { url: resource } }, c),
+      /different order or quote/,
+    );
+  }
+  const calls: { path: string; body: any; signature: string | null }[] = [];
+  const fetcher = (async (path, init) => {
+    const signature = new Headers(init?.headers).get("PAYMENT-SIGNATURE");
+    calls.push({
+      path: String(path),
+      body: JSON.parse(String(init?.body)),
+      signature,
+    });
+    return signature
+      ? response({ order: { makeIntent: { payment: { status: "pending" } } } })
+      : response(required, 402);
+  }) as typeof fetch;
+  const result = await checkoutWithWallet<any>(c, {
+    fetcher,
+    provider: provider(),
+  });
+  assert.equal(result.order.makeIntent.payment.status, "pending");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].path, `/api/orders/${c.jobId}/pay`);
+  assert.deepEqual(calls[0].body, calls[1].body);
+  assert.deepEqual(calls[1].body, {
+    idempotencyKey: c.idempotencyKey,
+    offerId: c.quote.id,
+    planVersion: 3,
+    planDigest: c.order.planDigest,
+    permission: true,
+    consent: { payment: true, production: true },
+  });
+  assert.equal(
+    JSON.parse(Buffer.from(calls[1].signature!, "base64").toString()).resource
+      .url,
+    required.resource.url,
+  );
 });

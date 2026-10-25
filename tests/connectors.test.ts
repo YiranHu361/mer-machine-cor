@@ -22,7 +22,7 @@ import {
 
 const secret = "isolated-connector-platform-secret";
 async function fixture(relay = new ConnectorRelay(200, 2000)) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-connectors-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-connectors-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const service = new Service(
     store,

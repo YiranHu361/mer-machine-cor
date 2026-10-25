@@ -26,5 +26,5 @@ export class OpenAIImageProvider {
   }
 }
 export function createOpenAIImageProvider(env:NodeJS.ProcessEnv=process.env):OpenAIImageProvider {
-  return new OpenAIImageProvider({apiKey:env.OPENAI_API_KEY??'',model:env.FABRARY_OPENAI_IMAGE_MODEL});
+  return new OpenAIImageProvider({apiKey:env.OPENAI_API_KEY??'',model:env.FABYN_OPENAI_IMAGE_MODEL});
 }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 const roots = [
   "server",
   "tests",
-  "node/fabrary_node",
+  "node/fabyn_node",
   "node/tests",
   "integrations/src",
   "integrations/test",

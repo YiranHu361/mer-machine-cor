@@ -5,19 +5,36 @@
   "owner": "team",
   "owner_wallet": "0xOWNER_WALLET_ON_BASE_SEPOLIA",
   "simulated": false,
-  "location": {"lat": 37.8029, "lng": -122.4484, "label": "Palace of Fine Arts, our table"},
-  "media_loaded": {"kind": "thermal_sticker_53mm", "remaining_est": 120},
-  "limits": {"max_size_mm": [48, 150, 0], "max_job_minutes": 5, "hours": "00:00-24:00"},
-  "time_model": {"setup_s": 10, "per_unit_s": 15},
+  "location": {
+    "lat": 37.8029,
+    "lng": -122.4484,
+    "label": "Palace of Fine Arts, our table"
+  },
+  "media_loaded": {
+    "kind": "thermal_sticker_53mm",
+    "remaining_est": 120
+  },
+  "limits": {
+    "max_size_mm": [
+      48,
+      150,
+      0
+    ],
+    "max_job_minutes": 5,
+    "hours": "00:00-24:00"
+  },
+  "time_model": {
+    "setup_s": 10,
+    "per_unit_s": 15
+  },
   "price_card": {
     "material_unit": "label",
     "material_cost_usd": 0.05,
-    "unit_cost_usd": 0.20,
+    "unit_cost_usd": 0.2,
     "time_rate_usd_per_min": 0.0,
-    "min_price_usd": 0.50
+    "min_price_usd": 0.5
   },
   "status": "idle",
-
   "adapter": {
     "type": "phomemo_m02pro",
     "transport": "ble",
@@ -34,6 +51,5 @@
     "chunk_delay_s": 0.02,
     "completion_timeout_s": 15,
     "settle_s": 3
-  },
-  "camera": {"index": null, "warmup_frames": 8, "delay_s": 1.0}
+  }
 }
