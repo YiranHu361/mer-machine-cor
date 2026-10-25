@@ -246,7 +246,7 @@ export function SFMap({
 /** Where a pin's label goes, as an offset from the pin; kept inside the map. Widths are
    estimated from the monospace font (about 0.62 em per character). */
 function placeLabel(p: MapPin, x: number, y: number, r: number, s: number, H: number) {
-  const w = Math.max(p.label.length * 12.5, (p.sub?.length ?? 0) * 10.5) * 0.62 * s;
+  const w = Math.max(p.label.length * 12.5, (p.sub?.length ?? 0) * 10.5) * 0.68 * s;
   const h = (p.sub ? 28 : 14) * s;
   const pad = 6 * s;
   const fits = (start: number) => start >= pad && start + w <= W - pad;

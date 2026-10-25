@@ -115,7 +115,7 @@ export const REFRESH_CODES = new Set([
 ]);
 
 /** Text that came from the producer or the server internals, never for the judge to read. */
-const RAW_TEXT = /traceback|File "|Module|PRODUCER_FAILED|Exception|Error:|\/Users\/|\/private\/|\.py\b|python|node_modules|stack/i;
+const RAW_TEXT = /traceback|File "|Module|PRODUCER_FAILED|Exception|Error:|\/Users\/|\/private\/|\.py\b|python|node_modules|stack|^\s*[{[]|"code"\s*:|TooManyWrites|deployment|convex/i;
 export const PREPARE_FAILED = "We could not prepare that design. Try again or start over.";
 const GENERIC = "Something went wrong. Try again.";
 

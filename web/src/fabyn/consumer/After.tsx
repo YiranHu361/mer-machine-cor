@@ -70,7 +70,7 @@ export function PrintingStep({ order, now, run, busy, error, go, onOrders }: Scr
   const startedAt = makingStartedAt(order.events);
   const states = plan.assignments.map((a) => estimateJob(a, { now, startedAt, readyEstimateMinutes: plan.readyEstimateMinutes }).state);
   const printed = states.every((s) => s === "handover" || s === "finished");
-  const cancellable = ["approved", "in_progress"].includes(plan.status) && !printed;
+  const cancellable = ["approved", "in_progress"].includes(plan.status) && states.some((s) => s === "queued");
   return (
     <section className="cs-making" aria-labelledby="cs-making-title">
       <TitleBlock
