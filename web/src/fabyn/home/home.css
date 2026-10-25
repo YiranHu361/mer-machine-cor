@@ -1,0 +1,134 @@
+/* Homepage styles. Every selector is prefixed .hm- because all fabyn pages share one bundle. */
+.hm-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--f-body), sans-serif;
+  font-weight: 300;
+  container-type: inline-size;
+}
+.hm-stage { position: absolute; inset: 0; }
+.hm-stage canvas { display: block; position: fixed; inset: 0; }
+.hm-ui { position: fixed; inset: 0; pointer-events: none; }
+.hm-nav { position: absolute; left: 3cqw; right: 3cqw; top: 2.2cqw; display: flex; align-items: flex-start; gap: 3.2cqw; }
+.hm-word { font-family: var(--f-display), sans-serif; font-size: max(18px, 1.7cqw); line-height: 1.05; letter-spacing: -0.01em; }
+.hm-wm { display: flex; align-items: center; gap: 0.4em; font-style: normal; }
+.hm-wm svg { width: 0.95em; height: 0.95em; flex: none; }
+.hm-word span { display: block; font-family: var(--f-mono), monospace; font-size: max(9px, 0.75cqw); color: var(--muted); margin-top: 0.5cqw; }
+.hm-item { display: flex; gap: 0.7cqw; }
+.hm-item svg { width: max(26px, 3cqw); height: max(26px, 3cqw); flex: none; }
+.hm-item svg * { fill: none; stroke: var(--txt); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.hm-item b { display: block; font-weight: 300; font-size: max(14px, 1.45cqw); line-height: 1; }
+.hm-item small { display: block; font-size: max(8px, 0.72cqw); line-height: 1.3; margin-top: 0.55cqw; color: var(--muted); }
+.hm-micro { margin-left: auto; font-family: var(--f-mono), monospace; font-size: max(8px, 0.7cqw); line-height: 1.4; color: var(--muted); text-align: right; }
+.hm-micro b { color: var(--txt); font-weight: 400; }
+.hm-scenes { position: absolute; left: 3cqw; bottom: 3cqw; font-family: var(--f-mono), monospace; font-size: max(9px, 0.8cqw); display: flex; gap: 1.6cqw; color: var(--muted); pointer-events: none; }
+.hm-scenes span.on { color: var(--txt); }
+.hm-scenes i { position: absolute; left: 0; bottom: -0.8cqw; height: 1px; background: var(--acc); width: 0; }
+.hm-cta { position: absolute; left: 50%; transform: translateX(-50%); bottom: 2.6cqw; text-align: center; width: min(92vw, 60cqw); pointer-events: auto; }
+.hm-h { font-family: var(--f-display), sans-serif; font-weight: 300; font-size: max(26px, 2.8cqw); letter-spacing: 0.02em; line-height: 1.1; }
+.hm-sub { font-size: max(12px, 1.05cqw); color: var(--muted); margin: 0.7cqw 0 1.4cqw; }
+.hm-btn {
+  display: inline-block;
+  font-family: var(--f-display), sans-serif;
+  font-weight: 300;
+  font-size: max(13px, 1.25cqw);
+  letter-spacing: 0.04em;
+  color: var(--txt);
+  background: none;
+  border: 1px solid var(--txt);
+  border-radius: 6px;
+  padding: 0.55cqw 2.4cqw;
+  cursor: pointer;
+  min-height: 44px;
+}
+.hm-btn:hover { background: var(--txt); color: var(--bg); }
+.hm-btn.solid { border-color: var(--acc); color: var(--bg); background: var(--acc); }
+.hm-btn.solid:hover { background: transparent; color: var(--acc); }
+.hm-btn.ghost { border-color: var(--line); color: var(--muted); }
+.hm-btn.ghost:hover { background: none; color: var(--txt); border-color: var(--txt); }
+.hm-lab {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  font-family: var(--f-mono), monospace;
+  font-size: max(9px, 0.72cqw);
+  line-height: 1.45;
+  white-space: nowrap;
+  text-align: left;
+  transition: opacity 0.25s;
+}
+.hm-lab b { display: block; font-family: var(--f-body), sans-serif; font-weight: 300; font-size: max(13px, 1.2cqw); color: var(--txt); letter-spacing: -0.005em; }
+.hm-lab span { color: var(--muted); display: block; }
+.hm-lab em { font-style: normal; color: var(--acc); display: block; }
+.hm-lab::after { content: ""; position: absolute; left: 0; bottom: -14px; width: 1px; height: 12px; background: var(--muted); }
+.hm-city {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--f-mono), monospace;
+  font-size: max(9px, 0.7cqw);
+  color: var(--muted);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.hm-city.hot { color: var(--acc); }
+
+/* START DEMO chooser */
+.hm-chooser-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(11, 11, 12, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  pointer-events: auto;
+  overflow-y: auto;
+}
+.hm-chooser {
+  width: min(880px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: clamp(20px, 3vw, 40px);
+}
+.hm-kicker { font-family: var(--f-mono), monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.hm-chooser-title { font-family: var(--f-display), sans-serif; font-weight: 300; font-size: clamp(22px, 3vw, 32px); margin: 10px 0 22px; letter-spacing: 0.01em; }
+.hm-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.hm-card {
+  text-align: left;
+  color: var(--txt);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 210px;
+  font: inherit;
+}
+.hm-card:hover { border-color: var(--muted); }
+.hm-card.on { border-color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
+.hm-card-tag { font-family: var(--f-mono), monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.06em; }
+.hm-card.on .hm-card-tag { color: var(--acc); }
+.hm-card b { font-family: var(--f-display), sans-serif; font-weight: 300; font-size: 19px; letter-spacing: 0.02em; text-transform: lowercase; }
+.hm-card-line { font-size: 15px; line-height: 1.35; }
+.hm-card small { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.hm-chooser-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+
+@media (max-width: 700px) {
+  .hm-nav .hm-item, .hm-scenes { display: none; }
+  .hm-nav { left: 6vw; right: 6vw; top: 6vw; }
+  .hm-cta { bottom: 8vw; width: 88vw; }
+  .hm-h { font-size: 8.4vw; }
+  .hm-micro { font-size: 10px; }
+  .hm-cards { grid-template-columns: 1fr; }
+  .hm-card { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-lab, .hm-city { transition: none; }
+}

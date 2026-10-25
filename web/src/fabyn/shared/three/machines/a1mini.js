@@ -197,14 +197,15 @@ export function build(THREE, kit) {
   }
 
   const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  function update(q, t) {
+  // opts.headX (mm, optional): put the nozzle over this x while printing instead of the idle sweep
+  function update(q, t, opts = {}) {
     drawScreen(q);
     const h = setPrint(q);
     const working = q > 0 && q < 1;
     const engage = smooth(0, 0.1, q) * (1 - smooth(0.92, 1, q));
     const printY = BED_TOP + h + 0.4 - NOZZLE;
     const armY = (1 - engage) * PARK_Y + engage * printY;
-    const headX = PARK_X + engage * (working ? Math.sin(t * 9) * 30 : 0);
+    const headX = opts.headX !== undefined ? PARK_X + engage * (opts.headX - PARK_X) : PARK_X + engage * (working ? Math.sin(t * 9) * 30 : 0);
     gantry.position.y = armY;
     head.position.x = headX;
     bed.position.z = working ? Math.sin(t * 6.3 + 1) * 12 * engage : 0;
@@ -212,5 +213,6 @@ export function build(THREE, kit) {
     cables(armY, headX);
   }
   update(0, 0);
-  return { group: root, update };
+  // bed (mm space, plate top at bedTop) and the sample tag are exposed so a caller can put its own item on the moving bed
+  return { group: root, update, bed, bedTop: BED_TOP, tag };
 }
