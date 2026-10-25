@@ -1,24 +1,31 @@
 import { createHash } from 'node:crypto';
 import { HTTPFacilitatorClient, decodePaymentSignatureHeader, encodePaymentResponseHeader, type FacilitatorClient } from '@x402/core/http';
 import type { PaymentPayload, PaymentRequirements, PaymentRequired } from '@x402/core/types';
-import { createPublicClient, createWalletClient, decodeEventLog, encodeFunctionData, getAddress, http, keccak256, parseAbi, type Hex } from 'viem';
+import { createPublicClient, createWalletClient, decodeEventLog, encodeFunctionData, getAddress, http, keccak256, parseAbi, parseAbiItem, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { baseSepolia } from 'viem/chains';
 
 export const BASE_SEPOLIA_NETWORK = 'eip155:84532' as const;
 export const BASE_SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const;
 const tokenAbi = parseAbi(['function transfer(address to, uint256 value) returns (bool)', 'event Transfer(address indexed from, address indexed to, uint256 value)']);
+const authorizationAbi = parseAbi(['function authorizationState(address authorizer, bytes32 nonce) view returns (bool)']);
+const authorizationUsed = parseAbiItem('event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)');
+const authorizationCanceled = parseAbiItem('event AuthorizationCanceled(address indexed authorizer, bytes32 indexed nonce)');
 export interface PaymentQuote { id: string; totalCents: number; ownerCents: number; platformCents: number; expiresAt: string }
 export interface PaymentReceipt {
   status: 'pending'|'confirmed'|'failed'; reference: string; mode: 'mock'|'testnet';
   transactionHash?: string; reason?: string; payer?: string; payee?: string; amountCents?: number;
   kind?: 'collection'|'release'|'refund'; blockNumber?: string;
+  /** Recovery data only: never retain a signature that could submit another payment. */
+  authorization?: { nonce: string; validBefore: string; fromBlock: string; searchFromBlock?: string };
+  settlementError?: { code: string; httpStatus?: number };
 }
 export interface PaymentOperation {
   jobId: string; operationId: string; quote: PaymentQuote; payload?: unknown;
   /** Server-generated route binding for whole-order payments. Never taken from the payer. */
   resourcePath?: string;
   requesterAddress?: string; ownerAddress?: string; receipt?: PaymentReceipt;
+  createdAt?: string;
   onSubmitted?: (receipt: PaymentReceipt) => Promise<void>;
 }
 export interface PaymentChallenge { status: 402; headers: Record<string,string>; body: PaymentRequired }
@@ -123,7 +130,8 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     const payer = getAddress(auth.from);
     if (op.requesterAddress && getAddress(op.requesterAddress)!==payer) throw new Error('PAYER_MISMATCH');
     const reference = `x402:84532:${payer.toLowerCase()}:${auth.nonce.toLowerCase()}`;
-    const pending: PaymentReceipt = {mode:this.mode,kind:'collection',status:'pending',reference,payer,payee:this.treasury,amountCents:op.quote.totalCents};
+    const fromBlock = await this.rpc.getBlockNumber({cacheTime:0});
+    const pending: PaymentReceipt = {mode:this.mode,kind:'collection',status:'pending',reference,payer,payee:this.treasury,amountCents:op.quote.totalCents,authorization:{nonce:auth.nonce,validBefore:String(validBefore),fromBlock:String(fromBlock)}};
     const verified = await this.facilitator.verify(payload,requirements);
     if (!verified.isValid) return {...pending,status:'failed',reason:verified.invalidReason ?? 'Facilitator rejected authorization'};
     // Durable caller records this nonce before settle, preventing signature reuse
@@ -132,11 +140,19 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     let settled;
     try {
       settled = await this.facilitator.settle(payload,requirements);
-    } catch {
-      return {...pending,reason:'Settlement response unavailable; authorization may have settled. Reconcile, never submit a new payment automatically.'};
+    } catch (error: any) {
+      // The SDK can throw a structured rejection that still contains a known
+      // transaction. Preserve it, and retain safe diagnostics across recovery.
+      const code = /^[a-z0-9_-]{1,80}$/i.test(error?.errorReason ?? '') ? error.errorReason : 'facilitator_response_unavailable';
+      pending.settlementError = {code,...(Number.isInteger(error?.statusCode) ? {httpStatus:error.statusCode} : {})};
+      console.warn(`[x402] ${op.operationId}: ${code}${pending.settlementError.httpStatus ? ` (HTTP ${pending.settlementError.httpStatus})` : ''}`);
+      if (error?.network === BASE_SEPOLIA_NETWORK && /^0x[0-9a-f]{64}$/i.test(error?.transaction ?? ''))
+        settled = {network:error.network,transaction:error.transaction};
+      else
+        return {...pending,reason:'Settlement response unavailable; authorization may have settled. Reconcile, never submit a new payment automatically.'};
     }
     if (settled.network!==BASE_SEPOLIA_NETWORK) return {...pending,status:'pending',reason:'Facilitator returned unexpected network; operator reconciliation required'};
-    if (!settled.transaction || !/^0x[0-9a-fA-F]{64}$/.test(settled.transaction)) return {...pending,status:'pending',reason:settled.errorReason ?? 'Settlement returned no transaction; no confirmed collection'};
+    if (!settled.transaction || !/^0x[0-9a-fA-F]{64}$/.test(settled.transaction)) return {...pending,status:'pending',settlementError:{code:/^[a-z0-9_-]{1,80}$/i.test(settled.errorReason ?? '') ? settled.errorReason! : 'facilitator_missing_transaction'},reason:'Settlement returned no transaction; checking the original authorization'};
     const submitted = {...pending,transactionHash:settled.transaction};
     try { await op.onSubmitted?.(submitted); }
     catch {
@@ -173,14 +189,95 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     if (!op.receipt) throw new Error('RECEIPT_REQUIRED: reconciliation never creates another payment');
     await this.checkChain();
     if (op.receipt.status!=='pending') return op.receipt;
-    if (!op.receipt.transactionHash) return {...op.receipt,reason:'Unknown settlement transaction; inspect facilitator / onchain authorization nonce. Automatic resubmission disabled.'};
+    if (!op.receipt.transactionHash) return this.recoverCollection(op);
     return this.confirm(op.receipt);
+  }
+  /** Resolve a lost facilitator response using only the original authorization. */
+  private async recoverCollection(op: PaymentOperation): Promise<PaymentReceipt> {
+    const receipt = op.receipt!;
+    const reference = /^x402:84532:(0x[0-9a-f]{40}):(0x[0-9a-f]{64})$/i.exec(receipt.reference);
+    const nonce = receipt.authorization?.nonce ?? reference?.[2];
+    const expiry = receipt.authorization?.validBefore ?? String(Math.floor(Date.parse(op.quote.expiresAt) / 1000));
+    if (receipt.kind !== 'collection' || !receipt.payer || !nonce || !/^0x[0-9a-f]{64}$/i.test(nonce) || !/^\d+$/.test(expiry) || (reference && reference[1].toLowerCase() !== receipt.payer.toLowerCase()))
+      return {...receipt,reason:'The saved test payment needs workshop review; no replacement payment will be sent.'};
+    let recovered = receipt;
+    try {
+      // Use a confirmed block's clock and state, not the server clock or an
+      // unconfirmed head, before concluding that no transfer can arrive later.
+      const head = BigInt(await this.rpc.getBlockNumber({cacheTime:0}));
+      const confirmations = BigInt(this.options.confirmations ?? 2);
+      const blockNumber = head >= confirmations - 1n ? head - (confirmations - 1n) : 0n;
+      const block = await this.rpc.getBlock({blockNumber});
+      const used = await this.rpc.readContract({
+        address:BASE_SEPOLIA_USDC,abi:authorizationAbi,functionName:'authorizationState',
+        args:[receipt.payer,nonce],blockNumber,
+      });
+      if (used === false) {
+        if (BigInt(block.timestamp) >= BigInt(expiry))
+          return {...receipt,status:'failed',reason:'Test payment expired without a transfer. Nothing was charged. Start a new order to try again.'};
+        return {...receipt,reason:'The test payment has not settled. Checking the original authorization; no replacement payment will be sent.'};
+      }
+      if (used !== true) throw new Error('INVALID_AUTHORIZATION_STATE');
+      const fromBlock = BigInt(receipt.authorization?.searchFromBlock ?? receipt.authorization?.fromBlock ?? await this.legacyRecoveryBlock(op, blockNumber));
+      const authorization = receipt.authorization ?? {nonce,validBefore:expiry,fromBlock:String(fromBlock)};
+      recovered = {...receipt,authorization};
+      if (fromBlock > blockNumber)
+        return {...recovered,reason:'Waiting for the test payment receipt to become available.'};
+      // Bounded log ranges work with public RPC limits. Save progress when an
+      // old payment needs several pages; fresh payments normally need one.
+      const toBlock = fromBlock + 999n < blockNumber ? fromBlock + 999n : blockNumber;
+      const events = [authorizationUsed, authorizationCanceled];
+      const [usedLogs, canceledLogs] = await Promise.all(events.map(event => this.rpc.getLogs({
+        address:BASE_SEPOLIA_USDC,event,args:{authorizer:receipt.payer,nonce},
+        fromBlock,toBlock,strict:true,
+      })));
+      const matches = (log: any, event: typeof authorizationUsed | typeof authorizationCanceled) => {
+        if (log.removed || log.address?.toLowerCase() !== BASE_SEPOLIA_USDC.toLowerCase()) return false;
+        try {
+          const decoded = decodeEventLog({abi:[event],data:log.data,topics:log.topics});
+          return decoded.eventName === event.name && decoded.args.authorizer.toLowerCase() === receipt.payer!.toLowerCase() && decoded.args.nonce.toLowerCase() === nonce.toLowerCase();
+        } catch { return false; }
+      };
+      const transaction = usedLogs.find((log: any) => matches(log, authorizationUsed) && /^0x[0-9a-f]{64}$/i.test(log.transactionHash ?? ''))?.transactionHash;
+      if (transaction) {
+        recovered = {...recovered,transactionHash:transaction};
+        await op.onSubmitted?.(recovered);
+        // A used nonce alone is not payment: still require the exact successful
+        // USDC transfer, payer, payee, amount and confirmation count.
+        return this.confirm(recovered);
+      }
+      if (canceledLogs.some((log: any) => matches(log, authorizationCanceled)))
+        return {...recovered,status:'failed',reason:'Test payment authorization was canceled without a transfer. Nothing was charged.'};
+      return {
+        ...recovered,
+        authorization:{...authorization,searchFromBlock:String(toBlock < blockNumber ? toBlock + 1n : fromBlock)},
+        reason:'Recovering the original test payment receipt; no replacement payment will be sent.',
+      };
+    } catch {
+      return {...recovered,reason:'The test payment network is unavailable. The saved payment will be checked again; do not pay again yet.'};
+    }
+  }
+  /** Older receipts saved the nonce in their reference but no starting block. */
+  private async legacyRecoveryBlock(op: PaymentOperation, head: bigint): Promise<string> {
+    const time = Date.parse(op.createdAt ?? op.quote.expiresAt);
+    if (!Number.isFinite(time)) throw new Error('RECOVERY_TIME_REQUIRED');
+    // The accepted authorization window is at most 300 seconds. Start before
+    // the recorded operation to include any settlement near that boundary.
+    const before = BigInt(Math.max(0, Math.floor(time / 1000) - 300));
+    let low = 0n, high = head;
+    while (low < high) {
+      const middle = (low + high + 1n) / 2n;
+      const block = await this.rpc.getBlock({blockNumber:middle});
+      if (BigInt(block.timestamp) <= before) low = middle;
+      else high = middle - 1n;
+    }
+    return String(low);
   }
   private async confirm(receipt: PaymentReceipt): Promise<PaymentReceipt> {
     try {
       const tx = await this.rpc.getTransactionReceipt({hash:receipt.transactionHash as Hex});
       if (tx.status!=='success') return {...receipt,status:'failed',reason:'Onchain transaction reverted'};
-      const current = await this.rpc.getBlockNumber();
+      const current = await this.rpc.getBlockNumber({cacheTime:0});
       if (BigInt(current) - BigInt(tx.blockNumber) + 1n < BigInt(this.options.confirmations ?? 2)) return {...receipt,status:'pending',reason:'Waiting for Base Sepolia confirmations'};
       const matching = tx.logs.some((log:any) => {
         if (log.address.toLowerCase()!==BASE_SEPOLIA_USDC.toLowerCase()) return false;

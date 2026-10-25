@@ -1851,6 +1851,8 @@ function testnetPayment(
   const tx = "0x" + "ab".repeat(32);
   let settlements = 0,
     confirmed = false,
+    recovery: "waiting" | "settled" | "expired" = "waiting",
+    savedNonce = "",
     amount = 0n;
   const boundary = new IntegratedPayment(f.store, {
     FABYN_PAYMENT_MODE: "mock",
@@ -1896,6 +1898,7 @@ function testnetPayment(
       },
       settle: async (payload: any) => {
         settlements++;
+        savedNonce = payload.payload.authorization.nonce;
         amount = BigInt(payload.payload.authorization.value);
         const state = await f.service.read();
         assert.ok(
@@ -1912,6 +1915,18 @@ function testnetPayment(
     publicClient: {
       getChainId: async () => 84532,
       getBlockNumber: async () => (confirmed ? 11n : 10n),
+      getBlock: async () => ({ timestamp: BigInt(Math.floor(Date.now() / 1000) + (recovery === "expired" ? 600 : 0)) }),
+      readContract: async () => recovery === "settled",
+      getLogs: async (query: any) => recovery === "settled" && query.event.name === "AuthorizationUsed" ? [{
+        address: BASE_SEPOLIA_USDC,
+        topics: encodeEventTopics({
+          abi: parseAbi(["event AuthorizationUsed(address indexed authorizer, bytes32 indexed nonce)"]),
+          eventName: "AuthorizationUsed",
+          args: { authorizer: payer.address, nonce: savedNonce },
+        }),
+        data: "0x",
+        transactionHash: tx,
+      }] : [],
       getTransactionReceipt: async () => ({
         status: "success",
         blockNumber: 10n,
@@ -1946,6 +1961,10 @@ function testnetPayment(
     tx,
     payer,
     settlements: () => settlements,
+    recover: (outcome: "settled" | "expired") => {
+      recovery = outcome;
+      if (outcome === "settled") confirmed = true;
+    },
     confirm: () => {
       confirmed = true;
     },
@@ -2320,6 +2339,48 @@ test("unknown x402 settlement remains pending across restart without another cha
     f.close();
   }
 });
+
+for (const outcome of ["settled", "expired"] as const)
+  test(`lost x402 settlement recovers as ${outcome} after restart without another collection`, async () => {
+    const f = fixture({ allowed: ["hardware"] });
+    try {
+      const payment = testnetPayment(f, true);
+      await f.ready(["instax_01"], "hardware");
+      const photo = await f.photo(requester.id);
+      const { order } = await f.orchestrator.createOrder(requester, { photoAssetIds: [photo] }, `recover-${outcome}-create`);
+      await f.orchestrator.settle(order.id);
+      const o = await f.orchestrator.view(requester, order.id);
+      let challenge: any;
+      try {
+        await f.orchestrator.confirm(requester, order.id, confirmBody(o));
+      } catch (error) {
+        challenge = (error as any).challenge.body;
+      }
+      await f.orchestrator.confirm(requester, order.id, confirmBody(o), await payment.sign(challenge));
+      const before = await f.orchestrator.view(requester, order.id);
+      const pendingEvents = before.events.filter(e => e.type === "payment.pending").length;
+      await new Orchestrator(f.service).tick();
+      const unchanged = await f.orchestrator.view(requester, order.id);
+      assert.equal(unchanged.events.filter(e => e.type === "payment.pending").length, pendingEvents);
+      payment.recover(outcome);
+      const restarted = new Orchestrator(f.service);
+      await restarted.tick();
+      const result = await restarted.view(requester, order.id);
+      assert.equal(result.makeIntent.payment.status, outcome === "settled" ? "confirmed" : "failed");
+      assert.equal(payment.settlements(), 1);
+      assert.equal(f.device.runs.length, outcome === "settled" ? 1 : 0);
+      if (outcome === "expired") {
+        const state = await f.service.read();
+        assert.equal(state.machines.instax_01.reservation, undefined);
+        assert.match(result.makeIntent.payment.reason, /expired without a transfer/);
+      }
+      await restarted.tick();
+      assert.equal(payment.settlements(), 1);
+      assert.equal(f.device.runs.length, outcome === "settled" ? 1 : 0);
+    } finally {
+      f.close();
+    }
+  });
 
 test("with FABYN_CHARGE_SIMULATED=0, testnet mode does not ask for a wallet or collect funds for simulated-only plans", async () => {
   const f = fixture();

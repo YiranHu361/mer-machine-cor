@@ -40,6 +40,7 @@ export class IntegratedPayment implements PaymentBoundary {
       requesterAddress: j.requesterAddress,
       ownerAddress: m?.ownerAddress,
       receipt: op.receipt,
+      createdAt: op.createdAt,
       onSubmitted: async (receipt) => {
         await mutate(this.store, (s) => {
           const existing = s.paymentReferences[receipt.reference];

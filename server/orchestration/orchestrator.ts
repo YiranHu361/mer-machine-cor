@@ -2755,6 +2755,10 @@ export class Orchestrator {
         mi = order.makeIntent!;
       const op = s.operations[operationId];
       if (["confirmed", "failed"].includes(mi.payment.status)) return;
+      const paymentChanged =
+        mi.payment.status !== result.status ||
+        mi.payment.reason !== result.reason ||
+        mi.payment.transactionHash !== (result.transactionHash ?? op.transactionHash);
       if (result.status === "confirmed") {
         const previous = s.paymentReferences[result.reference];
         requireThat(
@@ -2823,7 +2827,8 @@ export class Orchestrator {
         event(order, "payment.failed", { reason: result.reason ?? "" });
       } else {
         if (!mi.cancelRequested) mi.status = "payment_pending";
-        event(order, "payment.pending", { reason: result.reason ?? "" });
+        if (paymentChanged)
+          event(order, "payment.pending", { reason: result.reason ?? "" });
       }
       mi.updatedAt = order.updatedAt = now();
       order.version++;

@@ -99,8 +99,19 @@ transaction link; confirmed responses also include `PAYMENT-RESPONSE`.
 
 Retries and restarts reconcile the saved transaction. They do not create another
 authorization or charge. If the facilitator loses its response before returning a hash,
-the order stays pending for operator investigation. A payment arriving after cancellation
-or expiry requires workshop review and does not start production.
+recovery checks the saved authorization on-chain. A matching `AuthorizationUsed` event
+recovers the transaction hash, then the exact USDC transfer and confirmations are checked.
+An authorization still unused at a confirmed block after its deadline fails cleanly and
+releases the machine. RPC failures remain uncertain and never cause a replacement charge.
+Older receipts use their saved reference and quote expiry for safe recovery. Structured
+facilitator error codes and HTTP status survive reconciliation for diagnosis.
+A payment arriving after cancellation or expiry requires workshop review and does not
+start production.
+
+For an instant temporary dummy checkout, set `FABYN_PAYMENT_MODE=mock` in the consumer
+environment and redeploy/restart. The UI labels it as a demo payment; no tokens move and
+no blockchain receipt is fabricated. This is an explicit deployment choice, never an
+automatic conversion of an uncertain testnet payment into a successful mock payment.
 
 This MVP focuses on collection. Existing per-job payout/refund code remains separate;
 it requires a treasury signer and additional setup and is not part of this demo.

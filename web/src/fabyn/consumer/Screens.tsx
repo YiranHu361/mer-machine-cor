@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { paymentNotice } from "./payment-status";
 import { Stage3D, type StageItem } from "./Stage3D";
 import { estimateJob, makingStartedAt, mmss, type JobProgress } from "./estimate";
 import { kindForWait, itemTitle, type Phase, type ToolCall } from "./phase";
@@ -429,9 +430,10 @@ export function JobTiles({ order, now, owner = "Lucas" }: { order: OrderView; no
 export function NoticeScreen({ phase, order, run, busy, error, onNew, now }: ScreenProps & { phase: Phase }) {
   const [answer, setAnswer] = useState("");
   const reason = plainReason(order.draft.reason || order.candidates?.reason, "");
+  const payment = paymentNotice(order.makeIntent?.payment);
   const copy: Record<string, { title: string; body: string }> = {
-    payment: { title: "Checking your payment", body: "Your payment is still being confirmed. Nothing has been made yet." },
-    payment_failed: { title: "Payment failed", body: "Payment failed; nothing was made. Start again when you are ready." },
+    payment,
+    payment_failed: payment,
     unavailable: { title: "No machine can take this now", body: reason || "The machines nearby are busy or not ready. Try again in a moment." },
     failed: { title: "Something stopped the plan", body: reason || PREPARE_FAILED },
     cancelled: { title: "This order was stopped", body: "Nothing else will be made for it." },
@@ -446,7 +448,7 @@ export function NoticeScreen({ phase, order, run, busy, error, onNew, now }: Scr
   const c = copy[phase] ?? { title: "", body: "" };
   return (
     <section className="cs-notice" aria-labelledby="cs-notice-title">
-      {phase === "payment" && <Stage3D machine={null} item={null} progress={null} loop label="checking the payment" className="cs-notice-stage" />}
+      {phase === "payment" && payment.waiting && <Stage3D machine={null} item={null} progress={null} loop label="checking the payment" className="cs-notice-stage" />}
       <TitleBlock id="cs-notice-title" title={c.title} sub={c.body} />
       {phase === "question" && (
         <form

@@ -28,7 +28,7 @@ export function phaseOf(o: OrderView): Phase {
   }
   if (o.makeIntent) {
     const pay = o.makeIntent.payment?.status;
-    if (pay === "pending") return "payment";
+    if (pay === "submitting" || pay === "pending") return "payment";
     if (pay === "failed") return "payment_failed";
     const ps = o.plan?.status;
     if (ps === "done") return "ready";
