@@ -4,10 +4,16 @@ import { useMemo, useState } from "react";
 import { JobActions, type Act } from "./JobActions";
 import { estimateAll, formatEta } from "./estimate";
 import { groupOrders, matchesFilter, shortId, type OrderFilter, type SellerOrder } from "./orderGroups";
-import { sentOut, useHandoffs, type Handoff } from "./deliveries";
+import { deliveriesOf, handoffKind, sentOut, type OrderDelivery } from "./deliveries";
 import { jobStateLabel, jobTitle, stopReason } from "./status";
 import type { Dashboard, OwnerJob } from "./data";
 import { money } from "./data";
+
+const HANDOFF_NOTE = {
+  awaiting_courier: "The customer asked for delivery.",
+  courier: "With a courier.",
+  pickup: "Pickup at your table.",
+} as const;
 
 const FILTERS: { id: OrderFilter; label: string }[] = [
   { id: "active", label: "Making" },
@@ -18,8 +24,8 @@ const FILTERS: { id: OrderFilter; label: string }[] = [
 
 export function Orders({ dash, busy, act, now, onDeliver }: { dash: Dashboard; busy: string; act: Act; now: number; onDeliver: () => void }) {
   const [filter, setFilter] = useState<OrderFilter>("active");
-  const { book } = useHandoffs();
-  const sent = useMemo(() => sentOut(book, now), [book, now]);
+  const deliveries = deliveriesOf(dash);
+  const sent = useMemo(() => sentOut(deliveries, now), [deliveries, now]);
   const orders = useMemo(() => groupOrders(dash.jobs, sent, now), [dash.jobs, sent, now]);
   const estimates = useMemo(() => estimateAll(dash.machines, dash.jobs, now), [dash.machines, dash.jobs, now]);
   const shown = orders.filter((o) => matchesFilter(o, filter));
@@ -53,7 +59,7 @@ export function Orders({ dash, busy, act, now, onDeliver }: { dash: Dashboard; b
       )}
       <ul className="sl-orders">
         {shown.map((o) => (
-          <OrderCard key={o.key} order={o} handoff={book[o.key]} dash={dash} estimates={estimates} busy={busy} act={act} now={now} onDeliver={onDeliver} />
+          <OrderCard key={o.key} order={o} delivery={deliveries[o.key]} dash={dash} estimates={estimates} busy={busy} act={act} now={now} onDeliver={onDeliver} />
         ))}
       </ul>
     </section>
@@ -62,7 +68,7 @@ export function Orders({ dash, busy, act, now, onDeliver }: { dash: Dashboard; b
 
 function OrderCard({
   order: o,
-  handoff,
+  delivery,
   dash,
   estimates,
   busy,
@@ -71,7 +77,7 @@ function OrderCard({
   onDeliver,
 }: {
   order: SellerOrder;
-  handoff?: Handoff;
+  delivery?: OrderDelivery;
   dash: Dashboard;
   estimates: Map<string, { percent: number | null; etaSeconds: number | null }>;
   busy: string;
@@ -108,9 +114,9 @@ function OrderCard({
         </ul>
         {o.ready && (
           <div className="sl-actions">
-            {handoff && <span className="sl-fine">{handoff.mode === "courier" ? "With a courier." : "Set aside for pickup at your table."}</span>}
+            <span className="sl-fine">{HANDOFF_NOTE[handoffKind(delivery)]}</span>
             <button className="sl-btn" type="button" onClick={onDeliver}>
-              {handoff ? "Open delivery" : "Send it out or set up pickup"}
+              {handoffKind(delivery) === "awaiting_courier" ? "Call a courier" : "Open delivery"}
             </button>
           </div>
         )}

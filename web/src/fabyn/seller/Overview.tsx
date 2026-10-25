@@ -3,7 +3,7 @@
 import { groupOrders } from "./orderGroups";
 import { finished, intakeOf, jobTitle, machineStatus, MACHINE_LABEL, needsMaker, onLine, supplyOf, viaAgent } from "./status";
 import { money, MAKER, type Dashboard } from "./data";
-import { sentOut, type Handoff } from "./deliveries";
+import { handoffKind, sentOut, type OrderDelivery } from "./deliveries";
 import { usePaymentConfig } from "./live";
 import type { Tab } from "./SellerApp";
 
@@ -15,7 +15,7 @@ const startOfDay = (now: number) => {
   return d.getTime();
 };
 
-export function Overview({ dash, handoffs, now, onGo }: { dash: Dashboard; handoffs: Record<string, Handoff>; now: number; onGo: (tab: Tab) => void }) {
+export function Overview({ dash, handoffs, now, onGo }: { dash: Dashboard; handoffs: Record<string, OrderDelivery>; now: number; onGo: (tab: Tab) => void }) {
   const { machines, jobs, connectors, ledger } = dash;
   const keys = machines.map((m) => machineStatus(m, connectors.find((c) => c.machineId === m.id), jobs).key);
   const online = keys.filter((k) => k !== "offline").length;
@@ -33,9 +33,9 @@ export function Overview({ dash, handoffs, now, onGo }: { dash: Dashboard; hando
   const paymentLabel = testnet ? "x402 test USDC on Base Sepolia" : "test checkout, nothing charged";
   const attention = machines.filter((_, i) => keys[i] === "attention");
   const orders = groupOrders(jobs, sentOut(handoffs, now), now);
-  const toSend = orders.filter((o) => o.ready && !handoffs[o.key]).length;
-  const withCourier = orders.filter((o) => !o.done && handoffs[o.key]?.mode === "courier").length;
-  const atTable = orders.filter((o) => !o.done && handoffs[o.key]?.mode === "pickup").length;
+  const toSend = orders.filter((o) => o.ready && handoffKind(handoffs[o.key]) === "awaiting_courier").length;
+  const withCourier = orders.filter((o) => !o.done && handoffKind(handoffs[o.key]) === "courier").length;
+  const atTable = orders.filter((o) => o.ready && handoffKind(handoffs[o.key]) === "pickup").length;
   const low = machines.filter((m) => m.mediaRemaining < supplyOf(m).capacity * 0.2);
   // Which way each order came in: a typed name, the customer's own photo, a picked design, or the ASI:One agent.
   const paths = new Map<string, number>();

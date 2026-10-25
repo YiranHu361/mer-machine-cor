@@ -205,6 +205,24 @@ export function registerOrchestrationRoutes(
       order: await orchestrator.cancel(await actor(req), param(req, "id")),
     });
   });
+  // Pickup or delivery: the person's choice, then the owner's courier.
+  app.post("/api/orders/:id/delivery", async (req, res) => {
+    res.json({
+      order: await orchestrator.chooseDelivery(
+        await actor(req),
+        param(req, "id"),
+        req.body,
+      ),
+    });
+  });
+  app.post("/api/owner/orders/:id/courier", async (req, res) => {
+    await owner(req);
+    res.json(await orchestrator.callCourier(param(req, "id"), req.body));
+  });
+  app.post("/api/owner/orders/:id/handed-over", async (req, res) => {
+    await owner(req);
+    res.json(await orchestrator.handOver(param(req, "id")));
+  });
   app.get("/api/machines/capabilities", async (_req, res) => {
     const s = await orchestrator.service.read();
     res.json({

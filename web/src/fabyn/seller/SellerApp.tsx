@@ -17,7 +17,7 @@ import { AddMachine } from "./AddMachine";
 import { MAKER, type Dashboard, type PrinterStatusRow } from "./data";
 import { needsMaker, supplyOf } from "./status";
 import { groupOrders } from "./orderGroups";
-import { sentOut, useHandoffs } from "./deliveries";
+import { deliveriesOf, handoffKind, sentOut } from "./deliveries";
 import { useLiveMachines } from "./live";
 import type { Act } from "./JobActions";
 import "./seller.css";
@@ -56,7 +56,6 @@ export default function SellerApp() {
   const revision = useRef(-1);
   const mounted = useRef(true);
   const liveMachines = useLiveMachines(session === "owner", dash?.revision ?? 0);
-  const { book } = useHandoffs();
 
   const setTab = useCallback((next: Tab) => {
     setTabState(next);
@@ -214,8 +213,9 @@ export default function SellerApp() {
     );
 
   const attention = dash ? dash.jobs.filter(needsMaker).length + dash.machines.filter((m) => !m.calibrated).length : 0;
+  const book = dash ? deliveriesOf(dash) : {};
   const orders = dash ? groupOrders(dash.jobs, sentOut(book, now), now) : [];
-  const toSend = orders.filter((o) => o.ready && !book[o.key]).length;
+  const toSend = orders.filter((o) => o.ready && handoffKind(book[o.key]) === "awaiting_courier").length;
   const lowSupplies = dash ? dash.machines.filter((m) => m.mediaRemaining < supplyOf(m).capacity * 0.2).length : 0;
   const badges: Partial<Record<Tab, { n: number; label: string }>> = {
     machines: { n: attention, label: "need you" },

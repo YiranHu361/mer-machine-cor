@@ -44,6 +44,7 @@ import {
 } from "./machine-identification.ts";
 import { Orchestrator } from "./orchestration/orchestrator.ts";
 import { registerProducerHubRoutes } from "./producer-hub.ts";
+import { registerMvpSetupRoutes, type MvpDeps } from "./mvp-setup.ts";
 import { registerOrchestrationRoutes } from "./orchestration/routes.ts";
 import type { TestWallet } from "../integrations/src/test-wallet.ts";
 import {
@@ -146,6 +147,7 @@ export function createApp(
     orchestrator?: Orchestrator;
     relay?: ConnectorRelay;
     testWallet?: TestWallet;
+    mvpSetup?: MvpDeps;
   } = {},
 ) {
   const app = express();
@@ -901,6 +903,12 @@ export function createApp(
         source: (j.orderId && s.orders?.[j.orderId]?.source) || "web",
       })),
       ledger: Object.values(s.operations),
+      // Pickup or delivery per order; only delivery orders carry the person's spot.
+      deliveries: Object.fromEntries(
+        Object.values(s.orders ?? {})
+          .filter((o) => o.delivery)
+          .map((o) => [o.id, o.delivery]),
+      ),
       connectors: Object.values(s.connectors ?? {})
         .filter((connector) => !connector.revokedAt)
         .map((connector) => connectorView(connector, relay)),
@@ -1015,6 +1023,7 @@ export function createApp(
     hub: service.node instanceof RoutingNode ? service.node.hub : undefined,
     owner,
   });
+  registerMvpSetupRoutes(app, { service, owner, hubUrl: service.node instanceof RoutingNode ? service.node.hub?.url : undefined, deps: options.mvpSetup });
   registerOrchestrationRoutes(app, {
     orchestrator,
     actor,

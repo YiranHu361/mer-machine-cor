@@ -80,7 +80,12 @@ Checks: `npm run typecheck`, `npm test` (350 tests), `npm --prefix web run typec
 2. **Local Convex write limit:** two orders at once hit `TooManyWrites` (4 MiB/s) on the local Convex backend, and one order failed with "Something stopped the plan".
 3. **Owner payouts fail:** the Income tab shows failed "Paid out to you" rows. Customer payments are confirmed.
 4. **Pickup codes reach the seller's browser:** the owner dashboard API sends each job's pickup code. The UI never shows it, but the seller does not need the customer's code.
-5. **Courier or pickup choice is browser-only:** it is kept in localStorage, because no delivery service is connected yet.
+5. **Delivery is saved on the order, the courier is still a stand-in:**
+   - The customer's choice and spot go to `POST /api/orders/:id/delivery`. Delivery is allowed 0.3–4 km from the workshop.
+   - The owner's courier goes to `POST /api/owner/orders/:id/courier`.
+   - Both sides show the same courier, pickup time and ETA. The seller's Delivery tab names the customer's neighbourhood instead of a fixed address.
+   - The courier comes from a fixed list and the times are estimates. No delivery service is connected.
+   - The consumer page still has to post the choice.
 6. **Phone checks still open:** the name path (blocked by the held A1) and the cat path. Also click the A1 plate approval on a fresh paid print.
 7. **Real AI keys:** every test so far used fixture drafts. The first live run with the keys costs money (images about $0.03–0.04 each, three per round).
 8. **Real hardware:** nothing has printed on the real machines through the new web flow yet.

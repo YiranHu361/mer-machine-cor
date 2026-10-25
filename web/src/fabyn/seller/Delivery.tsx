@@ -1,27 +1,38 @@
-// Getting finished orders to people: call a courier, or keep it at the table for
-// pickup. Couriers are display-only for now (see estimate.ts); the hand-off
+// Getting finished orders to people. The customer chooses pickup or delivery on
+// their side; here the seller calls the courier for a delivery, or hands a pickup
+// over at the table. Both are saved on the order, so the customer sees the same
+// courier and times. The courier is display-only (see deliveries.ts); the hand-off
 // steps on the order itself (take it off, mark ready, redeem a code) are real.
 import { useMemo } from "react";
-import { BOUNDS, HOME, ROUTE_PALACE_TO_HOME, SFMap, formatKm } from "../shared/map";
+import { api } from "../../api";
+import { PALACE, SFMap, formatKm } from "../shared/map";
 import { JobActions, type Act } from "./JobActions";
-import { clockIn, courierEstimate, courierFor, PHASE_TEXT } from "./estimate";
-import { sentOut, TRIP_KM, useHandoffs, type Handoff } from "./deliveries";
+import { clockIn, PHASE_TEXT } from "./estimate";
+import { courierEstimate, deliveriesOf, frameAround, handoffKind, sentOut, tripKm, useStreetRoute, type OrderDelivery } from "./deliveries";
 import { groupOrders, shortId, type SellerOrder } from "./orderGroups";
 import { jobStateLabel, jobTitle, needsHandling, waitingPickup } from "./status";
 import { MAKER, type Dashboard } from "./data";
 
 const RECENT_MS = 6 * 3600000;
 
+/** When the order left: handed over, dropped off, or its last change. */
+function leftAt(o: SellerOrder, d: OrderDelivery | undefined): number {
+  const at = d?.handedOverAt ?? d?.courier?.arriveAt;
+  return at ? Date.parse(at) : Date.parse(o.updatedAt);
+}
+
 export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: string; act: Act; now: number }) {
-  const { book, callCourier, markPickup, markCollected, undo } = useHandoffs();
-  const tripKm = TRIP_KM;
-  const sent = useMemo(() => sentOut(book, now), [book, now]);
+  const deliveries = deliveriesOf(dash);
+  const sent = useMemo(() => sentOut(deliveries, now), [deliveries, now]);
   const orders = useMemo(() => groupOrders(dash.jobs, sent, now), [dash.jobs, sent, now]);
   const made = orders.filter((o) => o.made && !o.cancelled);
-  const waiting = made.filter((o) => o.ready && !book[o.key]);
-  const withCourier = made.filter((o) => !o.done && book[o.key]?.mode === "courier");
-  const atTable = made.filter((o) => !o.done && book[o.key]?.mode === "pickup");
-  const finishedRows = made.filter((o) => o.done && now - (book[o.key]?.at ?? Date.parse(o.updatedAt)) < RECENT_MS);
+  const kind = (o: SellerOrder) => handoffKind(deliveries[o.key]);
+  const waiting = made.filter((o) => !o.done && kind(o) === "awaiting_courier");
+  const withCourier = made.filter((o) => !o.done && kind(o) === "courier");
+  const atTable = made.filter((o) => !o.done && kind(o) === "pickup");
+  const finishedRows = made.filter((o) => o.done && now - leftAt(o, deliveries[o.key]) < RECENT_MS);
+  const courier = (o: SellerOrder, body: object, done: string) =>
+    act(`${o.key}-courier`, () => api(`/owner/orders/${encodeURIComponent(o.orderId ?? o.key)}/courier`, body), done);
   return (
     <section aria-labelledby="sl-delivery-title">
       <header className="sl-section-head">
@@ -30,7 +41,7 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
           Send it out, or keep it at the table.
         </h2>
         <p className="sl-lede">
-          When an order is made, call a courier to take it to the customer, or set it aside for pickup. The customer sees the same choice on their side.
+          Customers choose delivery or pickup when they order. When a delivery is made, call a courier to take it to them; pickups wait at your table. The customer follows the same courier on their side.
         </p>
       </header>
       <dl className="sl-stats sl-stats-4">
@@ -51,47 +62,60 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
           <dd>{finishedRows.length}</dd>
         </div>
       </dl>
-      <Group title="Waiting to go out" empty="Nothing is waiting. Finished orders show up here.">
-        {waiting.map((o) => (
-          <li key={o.key} className="sl-delivery">
-            <OrderHead o={o} />
-            <Handling o={o} dash={dash} busy={busy} act={act} now={now} pickup={false} />
-            {o.jobs.some(waitingPickup) && <p className="sl-fine">The customer has a pickup code. Choose pickup to enter it when they arrive.</p>}
-            <p className="sl-fine">
-              Going to {HOME.person} · {HOME.label} · {formatKm(tripKm)} away.
-            </p>
-            <div className="sl-actions">
-              <button className="sl-btn solid" type="button" onClick={() => callCourier(o.key)}>
-                Call a courier
-              </button>
-              <button className="sl-btn" type="button" onClick={() => markPickup(o.key)}>
-                Customer picks it up
-              </button>
-            </div>
-          </li>
-        ))}
+      <Group title="Waiting to go out" empty="No delivery is waiting. Finished delivery orders show up here.">
+        {waiting.map((o) => {
+          const d = deliveries[o.key];
+          const km = tripKm(d);
+          return (
+            <li key={o.key} className="sl-delivery">
+              <OrderHead o={o} />
+              <Handling o={o} dash={dash} busy={busy} act={act} now={now} pickup={false} />
+              <p className="sl-fine">
+                Going to the customer in {d.to?.label ?? "their neighbourhood"}
+                {km ? ` · ${formatKm(km)} away` : ""}.
+              </p>
+              {o.jobs.some(waitingPickup) && <p className="sl-fine">The customer has a pickup code for this order and shows it to the courier at the door.</p>}
+              <div className="sl-actions">
+                <button className="sl-btn solid" type="button" disabled={Boolean(busy)} onClick={() => void courier(o, {}, "Courier called. The customer can follow them now.")}>
+                  Call a courier
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </Group>
       <Group title="With a courier" empty="No courier is out right now.">
         {withCourier.map((o) => (
-          <CourierCard key={o.key} o={o} h={book[o.key]} tripKm={tripKm} now={now} dash={dash} busy={busy} act={act} onUndo={() => undo(o.key)} />
+          <CourierCard
+            key={o.key}
+            o={o}
+            d={deliveries[o.key]}
+            now={now}
+            dash={dash}
+            busy={busy}
+            act={act}
+            onCancel={() => void courier(o, { cancel: true }, "Courier cancelled.")}
+          />
         ))}
       </Group>
       <Group title="Pickup at the table" empty="Nothing is set aside for pickup.">
         {atTable.map((o) => (
           <li key={o.key} className="sl-delivery">
             <OrderHead o={o} />
-            <PickupNote o={o} now={now} />
+            <PickupNote o={o} chosen={deliveries[o.key]?.mode === "pickup"} now={now} />
             <Handling o={o} dash={dash} busy={busy} act={act} now={now} />
-            <div className="sl-actions">
-              {!o.jobs.some((j) => needsHandling(j) || waitingPickup(j)) && (
-                <button className="sl-btn solid" type="button" onClick={() => markCollected(o.key)}>
+            {o.orderId && !o.jobs.some((j) => needsHandling(j) || waitingPickup(j)) && (
+              <div className="sl-actions">
+                <button
+                  className="sl-btn solid"
+                  type="button"
+                  disabled={Boolean(busy)}
+                  onClick={() => void act(`${o.key}-handed`, () => api(`/owner/orders/${encodeURIComponent(o.orderId!)}/handed-over`, {}), "Handed over.")}
+                >
                   Handed over to the customer
                 </button>
-              )}
-              <button className="sl-btn ghost" type="button" onClick={() => undo(o.key)}>
-                Change to delivery
-              </button>
-            </div>
+              </div>
+            )}
           </li>
         ))}
       </Group>
@@ -100,7 +124,7 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
           <summary>Delivered or collected · {finishedRows.length}</summary>
           <ul className="sl-done-list">
             {finishedRows.map((o) => {
-              const h = book[o.key];
+              const d = deliveries[o.key];
               return (
                 <li key={o.key}>
                   <span className="sl-thumb sm">{o.jobs[0]?.artifact?.previewUrl ? <img src={o.jobs[0].artifact.previewUrl} alt="" /> : null}</span>
@@ -108,7 +132,11 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
                     #{shortId(o)} {o.title}
                   </span>
                   <span className="sl-done-meta">
-                    {h?.mode === "courier" ? `Delivered by ${courierFor(o.key).name}` : h?.mode === "pickup" || o.jobs.some((j) => j.fulfillmentState === "collected") ? "Collected at the table" : "Handed over"}
+                    {d?.courier
+                      ? `Delivered by ${d.courier.name}${d.to ? ` to ${d.to.label}` : ""}`
+                      : d?.handedOverAt || o.jobs.some((j) => j.fulfillmentState === "collected")
+                        ? "Collected at the table"
+                        : "Handed over"}
                   </span>
                 </li>
               );
@@ -188,7 +216,16 @@ function until(iso: string, now: number): string {
   return days === 0 ? time : days === 1 ? `tomorrow ${time}` : `${at.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
 }
 
-function PickupNote({ o, now }: { o: SellerOrder; now: number }) {
+function PickupNote({ o, chosen, now }: { o: SellerOrder; chosen: boolean; now: number }) {
+  return (
+    <>
+      <p className="sl-fine">{chosen ? "The customer chose to pick it up here." : "The customer has not asked for delivery, so it stays at your table."}</p>
+      <CodeNote o={o} now={now} />
+    </>
+  );
+}
+
+function CodeNote({ o, now }: { o: SellerOrder; now: number }) {
   const withCode = o.jobs.find((j) => j.pickup?.expiresAt && !j.pickup.redeemedAt);
   if (withCode?.pickup?.expiresAt) {
     const expired = Date.parse(withCode.pickup.expiresAt) <= now;
@@ -209,9 +246,12 @@ function PickupNote({ o, now }: { o: SellerOrder; now: number }) {
   );
 }
 
-function CourierCard({ o, h, tripKm, now, dash, busy, act, onUndo }: { o: SellerOrder; h: Handoff; tripKm: number; now: number; dash: Dashboard; busy: string; act: Act; onUndo: () => void }) {
-  const est = courierEstimate(h.at, tripKm, now);
-  const courier = courierFor(o.key);
+function CourierCard({ o, d, now, dash, busy, act, onCancel }: { o: SellerOrder; d: OrderDelivery; now: number; dash: Dashboard; busy: string; act: Act; onCancel: () => void }) {
+  const courier = d.courier!;
+  const est = courierEstimate(courier, now);
+  const route = useStreetRoute(PALACE, d.to);
+  const km = tripKm(d);
+  const place = d.to?.label ?? "the customer";
   return (
     <li className="sl-delivery courier">
       <OrderHead o={o} />
@@ -219,13 +259,13 @@ function CourierCard({ o, h, tripKm, now, dash, busy, act, onUndo }: { o: Seller
         <div className="sl-courier-map">
           <SFMap
             pins={[
-              { id: "workshop", at: ROUTE_PALACE_TO_HOME[0], label: `${MAKER.name}’s workshop`, tone: "place", showLabel: true },
-              { id: "home", at: HOME, label: `${HOME.person} · ${HOME.short}`, tone: "home", showLabel: true },
+              { id: "workshop", at: PALACE, label: `${MAKER.name}’s workshop`, tone: "place", showLabel: true },
+              ...(d.to ? [{ id: "home", at: d.to, label: `Customer · ${d.to.label}`, tone: "home" as const, showLabel: true }] : []),
             ]}
-            route={ROUTE_PALACE_TO_HOME}
+            route={route}
             progress={est.routeFraction}
             markerLabel={`${courier.name} · ${courier.vehicle}`}
-            bounds={BOUNDS.north}
+            bounds={frameAround(route ?? [PALACE])}
             label={`Courier route for order ${shortId(o)}`}
             hoods={false}
           />
@@ -241,12 +281,12 @@ function CourierCard({ o, h, tripKm, now, dash, busy, act, onUndo }: { o: Seller
           <dl className="sl-money">
             <div>
               <dt>At your table</dt>
-              <dd>{est.pickupMin > 0 ? `${clockIn(est.pickupMin, now)} · ${est.pickupMin} min` : "here now / picked up"}</dd>
+              <dd>{est.pickupMin > 0 ? `${clockIn(est.pickupMin, now)} · ${est.pickupMin} min` : est.phase === "at_workshop" ? "here now" : `picked up ${new Date(courier.pickupAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</dd>
             </div>
             <div>
-              <dt>At {HOME.person}’s door</dt>
+              <dt>At the customer</dt>
               <dd>
-                {clockIn(est.dropoffMin, now)} · {est.dropoffMin} min
+                {new Date(courier.arriveAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {est.dropoffMin} min
               </dd>
             </div>
             <div>
@@ -255,12 +295,12 @@ function CourierCard({ o, h, tripKm, now, dash, busy, act, onUndo }: { o: Seller
             </div>
           </dl>
           <p className="sl-fine">
-            {formatKm(tripKm)} to {HOME.label}. Times are estimates.
+            {km ? `${formatKm(km)} to ${place}` : `To ${place}`}. Times are estimates.
           </p>
           {o.jobs.some(waitingPickup) && <p className="sl-fine">The customer has a pickup code for this order and shows it to the courier at the door.</p>}
           {est.phase === "to_workshop" && (
             <div className="sl-actions">
-              <button className="sl-btn ghost" type="button" onClick={onUndo}>
+              <button className="sl-btn ghost" type="button" disabled={Boolean(busy)} onClick={onCancel}>
                 Cancel the courier
               </button>
             </div>
