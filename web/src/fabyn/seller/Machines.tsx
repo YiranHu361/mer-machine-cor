@@ -54,7 +54,7 @@ function MachineCard({ machine: m, jobs, connector, printer, busy, act, now }: {
   });
   const current = line.find((j) => ["dispatched", "running", "verifying"].includes(j.productionState));
   const progress = current ? (estimateJob(current, m, 0, now).percent ?? 0) / 100 : line.some(needsHandling) ? 1 : 0;
-  const modeLabel = MODE_LABEL[m.mode];
+  const modeLabel = printer?.lastSeen !== undefined ? "physical printer" : MODE_LABEL[m.mode];
   const key: MachineKey = status.key;
   return (
     <article className={`sl-machine is-${key}`} aria-labelledby={`sl-m-${m.id}`}>
@@ -75,7 +75,7 @@ function MachineCard({ machine: m, jobs, connector, printer, busy, act, now }: {
         </p>
         <p className="sl-note">{status.note}</p>
         <PrinterCheckRow machine={m} printer={printer} now={now} />
-        <MachineControls machine={m} busy={busy} act={act} />
+        {printer?.linked !== false && <MachineControls machine={m} busy={busy} act={act} />}
         <section className="sl-queue" aria-label={`Queue on ${m.name}`}>
           <h4 className="sl-h4">
             Queue on this machine <span>{line.length}</span>
