@@ -1,13 +1,6 @@
-import { createRoot } from "react-dom/client";
-import App from "./App";
-import { LiveProvider } from "./live";
-import "@fontsource-variable/dm-sans";
-import "./styles.css";
-import "./requester-minimal.css";
-import "./provider-minimal.css";
-import "./make.css";
-createRoot(document.getElementById("root")!).render(
-  <LiveProvider>
-    <App />
-  </LiveProvider>,
-);
+// The fabyn experience (/fabyn, /fabyn/order, /fabyn/seller) and the existing app load
+// separately, so neither one's global styles reach the other.
+const root = document.getElementById("root")!;
+if (location.pathname.startsWith("/fabyn"))
+  import("./fabyn/FabynApp").then(({ renderFabyn }) => renderFabyn(root));
+else import("./legacy").then(({ renderLegacy }) => renderLegacy(root));

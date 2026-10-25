@@ -1,0 +1,454 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabyn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Hanken+Grotesk:wght@100..900&family=Lexend+Zetta:wght@100..900&family=Major+Mono+Display&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Michroma&display=swap" rel="stylesheet">
+<style>
+  :root { --f-display: 'Michroma'; --f-body: 'Archivo'; --f-mono: 'Martian Mono'; --txt: #F0F0EC; --muted: #8E8E8A; --acc: #FF5B1F; --bg: #0b0b0c; }
+  :root[data-font="2"] { --f-display: 'Lexend Zetta'; --f-body: 'Hanken Grotesk'; }
+  :root[data-font="3"] { --f-display: 'Major Mono Display'; --f-body: 'Martian Mono'; }
+  :root[data-theme="light"] { --txt: #111111; --muted: #66665F; --bg: #DCDCD8; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  body { color: var(--txt); font-family: var(--f-body), sans-serif; font-weight: 300; container-type: inline-size; }
+  canvas { display: block; position: fixed; inset: 0; }
+  .ui { position: fixed; inset: 0; pointer-events: none; }
+
+  .nav { position: absolute; left: 3cqw; right: 3cqw; top: 2.2cqw; display: flex; align-items: flex-start; gap: 3.2cqw; }
+  .word { font-size: max(18px, 1.7cqw); line-height: 1.05; letter-spacing: -.01em; }
+  .wm { display: flex; align-items: center; gap: .4em; font-style: normal; }
+  .wm svg { width: .95em; height: .95em; flex: none; }
+  .word span { display: block; font-size: max(9px, .75cqw); color: var(--muted); margin-top: .5cqw; font-family: var(--f-mono), monospace; }
+  .item { display: flex; gap: .7cqw; }
+  .item svg { width: max(26px, 3cqw); height: max(26px, 3cqw); flex: none; }
+  .item svg * { fill: none; stroke: var(--txt); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .item b { display: block; font-weight: 300; font-size: max(14px, 1.45cqw); line-height: 1; }
+  .item small { display: block; font-size: max(8px, .72cqw); line-height: 1.3; margin-top: .55cqw; color: var(--muted); }
+  .micro { margin-left: auto; font-family: var(--f-mono), monospace; font-size: max(8px, .7cqw); line-height: 1.4; color: var(--muted); text-align: right; }
+  .micro b { color: var(--txt); font-weight: 400; }
+
+  .scenes { position: absolute; left: 3cqw; bottom: 3cqw; font-family: var(--f-mono), monospace; font-size: max(9px, .8cqw); display: flex; gap: 1.6cqw; color: var(--muted); }
+  .scenes span.on { color: var(--txt); }
+  .scenes i { position: absolute; left: 0; bottom: -.8cqw; height: 1px; background: var(--acc); width: 0; }
+
+  .cta { position: absolute; left: 50%; transform: translateX(-50%); bottom: 2.6cqw; text-align: center; width: min(92vw, 60cqw); pointer-events: auto; }
+  .h { font-family: var(--f-display), sans-serif; font-weight: 300; font-size: max(26px, 2.8cqw); letter-spacing: .02em; line-height: 1.1; }
+  .sub { font-size: max(12px, 1.05cqw); color: var(--muted); margin: .7cqw 0 1.4cqw; }
+  .btn { display: inline-block; font-family: var(--f-display), sans-serif; font-weight: 300; font-size: max(13px, 1.25cqw); letter-spacing: .04em;
+    color: var(--txt); background: none; border: 1px solid var(--txt); border-radius: 6px; padding: .55cqw 2.4cqw; cursor: pointer; }
+  .btn:hover { background: var(--txt); color: var(--bg); }
+
+  .lab { position: absolute; transform: translate(-50%, -100%); font-family: var(--f-mono), monospace; font-size: max(9px, .72cqw); line-height: 1.45; white-space: nowrap; text-align: left; transition: opacity .25s; }
+  .lab b { display: block; font-family: var(--f-body), sans-serif; font-weight: 300; font-size: max(13px, 1.2cqw); color: var(--txt); letter-spacing: -.005em; }
+  .lab span { color: var(--muted); display: block; }
+  .lab em { font-style: normal; color: var(--acc); display: block; }
+  .lab::after { content: ''; position: absolute; left: 0; bottom: -14px; width: 1px; height: 12px; background: var(--muted); }
+  .city { position: absolute; transform: translate(-50%, -50%); font-family: var(--f-mono), monospace; font-size: max(9px, .7cqw); color: var(--muted); text-transform: lowercase; letter-spacing: .04em; white-space: nowrap; }
+  .city.hot { color: var(--acc); }
+
+  @media (max-width: 700px) {
+    .nav .item, .scenes { display: none; }
+    .nav { left: 6vw; right: 6vw; top: 6vw; }
+    .cta { bottom: 8vw; }
+    .h { font-size: 8.4vw; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div class="ui">
+  <nav class="nav">
+    <div class="word"><i class="wm"><svg viewBox="0 0 24 24" aria-hidden="true"><defs><clipPath id="mk"><circle cx="12" cy="12" r="11"/></clipPath></defs><g clip-path="url(#mk)" style="fill:var(--acc)"><rect x="0" y="8.4" width="24" height="2.1" rx="1"/><rect x="0" y="11.5" width="24" height="2.1" rx="1"/><rect x="0" y="14.6" width="24" height="2.1" rx="1"/><rect x="0" y="17.7" width="24" height="2.1" rx="1"/><rect x="0" y="20.8" width="24" height="2.1" rx="1"/></g><circle cx="12" cy="12" r="11" style="fill:none;stroke:var(--acc);stroke-opacity:.5;stroke-width:.8"/></svg>fabyn</i><span>spare machines, made nearby</span></div>
+    <div class="item"><svg viewBox="0 0 40 40"><rect x="7" y="17" width="26" height="18"/><rect x="5" y="12" width="30" height="5"/><path d="M20 12V35"/><path d="M20 12C15 5 9 7 12 12M20 12C25 5 31 7 28 12"/></svg><div><b>gift</b><small>send one<br>track it<br>pick it up</small></div></div>
+    <div class="item"><svg viewBox="0 0 40 40"><path d="M4 34L20 7L36 34Z"/><path d="M20 7L15 34M20 7L25 34"/><path d="M1 34H39"/></svg><div><b>relief</b><small>supplies<br>outage<br>re-plan</small></div></div>
+    <div class="item"><svg viewBox="0 0 40 40"><rect x="6" y="15" width="28" height="15" rx="2"/><path d="M12 15V6H28V15"/><path d="M12 30V36H28V30"/><circle cx="29" cy="21" r="1.2"/></svg><div><b>machines</b><small>add yours<br>owner view<br>payouts</small></div></div>
+    <div class="item"><svg viewBox="0 0 40 40"><path d="M4 10L14 6L26 10L36 6V30L26 34L14 30L4 34Z"/><path d="M14 6V30M26 10V34"/></svg><div><b>network</b><small>live map<br>ledger</small></div></div>
+    <div class="micro"><b>153</b> machines online<br><b>10</b> kinds of making<br><b id="shipped">1,284</b> things shipped<br>usdc · base sepolia</div>
+  </nav>
+  <div class="scenes" id="scenes"><span>01 machines</span><span>02 network</span><span>03 shipping</span><i></i></div>
+  <div class="cta">
+    <div class="h">MADE NEARBY!</div>
+    <div class="sub">spare machines near the people you love make the gift. you just send the message.</div>
+    <button class="btn">START DEMO</button>
+  </div>
+  <div id="labels"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { makeKit } from './kit.js';
+
+const T = 18;
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeIn = x => { x = clamp(x); return x * x * x; };
+const easeOut = x => { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
+const lerp = (a, b, p) => a + (b - a) * p;
+const rng = seed => { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); };
+
+// ---------- params ----------
+const params = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+let P = params();
+const applyLook = () => {
+  document.documentElement.dataset.font = P.font || '1';
+  document.documentElement.dataset.theme = P.theme || 'dark';
+};
+applyLook();
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.fog = new THREE.FogExp2('#0b0b0c', 0.0009);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 6000);
+
+const floorMat = new THREE.MeshStandardMaterial({ color: '#0d0d0e', roughness: 0.95, envMapIntensity: 0.15 });
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), floorMat);
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const key = new THREE.SpotLight('#ffffff', 4.2, 0, 0.5, 0.85, 1.2);
+key.position.set(0.25, 2.4, 1.3); key.target.position.set(0.05, 0, 0);
+key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0002; key.shadow.radius = 4;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 6;
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight('#ffffff', 0.9); rim.position.set(-2, 1.5, -2.5); scene.add(rim);
+const hemi = new THREE.HemisphereLight('#ffffff', '#222222', 0.12); scene.add(hemi);
+
+// ---------- machines on the table ----------
+const kit = makeKit();
+async function loadMachine(file, fallbackSize) {
+  try {
+    const mod = await import('./machines/' + file);
+    return mod.build(THREE, kit);
+  } catch (e) {
+    console.warn('machine fallback', file, e);
+    const group = new THREE.Group();
+    const b = kit.rbox(fallbackSize[0], fallbackSize[1], fallbackSize[2], 0.01, kit.mat.shell); b.position.y = fallbackSize[1] / 2; group.add(b);
+    return { group, update() {} };
+  }
+}
+const SLOTS = [
+  { file: 'a1mini_exact.js', size: [0.35, 0.37, 0.32], x: -0.34, z: -0.1, name: 'bambu lab A1 mini', id: 'm_fdm_01 · on site', verb: 'printing keychain', q: [15.6, 4.4], wrap: true },
+  { file: 'm02pro.js', size: [0.09, 0.05, 0.08], x: 0.04, name: 'phomemo M02 Pro', id: 'm_sticker_01 · on site', verb: 'printing sticker', q: [3.0, 1.3] },
+  { file: 'instax.js', size: [0.09, 0.12, 0.04], x: 0.20, name: 'instax mini link 3', id: 'm_photo_01 · on site', verb: 'printing logo', q: [4.3, 1.6] },
+];
+const machines = await Promise.all(SLOTS.map(s => loadMachine(s.file, s.size)));
+machines.forEach((m, i) => {
+  m.group.position.set(SLOTS[i].x, 0, SLOTS[i].z || 0);
+  m.group.rotation.y = -0.12;
+  scene.add(m.group);
+  const box = new THREE.Box3().setFromObject(m.group);
+  SLOTS[i].box = box;
+  SLOTS[i].centre = box.getCenter(new THREE.Vector3());
+  SLOTS[i].top = new THREE.Vector3(box.min.x + (box.max.x - box.min.x) * 0.15, box.max.y, box.max.z);
+  SLOTS[i].radius = box.getSize(new THREE.Vector3()).length() / 2;
+});
+
+// "even more": dashed ghosts of other kinds of machine, cycling.
+const ghostMat = new THREE.LineDashedMaterial({ color: '#8E8E8A', dashSize: 0.008, gapSize: 0.006, transparent: true });
+function ghost(parts) {
+  const g = new THREE.Group();
+  parts.forEach(([w, h, d, x, y, z]) => {
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), ghostMat);
+    e.position.set(x, y + h / 2, z); e.computeLineDistances(); g.add(e);
+  });
+  return g;
+}
+const ghosts = [
+  ghost([[0.26, 0.11, 0.18, 0, 0, 0], [0.22, 0.03, 0.15, 0, 0.11, 0]]),                                   // laser cutter
+  ghost([[0.26, 0.02, 0.1, 0, 0, 0], [0.04, 0.12, 0.05, 0.09, 0.02, 0], [0.22, 0.04, 0.05, 0, 0.14, 0], [0.04, 0.06, 0.04, -0.09, 0.08, 0]]), // sewing machine
+  ghost([[0.28, 0.03, 0.2, 0, 0, 0], [0.02, 0.15, 0.02, -0.12, 0.03, 0], [0.02, 0.15, 0.02, 0.12, 0.03, 0], [0.26, 0.02, 0.03, 0, 0.16, 0], [0.04, 0.06, 0.04, 0, 0.11, 0]]), // cnc router
+];
+const ghostRoot = new THREE.Group(); ghostRoot.position.set(0.47, 0, 0); ghostRoot.rotation.y = -0.2;
+ghosts.forEach(g => ghostRoot.add(g)); scene.add(ghostRoot);
+SLOTS.push({ ghost: true, name: 'even more', id: 'laser · cnc · sewing · vinyl …', verb: '', top: new THREE.Vector3(0.36, 0.2, 0.1), centre: new THREE.Vector3(0.47, 0.08, 0) });
+
+// ---------- the Bay Area, at map scale (table at the origin) ----------
+const MAPW = 620, MAPD = 330, DEST = [0.185, 0.235];
+const toWorld = (u, v) => new THREE.Vector3((u - DEST[0]) * MAPW, 0, (v - DEST[1]) * MAPD);
+const COAST = {
+  marinCoast: [[0.06, 0], [0.09, 0.06], [0.10, 0.12], [0.11, 0.155]],
+  sfCoast: [[0.115, 0.20], [0.12, 0.30], [0.125, 0.42], [0.14, 0.55], [0.13, 0.68], [0.15, 0.82], [0.16, 1]],
+  marinBay: [[0.28, 0], [0.30, 0.08], [0.315, 0.165]],
+  sfBay: [[0.315, 0.205], [0.30, 0.26], [0.31, 0.33], [0.35, 0.45], [0.40, 0.55], [0.47, 0.66], [0.55, 0.80], [0.60, 0.92], [0.62, 1]],
+  eastBay: [[0.36, 0], [0.37, 0.10], [0.36, 0.20], [0.39, 0.32], [0.45, 0.43], [0.53, 0.55], [0.61, 0.68], [0.67, 0.80], [0.71, 0.90], [0.73, 1]],
+};
+const xAt = (seg, v) => {
+  for (let i = 1; i < seg.length; i++) if (v <= seg[i][1]) { const a = seg[i - 1], b = seg[i]; return lerp(a[0], b[0], (v - a[1]) / (b[1] - a[1] || 1)); }
+  return seg[seg.length - 1][0];
+};
+const isLand = (u, v) => {
+  if (u > xAt(COAST.eastBay, v)) return true;
+  if (v < 0.155) return u > xAt(COAST.marinCoast, v) && u < xAt(COAST.marinBay, v);
+  if (v > 0.205) return u > xAt(COAST.sfCoast, v) && u < xAt(COAST.sfBay, v);
+  return false;
+};
+
+const mapRoot = new THREE.Group(); scene.add(mapRoot);
+const mapMats = [];
+const fadeMat = (m, base = 1) => { m.transparent = true; m.depthWrite = false; mapMats.push({ m, base }); return m; };
+const PR = renderer.getPixelRatio();
+
+// Sprites keep a constant pixel size at any altitude, like markers on a map app.
+function spriteTex(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = g.strokeStyle = '#fff';
+  if (kind === 'dot') { g.beginPath(); g.arc(32, 32, 28, 0, Math.PI * 2); g.fill(); }
+  if (kind === 'ring') { g.lineWidth = 9; g.beginPath(); g.arc(32, 32, 24, 0, Math.PI * 2); g.stroke(); }
+  if (kind === 'sq') g.fillRect(10, 10, 44, 44);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const TEX = { dot: spriteTex('dot'), ring: spriteTex('ring'), sq: spriteTex('sq') };
+function points(positions, sizePx, color, tex, base = 1) {
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions.flatMap(p => [p.x, p.y, p.z]), 3));
+  const m = fadeMat(new THREE.PointsMaterial({ size: sizePx * PR, sizeAttenuation: false, map: TEX[tex], color, alphaTest: 0.02, depthTest: false }), base);
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; mapRoot.add(pts); return pts;
+}
+
+const coastMat = fadeMat(new THREE.LineBasicMaterial({ color: '#5f5f5c' }));
+Object.values(COAST).forEach(seg => {
+  const g = new THREE.BufferGeometry().setFromPoints(seg.map(([u, v]) => toWorld(u, v).setY(0.05)));
+  mapRoot.add(new THREE.Line(g, coastMat));
+});
+
+// land as a dot grid
+const landPts = [];
+for (let u = 0; u <= 1; u += 0.0075) for (let v = 0; v <= 1; v += 0.012) if (isLand(u, v)) landPts.push(toWorld(u, v).setY(0.04));
+const land = points(landPts, 2.4, '#5a5a56', 'dot');
+
+// the network: ~150 machines, clustered around towns
+const r = rng(7);
+const CL = [[0.21, 0.30, 0.03], [0.24, 0.55, 0.03], [0.19, 0.07, 0.02], [0.47, 0.15, 0.03], [0.50, 0.32, 0.04], [0.62, 0.52, 0.04], [0.74, 0.70, 0.04], [0.75, 0.22, 0.05], [0.86, 0.86, 0.04], [0.88, 0.12, 0.04], [0.83, 0.47, 0.04]];
+const net = [];
+while (net.length < 150) {
+  const c = CL[Math.floor(r() * CL.length)];
+  const u = c[0] + (r() + r() + r() - 1.5) * c[2] * 1.5, v = c[1] + (r() + r() + r() - 1.5) * c[2] * 2.2;
+  if (isLand(u, v)) net.push(toWorld(u, v).setY(0.08));
+}
+const netPts = points(net, 9, '#a5a5a0', 'ring');
+
+// destinations: the table (gift) and a shelter (relief)
+const DESTS = [
+  { at: new THREE.Vector3(0, 0.1, 0), label: 'cal hacks · for henry', hot: true },
+  { at: toWorld(0.53, 0.36).setY(0.1), label: 'oakland shelter', hot: false },
+];
+DESTS.forEach(d => points([d.at], 11, d.hot ? '#FF5B1F' : '#F0F0EC', 'dot'));
+const pulses = DESTS.map(d => points([d.at], 12, d.hot ? '#FF5B1F' : '#F0F0EC', 'ring'));
+
+// arcs: pixel-width lines that glow; deliveries to the destinations, plus the far-away order
+const HOT = new THREE.Color().setRGB(1.7, 0.36, 0.08), COOL = new THREE.Color().setRGB(1.1, 1.1, 1.08);
+const lineMats = [];
+function lineMat(color, width, base) {
+  const m = fadeMat(new LineMaterial({ color, linewidth: width, worldUnits: false }), base);
+  m.resolution.set(innerWidth, innerHeight); lineMats.push(m); return m;
+}
+const arcMatHot = lineMat(HOT, 2.2, 1), arcMat = lineMat(COOL, 1.2, 0.55);
+function arcCurve(a, b, lift) {
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const h = lift ?? a.distanceTo(b) * 0.2 + 6;
+  return new THREE.CubicBezierCurve3(a.clone().setY(0.2), a.clone().lerp(mid, 0.5).setY(h), b.clone().lerp(mid, 0.5).setY(h), b.clone().setY(0.2));
+}
+function arcLine(curve, mat, n = 90) {
+  const g = new LineGeometry(); g.setPositions(curve.getPoints(n).flatMap(p => [p.x, p.y, p.z]));
+  const l = new Line2(g, mat); l.computeLineDistances(); l.frustumCulled = false; mapRoot.add(l);
+  return { line: l, geo: g, segs: n };
+}
+const arcs = [];
+for (let i = 0; i < 18; i++) {
+  const src = net[Math.floor(r() * net.length)], d = DESTS[i % 3 === 0 ? 1 : 0];
+  const curve = arcCurve(src, d.at);
+  const a = arcLine(curve, d.hot ? arcMatHot : arcMat);
+  a.geo.instanceCount = 0;
+  const pkg = points([new THREE.Vector3()], 6, '#ffffff', 'sq');
+  arcs.push({ ...a, curve, pkg, start: 10.0 + i * 0.17 });
+}
+const orderCurve = arcCurve(toWorld(1.9, -0.6), DESTS[0].at, 200);
+const order = arcLine(orderCurve, arcMatHot, 160); order.geo.instanceCount = 0;
+const env = points([new THREE.Vector3()], 10, '#FF5B1F', 'sq');
+const setPoint = (pts, p) => { pts.geometry.attributes.position.setXYZ(0, p.x, p.y, p.z); pts.geometry.attributes.position.needsUpdate = true; };
+
+// labels that live in the overlay
+const labelsEl = document.getElementById('labels');
+const machineLabels = SLOTS.map(s => {
+  const d = document.createElement('div'); d.className = 'lab';
+  d.innerHTML = `<b>${s.name}</b><span>${s.id}</span><em></em>`; labelsEl.appendChild(d); return d;
+});
+const kcLabel = document.createElement('div'); kcLabel.className = 'lab';
+kcLabel.innerHTML = '<b>keychain · for henry</b><span>pla · 30 layers · 0.2 mm</span><em>printed here · done</em>'; labelsEl.appendChild(kcLabel);
+const CITIES = [['san francisco', 0.165, 0.37], ['berkeley', 0.44, 0.10], ['oakland', 0.52, 0.27], ['hayward', 0.63, 0.46], ['san mateo', 0.22, 0.63], ['walnut creek', 0.76, 0.18]];
+const cityLabels = CITIES.map(([n, u, v]) => { const d = document.createElement('div'); d.className = 'city'; d.textContent = n; labelsEl.appendChild(d); return { d, p: toWorld(u, v) }; })
+  .concat(DESTS.map(dd => { const d = document.createElement('div'); d.className = 'city' + (dd.hot ? ' hot' : ''); d.textContent = dd.label; labelsEl.appendChild(d); return { d, p: dd.at.clone().setY(14) }; }));
+const orderLabel = document.createElement('div'); orderLabel.className = 'city hot'; orderLabel.textContent = 'new order · from austin, tx'; labelsEl.appendChild(orderLabel);
+
+// ---------- camera timeline ----------
+// [time, target, distance (m), azimuth (deg), elevation (deg), target easing]
+const A1 = () => SLOTS[0].centre.clone().add(new THREE.Vector3(0, -0.035, 0)), M2 = () => SLOTS[1].centre.clone().add(new THREE.Vector3(0, 0.025, 0.01)), IX = () => SLOTS[2].centre.clone().add(new THREE.Vector3(0, 0.08, 0));
+const ALL = () => new THREE.Vector3(0.04, 0.25, 0);
+// the finished keychain on the A1's bed (bed-local position from a1mini_exact.js, in metres)
+const KC_LOCAL = new THREE.Vector3(-0.035, 0.09, 0.004);
+const KC = () => machines[0].group.localToWorld(KC_LOCAL.clone());
+const MAPC = () => toWorld(0.42, 0.42), MAPC2 = () => toWorld(0.36, 0.38);
+const CAM = [
+  [0, A1, 1.42, 26, 12, 'inout'], [1.6, A1, 1.34, 36, 14, 'inout'],
+  [2.15, KC, 0.24, -14, 40, 'inout'], [2.85, KC, 0.21, 12, 44, 'inout'],
+  [3.3, M2, 0.44, -22, 20, 'inout'], [4.2, M2, 0.40, -8, 22, 'inout'],
+  [4.7, IX, 0.6, -12, 12, 'inout'], [5.8, IX, 0.56, 6, 14, 'inout'],
+  [7.0, ALL, 2.1, 16, 15, 'inout'],
+  [9.6, MAPC, 560, 4, 56, 'dist'],
+  [15.0, MAPC2, 500, 30, 50, 'inout'],
+  [T, A1, 1.42, 26, 12, 'dist'],
+];
+const ez = { inout: ease, in: easeIn, out: easeOut };
+function cameraAt(t) {
+  let k = 0; while (k < CAM.length - 2 && t >= CAM[k + 1][0]) k++;
+  const a = CAM[k], b = CAM[k + 1];
+  const u = (t - a[0]) / (b[0] - a[0]);
+  const ta = a[1](), tb = b[1]();
+  let dist = Math.exp(lerp(Math.log(a[2]), Math.log(b[2]), ease(u)));
+  // on a tall phone screen the keychain close-up would overflow the narrow width, so pull back for very close shots
+  dist *= 1 + (Math.max(1, 1.25 / camera.aspect) - 1) * clamp((0.35 - dist) / 0.1);
+  // 'dist': the target moves in proportion to how far the camera is, so the table stays in frame while we rise or dive.
+  const w = b[5] === 'dist' ? clamp((dist - a[2]) / (b[2] - a[2])) : ez[b[5]](u);
+  const target = ta.clone().lerp(tb, w);
+  const az = THREE.MathUtils.degToRad(lerp(a[3], b[3], ease(u))), el = THREE.MathUtils.degToRad(lerp(a[4], b[4], ease(u)));
+  return { target, dist, az, el };
+}
+
+// ---------- post ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.12, 0.4, 1.0);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ---------- theme ----------
+function applyTheme() {
+  const light = (P.theme || 'dark') === 'light';
+  const bg = light ? '#dcdcd8' : '#0b0b0c';
+  scene.background = new THREE.Color(bg); scene.fog.color.set(bg);
+  floorMat.color.set(light ? '#cfcfcb' : '#0d0d0e');
+  hemi.intensity = light ? 0.55 : 0.12;
+  key.intensity = light ? 3.6 : 4.2;
+  coastMat.color.set(light ? '#8d8d88' : '#5f5f5c');
+  arcMat.color.copy(light ? new THREE.Color('#2a2a2a') : COOL);
+  netPts.material.color.set(light ? '#55554f' : '#a5a5a0');
+  land.material.color.set(light ? '#b5b5b0' : '#5a5a56');
+  bloom.strength = light ? 0.2 : 0.55;
+}
+applyTheme();
+addEventListener('hashchange', () => { P = params(); applyLook(); applyTheme(); });
+
+// ---------- loop ----------
+const scenesEl = document.querySelectorAll('#scenes span'), barEl = document.querySelector('#scenes i'), shippedEl = document.getElementById('shipped');
+const v3 = new THREE.Vector3();
+function project(p) { v3.copy(p).project(camera); return { x: (v3.x * 0.5 + 0.5) * innerWidth, y: (-v3.y * 0.5 + 0.5) * innerHeight, on: v3.z < 1 && Math.abs(v3.x) < 1.1 && Math.abs(v3.y) < 1.1 }; }
+
+function update(t) {
+  const c = cameraAt(t);
+  camera.position.set(c.target.x + c.dist * Math.cos(c.el) * Math.sin(c.az), c.target.y + c.dist * Math.sin(c.el), c.target.z + c.dist * Math.cos(c.el) * Math.cos(c.az));
+  // keep subjects above the headline: look slightly below them while we are at the table
+  camera.lookAt(c.target.clone().add(new THREE.Vector3(0, -0.075 * c.dist * (1 - clamp((c.dist - 2) / 6)), 0)));
+  camera.near = Math.max(0.005, c.dist * 0.01); camera.far = Math.max(50, c.dist * 12); camera.updateProjectionMatrix();
+
+  // how far up we are: 0 at the table, 1 at map height
+  const alt = clamp((Math.log(c.dist) - Math.log(3)) / (Math.log(90) - Math.log(3)));
+  mapMats.forEach(({ m, base }) => { m.opacity = base * alt; });
+  mapRoot.visible = alt > 0.001;
+  key.intensity = (P.theme === 'light' ? 3.6 : 4.2) * (1 - alt * 0.6);
+  bloom.strength = (P.theme === 'light' ? 0.1 : 0.12) + alt * (P.theme === 'light' ? 0.15 : 0.5);
+
+  machines.forEach((m, i) => {
+    const s = SLOTS[i];
+    // wrap: the job starts during the dive back and carries across the loop seam, so the A1 is mid-print at t = 0.
+    const q = s.wrap ? clamp((((t - s.q[0]) % T) + T) % T / s.q[1]) : t < 15 ? clamp((t - s.q[0]) / s.q[1]) : 0;
+    m.update(q, t);
+    s.qNow = q;
+  });
+  const gi = t / 1.4, cur = Math.floor(gi) % ghosts.length, fr = gi - Math.floor(gi);
+  ghosts.forEach((g, j) => { g.visible = j === cur || (fr > 0.75 && j === (cur + 1) % ghosts.length); });
+  ghostMat.opacity = 0.85;
+
+  // order flies in, then deliveries
+  const oc = ease(clamp((t - 9.0) / 1.4));
+  order.geo.instanceCount = Math.floor(order.segs * oc);
+  order.line.visible = t >= 9.0 && t < 14.6;
+  env.visible = t >= 9.0 && oc < 1;
+  setPoint(env, orderCurve.getPoint(oc));
+  let delivered = 0;
+  arcs.forEach(a => {
+    const d = ease(clamp((t - a.start) / 1.1)), f = clamp((t - a.start - 0.5) / 2.2);
+    a.geo.instanceCount = Math.floor(a.segs * d);
+    a.line.visible = t >= a.start && t < 14.8;
+    a.pkg.visible = f > 0 && f < 1 && t < 14.8;
+    if (a.pkg.visible) setPoint(a.pkg, a.curve.getPoint(ease(f)));
+    if (f >= 1 && t < 15) delivered++;
+  });
+  pulses.forEach((p, i) => { const k = ((t * 0.6 + i * 0.5) % 1); p.material.size = (12 + k * 44) * PR; p.material.opacity = (1 - k) * alt; });
+  shippedEl.textContent = (1284 + delivered).toLocaleString('en-US');
+
+  // overlay labels
+  const near = 1 - clamp((c.dist - 1.2) / 1.2);
+  SLOTS.forEach((s, i) => {
+    const el = machineLabels[i], pr = project(s.top);
+    const focus = c.target.distanceTo(s.centre) < 0.05 ? 1 : 0.55;
+    el.style.left = pr.x + 'px'; el.style.top = Math.max(150, pr.y - 18) + 'px';
+    el.style.opacity = pr.on ? near * focus : 0;
+    el.querySelector('em').textContent = s.ghost ? '+147 more nearby' : s.qNow >= 1 ? 'done!' : s.qNow <= 0 ? 'queued' : s.verb + ' ' + Math.round(s.qNow * 100) + '%';
+  });
+  { const k = KC(), pr = project(k.setY(k.y + 0.02)), show = clamp((t - 1.95) / 0.2) * clamp((3.15 - t) / 0.2);
+    kcLabel.style.left = pr.x + 'px'; kcLabel.style.top = (pr.y - 18) + 'px'; kcLabel.style.opacity = pr.on ? show : 0; }
+  cityLabels.forEach(({ d, p }) => { const pr = project(p); d.style.left = pr.x + 'px'; d.style.top = pr.y + 'px'; d.style.opacity = pr.on ? alt : 0; });
+  { const pr = project(orderCurve.getPoint(Math.max(0.12, oc * 0.5))); orderLabel.style.left = pr.x + 'px'; orderLabel.style.top = (pr.y - 16) + 'px'; orderLabel.style.opacity = pr.on && t >= 9.0 && t < 13.8 ? alt : 0; }
+
+  const sc = t < 7 ? 0 : t < 9.6 ? 1 : t < 15 ? 2 : 0;
+  const span = t < 7 ? [0, 7] : t < 9.6 ? [7, 9.6] : t < 15 ? [9.6, 15] : [15, 15];
+  scenesEl.forEach((e, i) => e.classList.toggle('on', i === sc));
+  const on = scenesEl[sc];
+  barEl.style.left = on.offsetLeft + 'px';
+  barEl.style.width = span[1] > span[0] ? (on.offsetWidth * clamp((t - span[0]) / (span[1] - span[0]))) + 'px' : '0px';
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  lineMats.forEach(m => m.resolution.set(innerWidth, innerHeight));
+});
+camera.aspect = innerWidth / innerHeight;
+
+const start = performance.now();
+function frame(now) {
+  const t = P.t !== undefined ? parseFloat(P.t) : ((now - start) / 1000) % T;
+  update(t);
+  composer.render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

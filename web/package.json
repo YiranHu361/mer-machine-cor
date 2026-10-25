@@ -12,12 +12,16 @@
     "test:unit": "node --test unit/*.test.ts"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
     "@fontsource-variable/dm-sans": "5.3.0",
+    "@fontsource/martian-mono": "5.3.0",
+    "@fontsource/michroma": "5.3.0",
     "@x402/core": "2.28.0",
     "@x402/evm": "2.28.0",
     "convex": "1.46.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "three": "0.160.0",
     "viem": "2.57.10"
   },
   "devDependencies": {
@@ -25,6 +29,7 @@
     "@playwright/test": "1.64.1",
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
+    "@types/three": "0.160.0",
     "@vitejs/plugin-react": "5.0.3",
     "prettier": "3.9.10",
     "typescript": "5.9.2",

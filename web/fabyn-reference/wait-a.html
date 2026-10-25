@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabrary · wait</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Hanken+Grotesk:wght@100..900&family=Lexend+Zetta:wght@100..900&family=Major+Mono+Display&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Michroma&display=swap" rel="stylesheet">
+<style>
+  :root { --f-display: 'Michroma'; --f-body: 'Archivo'; --f-mono: 'Martian Mono'; --txt: #F0F0EC; --muted: #8E8E8A; --line: #2a2a2c; --acc: #FF5B1F; --bg: #0b0b0c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  body { color: var(--txt); font-family: var(--f-body), sans-serif; font-weight: 300; }
+  #gl { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  .hud { position: fixed; inset: 0; pointer-events: none; }
+  .mono { font-family: var(--f-mono), monospace; }
+
+  .top { position: absolute; left: 3vw; right: 3vw; top: 2.4vw; display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+  .word { font-family: var(--f-display), sans-serif; font-size: max(14px, 1.15vw); letter-spacing: .02em; }
+  .meta { font-family: var(--f-mono), monospace; font-size: max(9px, .7vw); line-height: 1.6; color: var(--muted); text-align: right; }
+  .meta b { color: var(--txt); font-weight: 400; }
+
+  .rail { position: absolute; left: calc(3vw - 18px); top: 50%; transform: translateY(-50%); box-sizing: border-box; width: calc(min(240px, 20vw) + 36px); padding: 14px 18px 10px; background: var(--bg); }
+  .stage { position: relative; display: grid; grid-template-columns: 22px 1fr; column-gap: 12px; padding: 1.1vw 0; border-top: 1px solid var(--line); color: var(--muted); opacity: .42; transition: opacity .5s, color .5s; }
+  .stage:last-child { border-bottom: 1px solid var(--line); }
+  .stage.done { opacity: .7; }
+  .stage.on { opacity: 1; color: var(--txt); }
+  .stage.on::before { content: ''; position: absolute; left: -14px; top: -1px; bottom: -1px; width: 2px; background: var(--acc); }
+  .stage svg { grid-row: 1 / 3; width: 20px; height: 20px; margin-top: 2px; }
+  .stage svg * { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+  .stage .nm { font-size: max(13px, 1.05vw); line-height: 1.1; color: inherit; }
+  .stage .nm .n { font-family: var(--f-mono), monospace; font-size: max(9px, .66vw); color: var(--muted); margin-right: .6em; }
+  .stage.on .nm .n { color: var(--acc); }
+  .stage .hint { grid-column: 2; font-family: var(--f-mono), monospace; font-size: max(8px, .62vw); line-height: 1.4; color: var(--muted); margin-top: .5vw; }
+
+  .read { position: absolute; left: 0; right: 0; bottom: 11vh; text-align: center; }
+  .read .k { font-family: var(--f-mono), monospace; font-size: max(9px, .72vw); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .read .big { font-family: var(--f-display), sans-serif; font-weight: 300; font-size: min(9vw, 130px); line-height: 1; letter-spacing: -.02em; margin: .5vw 0 .6vw; font-variant-numeric: tabular-nums; }
+  .read .big i { font-style: normal; font-size: .34em; color: var(--muted); margin-left: .12em; letter-spacing: 0; }
+  .read .note { font-family: var(--f-mono), monospace; font-size: max(10px, .8vw); color: var(--muted); }
+
+  .brk { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity .4s; }
+  .brk i { position: absolute; width: 14px; height: 14px; border: 0 solid var(--txt); }
+  .brk .tl { left: 0; top: 0; border-left-width: 1px; border-top-width: 1px; }
+  .brk .tr { right: 0; top: 0; border-right-width: 1px; border-top-width: 1px; }
+  .brk .bl { left: 0; bottom: 0; border-left-width: 1px; border-bottom-width: 1px; }
+  .brk .br { right: 0; bottom: 0; border-right-width: 1px; border-bottom-width: 1px; }
+  .brk span { position: absolute; left: 0; top: -22px; font-family: var(--f-mono), monospace; font-size: max(9px, .66vw); letter-spacing: .08em; color: var(--txt); white-space: nowrap; }
+
+  .bar { position: absolute; left: 3vw; right: 3vw; bottom: calc(3vh + 2.4vw); height: 1px; background: var(--line); }
+  .bar i { display: block; height: 1px; width: 0; background: var(--acc); }
+  .foot { position: absolute; left: 3vw; right: 3vw; bottom: 3vh; display: flex; justify-content: space-between; font-family: var(--f-mono), monospace; font-size: max(9px, .66vw); color: var(--muted); }
+
+  @media (max-width: 700px) {
+    .top { left: 0; right: 0; top: 0; padding: 14px 5vw 10px; background: var(--bg); }
+    .meta { display: none; }
+    .rail { left: 0; right: 0; top: 54px; transform: none; width: auto; padding: 8px 5vw 6px; display: flex; gap: 6px; }
+    .stage { flex: 1; display: block; border-top: 2px solid var(--line); border-bottom: 0 !important; padding: 8px 0 0; opacity: .42; }
+    .stage.on::before { left: 0; right: 0; top: -2px; bottom: auto; width: auto; height: 2px; }
+    .stage svg, .stage .hint, .stage .nm .n { display: none; }
+    .stage .nm { font-size: 11px; letter-spacing: .01em; }
+    .read { bottom: 0; padding: 16px 5vw 56px; background: var(--bg); }
+    .read .big { font-size: 22vw; }
+    .read .note { font-size: 11px; }
+    .bar { left: 5vw; right: 5vw; }
+    .foot { left: 5vw; right: 5vw; }
+    .foot .hide-m { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="hud">
+  <header class="top">
+    <div class="word">fabrary</div>
+    <div class="meta"><b>maya</b> · flat keychain · orange<br>from austin, tx → cal hacks<br>bambu lab a1 mini · m_fdm_01</div>
+  </header>
+  <nav class="rail" id="rail" aria-label="order status"></nav>
+  <div class="brk" id="brk"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span id="brkTx">camera check</span></div>
+  <div class="read"><div class="k" id="rk">received</div><div class="big" id="rbig">00<i>%</i></div><div class="note" id="rnote"></div></div>
+  <div class="bar"><i id="barFill"></i></div>
+  <footer class="foot"><span class="hide-m">spare machine · made nearby</span><span id="clock">t 0.0 / 22.0 s</span></footer>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { makeKit } from './kit.js';
+
+// ============================================================================
+// STAGES: the placeholder sequence. Swap the text and the readouts for the real
+// backend states later; the timing (one ~22 s loop) and the demo times stay here.
+// ============================================================================
+const LOOP = 22;                      // seconds for one full pass
+const LAYERS = 30;                    // slicer layer count (placeholder)
+const PRINT_SECONDS = 52 * 60;        // placeholder print time, shown as eta
+const PICKUP_CODE = '4F7K';           // placeholder pickup code
+const STAGES = [
+  { id: 'received', name: 'received', from: 0.0,  to: 3.2,  demo: 1.6,  icon: 'envelope',
+    hint: 'order from austin, tx',
+    read: () => ({ k: 'received', n: '00', u: '%' }),
+    note: () => 'order from austin, tx' },
+  { id: 'planning', name: 'planning', from: 3.2,  to: 6.4,  demo: 4.8,  icon: 'pin',
+    hint: 'picking the nearest machine: cal hacks, 0.4 mi',
+    read: () => ({ k: 'planning', n: '00', u: '%' }),
+    note: () => 'picking the nearest machine: cal hacks, 0.4 mi' },
+  { id: 'slicing',  name: 'slicing',  from: 6.4,  to: 10.0, demo: 8.2,  icon: 'layers',
+    hint: '30 layers · 0.2 mm',
+    read: c => ({ k: 'layer', n: String(c.scanL).padStart(2, '0'), u: '/30' }),
+    note: () => '30 layers · 0.2 mm' },
+  { id: 'printing', name: 'printing', from: 10.0, to: 17.6, demo: 13.8, icon: 'printer',
+    hint: 'live layer, % and eta',
+    read: c => ({ k: 'printing', n: String(Math.round(c.q * 100)), u: '%' }),
+    note: c => `layer ${c.layer}/${LAYERS} · eta ${fmt(c.eta)}` },
+  { id: 'checking', name: 'checking', from: 17.6, to: 20.0, demo: 18.8, icon: 'scope',
+    hint: 'camera check of the finished part',
+    read: c => ({ k: 'checking', n: String(Math.round(c.q * 100)), u: '%' }),
+    note: () => 'camera check of the finished part' },
+  { id: 'ready',    name: 'ready',    from: 20.0, to: 22.0, demo: 20.6, icon: 'box',
+    hint: 'ready · pickup code',
+    read: () => ({ k: 'ready · pickup code', n: PICKUP_CODE, u: '' }),
+    note: () => 'ready · pickup code' },
+];
+const ICON = {
+  envelope: '<rect x="3" y="6" width="18" height="12"/><path d="M3 7l9 6 9-6"/>',
+  pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/><path d="M3 17.5l9 4.5 9-4.5"/>',
+  printer: '<path d="M8 3h8v5H8z"/><path d="M5 8h14v7H5z"/><path d="M9 15l1 6h4l1-6"/>',
+  scope: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><circle cx="12" cy="12" r="3"/>',
+  box: '<path d="M3 8l9-5 9 5v8l-9 5-9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+};
+
+// ============================================================================
+// timeline helpers
+// ============================================================================
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const smooth = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+const lerp = (a, b, p) => a + (b - a) * p;
+const DEG = Math.PI / 180;
+const pad = n => String(n).padStart(2, '0');
+const fmt = s => { s = Math.max(0, Math.round(s)); return pad(Math.floor(s / 60)) + ':' + pad(s % 60); };
+
+// camera keys: [t, distance m, azimuth deg, elevation deg, target lift mm]
+const CAM = [
+  [0,    0.21, -12, 24,  0],
+  [3.2,  0.20,  -4, 27,  0],   // received -> planning: slow push in
+  [6.4,  0.23,  10, 30, 18],   // planning -> slicing: pull back, lift to the layer stack
+  [10.0, 0.19,  -6, 24,  0],   // slicing -> printing: drop low for the hero angle
+  [17.6, 0.20,  14, 26,  0],   // printing: slow orbit
+  [20.0, 0.24,  -8, 30,  0],   // checking -> ready: pull back, item stays at the centre
+  [LOOP, 0.21, -12, 24,  0],
+];
+function camAt(t) {
+  let k = 0; while (k < CAM.length - 2 && t >= CAM[k + 1][0]) k++;
+  const a = CAM[k], b = CAM[k + 1];
+  const u = smooth((t - a[0]) / (b[0] - a[0]));
+  return {
+    dist: Math.exp(lerp(Math.log(a[1]), Math.log(b[1]), u)),
+    az: (lerp(a[2], b[2], u) + 2.5 * Math.sin(2 * Math.PI * t / LOOP)) * DEG,
+    el: lerp(a[3], b[3], u) * DEG,
+    lift: lerp(a[4], b[4], u),
+  };
+}
+// printed fraction of the keychain; 0 before printing, 1 once done, back to 0 when the bed clears for the loop
+function printProgress(t) {
+  if (t < 10) return 0;
+  if (t < 21.2) return clamp((t - 10) / 7.6);
+  return 1 - smooth((t - 21.2) / 0.8);
+}
+// slicing: the layer stack opens out of the item (0..1), then closes back down into it
+function explodeAt(t) {
+  if (t < 6.4) return 0;
+  if (t < 7.2) return smooth((t - 6.4) / 0.8);
+  if (t < 9.0) return 1;
+  if (t < 10.0) return 1 - smooth((t - 9.0) / 1.0);
+  return 0;
+}
+function scanLayer(t) {
+  if (t < 7.2) return 1;
+  if (t >= 9.0) return LAYERS;
+  return clamp(Math.floor((t - 7.2) / 1.8 * LAYERS) + 1, 1, LAYERS);
+}
+function stageIndex(t) {
+  for (let i = STAGES.length - 1; i >= 0; i--) if (t >= STAGES[i].from) return i;
+  return 0;
+}
+function readHash() { return Object.fromEntries(new URLSearchParams(location.hash.slice(1))); }
+let P = readHash();
+addEventListener('hashchange', () => { P = readHash(); });
+function timeNow(now) {
+  if (P.t !== undefined && !isNaN(parseFloat(P.t))) return parseFloat(P.t);
+  if (P.stage) { const s = STAGES.find(s => s.id === P.stage); if (s) return s.demo; }
+  return ((now - start) / 1000) % LOOP;
+}
+
+// ============================================================================
+// renderer, scene, camera
+// ============================================================================
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0b0c');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 5);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(3, 3), new THREE.MeshStandardMaterial({ color: '#0d0d0e', roughness: 0.95, envMapIntensity: 0.15 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+// product-shot lighting: one spot from above the item, a faint rim, a little fill
+const key = new THREE.SpotLight('#ffffff', 0.5, 0, 0.30, 0.9, 2);
+key.position.set(0.05, 0.55, 0.25);
+key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0004; key.shadow.radius = 4;
+key.shadow.camera.near = 0.05; key.shadow.camera.far = 2;
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight('#ffffff', 0.2); rim.position.set(-0.4, 0.5, -0.6); scene.add(rim);
+scene.add(new THREE.HemisphereLight('#ffffff', '#222222', 0.05));
+
+// ============================================================================
+// the real A1 mini, from the shared module (never edited)
+// ============================================================================
+const kit = makeKit();
+const mod = await import('./machines/a1mini_exact.js');
+const machine = mod.build(THREE, kit);
+scene.add(machine.group);
+// keep the machine in the dark studio: the room reflections are turned right down on its parts
+machine.group.traverse(o => { if (o.isMesh) o.material.envMapIntensity = 0.12; });
+// the A1 sits in the dark studio: its light plastics come down toward #8a8a88 (set here, machines/ untouched).
+// The accent orange is skipped so the print colour stays true.
+const LIGHT_TARGET = new THREE.Color('#8a8a88');
+const doneMat = new Set();
+machine.group.traverse(o => {
+  const m = o.isMesh && o.material;
+  if (!m || doneMat.has(m) || m === kit.mat.accent) return;
+  doneMat.add(m);
+  if (m.color && m.color.getHSL({ h: 0, s: 0, l: 0 }).l > 0.5) m.color.lerp(LIGHT_TARGET, 0.6);
+});
+// the toolhead, arm and cable get their own materials so they can ghost out while the nozzle works on the item
+const machineBody = machine.group.children[0];                                    // the module's scaled group
+const ghostMeshes = [];
+machineBody.children.filter(c => c.isGroup)[1].traverse(o => { if (o.isMesh) ghostMeshes.push(o); }); // [bed, gantry]
+machineBody.children.forEach(c => { if (c.isMesh && c.geometry.type === 'BufferGeometry') ghostMeshes.push(c); }); // the cable
+ghostMeshes.forEach(o => { o.material = o.material.clone(); o.material.transparent = true; });
+
+// The module prints its own copy of the keychain on the bed. We hide that copy and draw the
+// hero copy below in its place, so the item can be ghosted, sliced and clipped layer by layer.
+let tagMesh = null;
+machine.group.traverse(o => { if (!tagMesh && o.isMesh && o.geometry.type === 'ExtrudeGeometry' && o.material === kit.mat.accent) tagMesh = o; });
+const tagGroup = tagMesh.parent;
+tagGroup.visible = false;
+
+// ============================================================================
+// hero keychain, in millimetres (group scaled to metres), same geometry as the module's tag
+// ============================================================================
+const tagShape = new THREE.Shape();
+{
+  const w = 74, h = 26, r = 6;
+  tagShape.moveTo(-w / 2 + r, -h / 2); tagShape.lineTo(w / 2 - r, -h / 2); tagShape.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  tagShape.lineTo(w / 2, h / 2 - r); tagShape.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+  tagShape.lineTo(-w / 2 + r, h / 2); tagShape.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r);
+  tagShape.lineTo(-w / 2, -h / 2 + r); tagShape.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+}
+{ const hole = new THREE.Path(); hole.absarc(-29, 0, 4, 0, Math.PI * 2, true); tagShape.holes.push(hole); }
+const tagGeo = new THREE.ExtrudeGeometry(tagShape, { depth: 3, bevelEnabled: false }).rotateX(-Math.PI / 2);
+
+// raised letters M A Y A: [x, z, w, d, rot] strokes, 2 mm tall on top of the 3 mm tag
+const LETTERS = [];
+const S = (x, z, w, d, rot = 0) => LETTERS.push({ x, z, w, d, rot });
+S(-15, 0, 2.4, 14); S(-6, 0, 2.4, 14); S(-12.6, -2.5, 2.2, 9, 0.42); S(-8.4, -2.5, 2.2, 9, -0.42);
+const A = ox => { S(ox - 2.6, 0.5, 2.2, 14.5, -0.2); S(ox + 2.6, 0.5, 2.2, 14.5, 0.2); S(ox, 2.5, 5, 2); };
+A(2.5);
+S(13.1, -3.5, 2.2, 8, 0.5); S(17.9, -3.5, 2.2, 8, -0.5); S(15.5, 3.5, 2.4, 7);
+A(27.5);
+const lettersGeo = kit.mergeGeometries(LETTERS.map(s => {
+  const g = new THREE.BoxGeometry(s.w, 2, s.d); g.rotateY(s.rot); g.translate(s.x, 4, s.z); return g;
+}));
+
+// clipping planes (world space): planeTop keeps y <= printed height, planeAbove keeps y >= it
+const planeTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const planeAbove = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const solidMat = new THREE.MeshStandardMaterial({ color: '#FF5B1F', roughness: 0.4, metalness: 0, envMapIntensity: 0.6, side: THREE.DoubleSide, clippingPlanes: [planeTop] });
+const ghostMat = new THREE.LineBasicMaterial({ color: '#8E8E8A', transparent: true, opacity: 0.9, clippingPlanes: [planeAbove] });
+
+const hero = new THREE.Group(); hero.scale.setScalar(0.001); scene.add(hero);
+const solidTag = new THREE.Mesh(tagGeo, solidMat); solidTag.castShadow = true; hero.add(solidTag);
+const solidLetters = new THREE.Mesh(lettersGeo, solidMat); solidLetters.castShadow = true; hero.add(solidLetters);
+
+// ghost outline (unprinted), draws itself on arrival
+const ghostTag = new THREE.LineSegments(new THREE.EdgesGeometry(tagGeo), ghostMat);
+const ghostLetters = new THREE.LineSegments(new THREE.EdgesGeometry(lettersGeo), ghostMat);
+hero.add(ghostTag, ghostLetters);
+
+// contour loops in the bed plane: outer edge, hole, every letter stroke
+const shapePts = tagShape.extractPoints(16);
+const LOOPS = [shapePts.shape.map(p => [p.x, -p.y]), ...shapePts.holes.map(h => h.map(p => [p.x, -p.y]))];
+LETTERS.forEach(s => {
+  const c = Math.cos(s.rot), sn = Math.sin(s.rot), hw = s.w / 2, hd = s.d / 2;
+  LOOPS.push([[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, z]) => [s.x + x * c + z * sn, s.z - x * sn + z * c]));
+});
+function segs(loops) {
+  const out = [];
+  loops.forEach(L => { for (let i = 0; i < L.length; i++) { const a = L[i], b = L[(i + 1) % L.length]; out.push(a[0], 0, a[1], b[0], 0, b[1]); } });
+  return new Float32Array(out);
+}
+const contourGeo = new THREE.BufferGeometry();
+contourGeo.setAttribute('position', new THREE.BufferAttribute(segs(LOOPS), 3));
+
+// the layer currently being laid down: a bright contour riding on the clip height
+const layerLine = new THREE.LineSegments(contourGeo, new THREE.LineBasicMaterial({ color: '#FF5B1F', transparent: true, opacity: 0.95, depthWrite: false }));
+hero.add(layerLine);
+
+// slicing: 30 contour layers, opened out of the item and closed back into it
+const sliceGroup = new THREE.Group(); hero.add(sliceGroup);
+const sliceMats = [];
+for (let i = 0; i < LAYERS; i++) {
+  const m = new THREE.LineBasicMaterial({ color: '#FF5B1F', transparent: true, opacity: 0.13, depthWrite: false });
+  const l = new THREE.LineSegments(contourGeo, m); sliceGroup.add(l); sliceMats.push({ m, l });
+}
+
+// checking: a scan plane that sweeps down over the finished part
+const beam = new THREE.LineSegments(
+  new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(segs([[[-50, -24], [50, -24], [50, 24], [-50, 24]]]), 3)),
+  new THREE.LineBasicMaterial({ color: '#F0F0EC', transparent: true, opacity: 0.85, depthWrite: false }));
+hero.add(beam);
+
+// the module's bed carries the tag; the hero follows its world position every frame
+const CORNERS = [[-37, 0, -13], [37, 0, -13], [-37, 0, 13], [37, 0, 13], [-37, 5, -13], [37, 5, -13], [-37, 5, 13], [37, 5, 13]];
+
+// ============================================================================
+// HUD
+// ============================================================================
+const railEl = document.getElementById('rail');
+railEl.innerHTML = STAGES.map((s, i) =>
+  `<div class="stage" data-i="${i}"><svg viewBox="0 0 24 24">${ICON[s.icon]}</svg><div class="nm"><span class="n">${pad(i + 1)}</span><b style="font-weight:300">${s.name}</b></div><div class="hint">${s.hint}</div></div>`).join('');
+const railEls = [...railEl.querySelectorAll('.stage')];
+const rk = document.getElementById('rk'), rbig = document.getElementById('rbig'), rnote = document.getElementById('rnote');
+const barFill = document.getElementById('barFill'), clock = document.getElementById('clock');
+const brk = document.getElementById('brk');
+let lastSi = -1, lastK = '', lastBig = '', lastNote = '', lastBar = '', lastClock = '';
+
+// ============================================================================
+// frame
+// ============================================================================
+const tagW = new THREE.Vector3(), tgt = new THREE.Vector3(), tmpV = new THREE.Vector3();
+const start = performance.now();
+const fitScale = () => { const tanH = Math.tan(camera.fov * DEG / 2) * camera.aspect; return Math.max(1, (0.062 / (1.16 * tanH)) / 0.2); };
+// narrow screens: the item sits in the open area above the bottom readout band (view shifted up 10% of height)
+function applyView() {
+  if (innerWidth < 700) camera.setViewOffset(innerWidth, innerHeight, 0, Math.round(innerHeight * 0.1), innerWidth, innerHeight);
+  else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+function setRange(line, f) {
+  const n = line.geometry.attributes.position.count;
+  line.geometry.setDrawRange(0, Math.max(0, Math.floor(n * f / 2) * 2));
+}
+function boundsOnScreen() {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  hero.updateMatrixWorld(true);
+  for (const [x, y, z] of CORNERS) {
+    tmpV.set(x, y, z); hero.localToWorld(tmpV); tmpV.project(camera);
+    const px = (tmpV.x * 0.5 + 0.5) * innerWidth, py = (-tmpV.y * 0.5 + 0.5) * innerHeight;
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+  }
+  return [x0, y0, x1, y1];
+}
+
+function frame(now) {
+  const t = timeNow(now);
+  const si = stageIndex(t), st = STAGES[si];
+  const q = printProgress(t);
+
+  // the machine, then the item on its bed
+  machine.update(q, t);
+  machine.group.updateMatrixWorld(true);
+  tagGroup.getWorldPosition(tagW);
+  hero.position.copy(tagW);
+  key.target.position.copy(tagW);
+
+  // print clip: the item exists below the printed height only
+  const H = 5 * q;                                  // printed height in mm (3 mm tag + 2 mm letters)
+  const worldTop = tagW.y + H * 0.001;
+  planeTop.constant = worldTop;
+  planeAbove.constant = -worldTop;
+  solidTag.visible = solidLetters.visible = q > 0.001;
+  layerLine.visible = q > 0.001 && q < 0.999;
+  layerLine.position.y = H;
+
+  // ghost outline: draws itself during received, stays until printing covers it
+  const gFrac = t < 1.6 ? t / 1.6 : 1;
+  setRange(ghostTag, gFrac); setRange(ghostLetters, gFrac);
+  // the outline fades back while the slice stack is open, so only the layers read on the slicing frame
+  ghostMat.opacity = 0.9 - 0.55 * explodeAt(t);
+  // the head, arm and cable ghost out while the nozzle works (0 at rest, 85% while printing)
+  const ghostAmt = 0.85 * smooth(q / 0.1) * (1 - smooth((q - 0.92) / 0.08));
+  ghostMeshes.forEach(o => { o.material.opacity = 1 - ghostAmt; });
+
+  // slicing layers
+  const E = explodeAt(t), sl = scanLayer(t);
+  const scanning = t >= 7.2 && t < 9.0;
+  sliceGroup.visible = E > 0.001;
+  sliceMats.forEach(({ m, l }, i) => {
+    l.position.y = E * (i + 1) * 1.5;
+    m.opacity = scanning && i + 1 === sl ? 1 : 0.13 * E;
+  });
+
+  // checking: scan plane sweeps down the part
+  beam.visible = t >= 17.6 && t < 19.6;
+  beam.position.y = lerp(5.5, -0.5, smooth((t - 17.6) / 1.8));
+  beam.material.opacity = 0.85 * (1 - smooth((t - 18.8) / 0.8));
+
+  // camera: aimed at the item (lifted during slicing), dolly scaled for narrow screens
+  const c = camAt(t), fit = fitScale();
+  tgt.copy(tagW).add(tmpV.set(0, (2.5 + c.lift) * 0.001, 0));
+  const d = c.dist * fit;
+  camera.position.set(
+    tgt.x + d * Math.sin(c.az) * Math.cos(c.el),
+    tgt.y + d * Math.sin(c.el),
+    tgt.z + d * Math.cos(c.az) * Math.cos(c.el));
+  camera.lookAt(tgt);
+  camera.updateMatrixWorld();
+
+  // checking brackets follow the item's screen bounds
+  if (st.id === 'checking') {
+    const [x0, y0, x1, y1] = boundsOnScreen();
+    const pd = 16;
+    brk.style.left = (x0 - pd) + 'px'; brk.style.top = (y0 - pd) + 'px';
+    brk.style.width = (x1 - x0 + pd * 2) + 'px'; brk.style.height = (y1 - y0 + pd * 2) + 'px';
+    brk.style.opacity = 1;
+  } else {
+    brk.style.opacity = 0;
+  }
+
+  renderer.render(scene, camera);
+
+  // HUD
+  if (si !== lastSi) {
+    lastSi = si;
+    railEls.forEach((el, i) => { el.classList.toggle('on', i === si); el.classList.toggle('done', i < si); });
+  }
+  const ctx = { t, q, layer: Math.min(LAYERS, Math.max(1, Math.ceil(q * LAYERS))), eta: (1 - q) * PRINT_SECONDS, scanL: sl };
+  const r = st.read(ctx);
+  if (r.k !== lastK) { lastK = r.k; rk.textContent = r.k; }
+  const big = r.n + '<i>' + r.u + '</i>';
+  if (big !== lastBig) { lastBig = big; rbig.innerHTML = big; }
+  const note = st.note(ctx);
+  if (note !== lastNote) { lastNote = note; rnote.textContent = note; }
+  const overall = (si + clamp((t - st.from) / (st.to - st.from))) / STAGES.length;
+  const bar = (overall * 100).toFixed(2) + '%';
+  if (bar !== lastBar) { lastBar = bar; barFill.style.width = bar; }
+  const clk = 't ' + t.toFixed(1) + ' / ' + LOOP.toFixed(1) + ' s';
+  if (clk !== lastClock) { lastClock = clk; clock.textContent = clk; }
+
+  requestAnimationFrame(frame);
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight; applyView();
+});
+camera.aspect = innerWidth / innerHeight; applyView();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

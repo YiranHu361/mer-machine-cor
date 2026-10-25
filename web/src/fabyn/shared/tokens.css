@@ -1,0 +1,44 @@
+/* fabyn design tokens: dark spotlight studio, one orange. Shared by home, consumer and seller.
+   Add page-specific styles in your own folder's CSS, never here. */
+:root {
+  --bg: #0b0b0c;
+  --panel: #121214;
+  --line: #2a2a2d;
+  --txt: #f0f0ec;
+  --muted: #8e8e8a;
+  --acc: #ff5b1f;
+  --ok: #7fd18b;
+  --warn: #f2c14e;
+  --err: #ff6b5e;
+  --f-display: "Michroma", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "Martian Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--f-body);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+:focus-visible {
+  outline: 1px solid var(--acc);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fabrary order track</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Hanken+Grotesk:wght@100..900&family=Lexend+Zetta:wght@100..900&family=Major+Mono+Display&family=Martian+Mono:wdth,wght@75..112.5,100..800&family=Michroma&display=swap" rel="stylesheet">
+<style>
+  :root { --f-display: 'Michroma', sans-serif; --f-body: 'Archivo', sans-serif; --f-mono: 'Martian Mono', monospace;
+    --txt: #F0F0EC; --muted: #8E8E8A; --faint: #2a2a2b; --acc: #FF5B1F; --bg: #0b0b0c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+  body { color: var(--txt); font-family: var(--f-body), sans-serif; font-weight: 300; }
+  #gl { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  .ui { position: fixed; inset: 0; pointer-events: none; }
+
+  /* header */
+  .top { position: absolute; left: 40px; right: 40px; top: 28px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .word { font-family: var(--f-display); font-size: 18px; line-height: 1.05; letter-spacing: -.01em; text-shadow: 0 0 10px #0b0b0c, 0 0 3px #0b0b0c; }
+  .word span { display: block; font-family: var(--f-mono); font-size: 10px; color: var(--muted); margin-top: 8px; letter-spacing: .02em; }
+  .meta { font-family: var(--f-mono); font-size: 10px; line-height: 1.6; color: var(--muted); text-align: right; text-shadow: 0 0 10px #0b0b0c, 0 0 3px #0b0b0c; }
+  .meta b { color: var(--txt); font-weight: 400; }
+
+  /* viewfinder: camera check overlay */
+  .vf { position: absolute; left: 30%; right: 30%; top: 28%; bottom: 28%; opacity: 0; }
+  .vf .c { position: absolute; width: 22px; height: 22px; border: 0 solid var(--txt); opacity: .7; }
+  .vf .tl { left: 0; top: 0; border-left-width: 1px; border-top-width: 1px; }
+  .vf .tr { right: 0; top: 0; border-right-width: 1px; border-top-width: 1px; }
+  .vf .bl { left: 0; bottom: 0; border-left-width: 1px; border-bottom-width: 1px; }
+  .vf .br { right: 0; bottom: 0; border-right-width: 1px; border-bottom-width: 1px; }
+  .vf .scan { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--acc); }
+  .vf .vfl { position: absolute; left: 0; top: -22px; font-family: var(--f-mono); font-size: 10px; color: var(--muted); letter-spacing: .04em; }
+  .vf .vfl b { color: var(--txt); font-weight: 400; }
+
+  /* pickup code under the finished part */
+  .code { position: absolute; left: 50%; top: 74%; transform: translateX(-50%); text-align: center; opacity: 0; }
+  .code b { display: block; font-family: var(--f-display); font-weight: 300; font-size: clamp(30px, 3.2vw, 44px); letter-spacing: .22em; }
+  .code span { display: block; margin-top: 6px; font-family: var(--f-mono); font-size: 10px; color: var(--muted); letter-spacing: .14em; text-transform: uppercase; }
+
+  /* caption, bottom left */
+  .cap { position: absolute; left: 40px; bottom: 104px; width: min(440px, 40vw);  text-shadow: 0 0 12px #0b0b0c; }
+  .num { font-family: var(--f-mono); font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .h { font-family: var(--f-display); font-weight: 300; font-size: 26px; letter-spacing: .02em; line-height: 1.1; margin-top: 10px; }
+  .bar { position: relative; height: 1px; background: var(--faint); margin: 16px 0 12px; }
+  .bar i { position: absolute; left: 0; top: 0; height: 1px; width: 0; background: var(--acc); }
+  .sub { font-size: 14px; color: var(--muted); line-height: 1.45; }
+
+  /* the horizontal track of stages */
+  .track { position: absolute; left: 40px; right: 40px; bottom: 64px; height: 1px; }
+  .rail { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--faint); }
+  .rail i { position: absolute; left: 0; top: 0; height: 1px; width: 0; background: var(--acc); }
+  .tk { position: absolute; top: 0; width: 0; }
+  .tk::before { content: ''; position: absolute; left: 0; top: -5px; width: 1px; height: 11px; background: #4a4a48; transform: translateX(-.5px); }
+  .tk .lbl { position: absolute; top: 16px; left: 0; transform: translateX(-50%); white-space: nowrap; text-align: center;
+    font-family: var(--f-mono); font-size: 10px; color: var(--muted); letter-spacing: .03em; }
+  .tk .lbl b { display: block; font-weight: 400; }
+  .tk.done::before { background: var(--txt); }
+  .tk.on::before { background: var(--acc); height: 13px; top: -6px; }
+  .tk.on .lbl, .tk.done .lbl { color: var(--txt); }
+
+  @media (max-width: 700px) {
+    .top { left: 16px; right: 16px; top: 18px; }
+    .word { font-size: 15px; }
+    .word span { font-size: 9px; }
+    .meta { display: none; }
+    .vf { left: 14%; right: 14%; top: 25%; bottom: 50%; }
+    .vf .vfl { font-size: 9px; }
+    .code { top: 68%; }
+    .cap { left: 16px; right: 16px; bottom: 96px; width: auto; }
+    .h { font-size: 19px; }
+    .sub { font-size: 12px; }
+    .track { left: 16px; right: 16px; bottom: 46px; }
+    .tk .lbl span { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="ui">
+  <header class="top">
+    <div class="word">fabrary<span>order 0427 · maya keychain</span></div>
+    <div class="meta">
+      from <b>austin, tx</b><br>
+      made at <b>cal hacks</b> · 0.4 mi<br>
+      machine <b>bambu lab a1 mini</b><br>
+      status <b id="status">received</b>
+    </div>
+  </header>
+
+  <div class="vf" id="vf">
+    <i class="c tl"></i><i class="c tr"></i><i class="c bl"></i><i class="c br"></i>
+    <div class="vfl">camera check · <b>tolerance 0.2 mm</b></div>
+    <i class="scan" id="scan"></i>
+  </div>
+
+  <div class="code" id="code"><b>4F7K</b><span>pickup code</span></div>
+
+  <div class="cap">
+    <div class="num" id="num">01 / 06</div>
+    <div class="h" id="caph">order received</div>
+    <div class="bar"><i id="jobbar"></i></div>
+    <div class="sub" id="caps">order from austin, tx</div>
+  </div>
+
+  <nav class="track" aria-label="order stages">
+    <div class="rail"><i id="fill"></i></div>
+    <div id="ticks"></div>
+  </nav>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { makeKit } from './kit.js';
+
+// =====================================================================
+// PLACEHOLDER STAGES. Swap these for the real backend states later.
+// start / end are seconds on the 22 s loop. sub(j) gets the live job numbers.
+// =====================================================================
+const T_LOOP = 22;
+const STAGES = [
+  { id: 'received', name: 'received', title: 'order received', start: 0.0,  end: 3.2,  sub: () => 'order from austin, tx' },
+  { id: 'planning', name: 'planning', title: 'planning',       start: 3.2,  end: 6.4,  sub: () => 'picking the nearest machine: cal hacks, 0.4 mi' },
+  { id: 'slicing',  name: 'slicing',  title: 'slicing',        start: 6.4,  end: 10.4, sub: () => '30 layers · 0.2 mm' },
+  { id: 'printing', name: 'printing', title: 'printing',       start: 10.4, end: 16.4, sub: j => `layer ${j.layer}/30 · ${j.pct}% · eta ${j.eta}` },
+  { id: 'checking', name: 'checking', title: 'checking',       start: 16.4, end: 19.4, sub: () => 'camera check of the finished part' },
+  { id: 'ready',    name: 'ready',    title: 'ready',          start: 19.4, end: 22.0, sub: () => 'pickup code 4F7K' },
+];
+// Timeline events inside the stages (seconds on the loop).
+const TL = {
+  dotA: 3.7, dotB: 5.8,             // planning: dot travels to the machine
+  sendA: 10.2, sendB: 10.7,         // slicing: keychain sent to the bed
+  arriveA: 10.2, arriveB: 11.2,     // A1 mini slides in
+  printA: 11.0, printB: 16.4,       // print runs 5.4 s of loop time (ETA is shown as 12 min)
+  leaveA: 19.4, leaveB: 20.4,       // A1 mini slides out, carrying the finished part
+  plinthA: 19.5, dropA: 19.9, goneA: 21.0, goneB: 21.8,
+};
+// Camera keys: [t, distance m, azimuth deg, elevation deg, sideways track m].
+// The camera always looks at the centre of the frame, so the item stays centred.
+const CAM = [
+  [0.0,  0.78, 18, 34, 0.00],
+  [3.2,  0.70, -6, 60, -0.04],
+  [6.4,  0.84, -20, 20, 0.03],
+  [10.4, 0.80, -18, 20, 0.04],
+  [11.6, 0.42, 16, 16, 0.10],
+  [16.4, 0.30, -8, 20, 0.00],
+  [19.4, 0.40, 26, 24, -0.05],
+  [22.0, 0.78, 18, 34, 0.00],
+];
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const ease = x => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = x => { x = clamp(x); return 1 - Math.pow(1 - x, 3); };
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const MM = 0.001, HERO_S = 2.2, LAYERS = 30;
+const P0 = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+let P = P0();
+addEventListener('hashchange', () => { P = P0(); });
+const say = (id, s) => { const el = document.getElementById(id); if (el.textContent !== s) el.textContent = s; };
+const stageAt = t => { for (let k = 0; k < STAGES.length; k++) if (t < STAGES[k].end) return k; return STAGES.length - 1; };
+const canvasOf = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+
+// ---------- fonts (canvas text needs them loaded first) ----------
+try {
+  await Promise.all([
+    document.fonts.load('300 40px Michroma'),
+    document.fonts.load('400 30px Archivo'),
+    document.fonts.load('400 24px "Martian Mono"'),
+  ]);
+} catch (e) { /* fall back to system fonts */ }
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0b0b0c');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.fog = new THREE.FogExp2('#0b0b0c', 0.3);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.01, 20);
+
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: '#0d0d0e', roughness: 0.95, envMapIntensity: 0.15 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const grid = new THREE.GridHelper(2.4, 48, '#1c1c1e', '#131315'); grid.position.y = 0.0002; scene.add(grid);
+
+const key = new THREE.SpotLight('#ffffff', 4.2, 0, 0.5, 0.85, 1.2);
+key.position.set(0.25, 2.4, 1.3); key.target.position.set(0, 0.05, 0);
+key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0002; key.shadow.radius = 4;
+key.shadow.camera.near = 0.5; key.shadow.camera.far = 6;
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight('#ffffff', 0.9); rim.position.set(-2, 1.5, -2.5); scene.add(rim);
+scene.add(new THREE.HemisphereLight('#ffffff', '#222222', 0.12));
+
+// ---------- table reticle: a measuring ring with ticks ----------
+{
+  const R = 0.36, ring = [], ticks = [];
+  for (let i = 0; i <= 160; i++) { const a = i / 160 * Math.PI * 2; ring.push(new THREE.Vector3(Math.cos(a) * R, 0.0004, Math.sin(a) * R)); }
+  for (let i = 0; i < 90; i++) {
+    const a = i / 90 * Math.PI * 2, r2 = R + (i % 9 === 0 ? 0.022 : 0.009);
+    ticks.push(new THREE.Vector3(Math.cos(a) * R, 0.0004, Math.sin(a) * R), new THREE.Vector3(Math.cos(a) * r2, 0.0004, Math.sin(a) * r2));
+  }
+  const m = new THREE.LineBasicMaterial({ color: '#34343a' });
+  scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ring), m));
+  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ticks), m));
+}
+
+// ---------- the A1 mini (faithful module), parked off to the right until it is called ----------
+const kit = makeKit();
+const machineMod = await import('./machines/a1mini_exact.js');
+const a1 = machineMod.build(THREE, kit);
+const printer = new THREE.Group(); printer.add(a1.group); scene.add(printer);
+
+// ---------- the order card (flat message on the table) ----------
+function drawCard(g, W, H) {
+  g.fillStyle = '#F7F6F1'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#66665F'; g.font = '400 24px "Martian Mono", monospace'; g.textBaseline = 'alphabetic';
+  g.fillText('ORDER 0427 · FABRARY', 64, 84);
+  g.fillStyle = '#111111'; g.font = '300 92px Michroma, sans-serif';
+  g.fillText('for maya', 64, 250);
+  g.font = '300 40px Archivo, sans-serif'; g.fillText('flat name keychain', 64, 332);
+  g.fillStyle = '#FF5B1F'; g.fillRect(64, 376, 120, 4);
+  g.fillStyle = '#66665F'; g.font = '400 24px "Martian Mono", monospace';
+  g.fillText('74 × 26 mm · orange', 64, 440);
+  g.fillStyle = '#111111'; g.font = '300 40px Archivo, sans-serif';
+  g.fillText('from austin, tx', 64, 524);
+}
+const cardCv = canvasOf(1000, 625); drawCard(cardCv.getContext('2d'), 1000, 625);
+const card = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.125),
+  new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cardCv), transparent: true, toneMapped: false }));
+card.material.map.colorSpace = THREE.SRGBColorSpace;
+card.rotation.x = -Math.PI / 2; card.position.y = 0.002; scene.add(card);
+
+// ---------- the tiny map (planning) ----------
+const mapCv = canvasOf(1000, 600), mapG = mapCv.getContext('2d');
+const mapTex = new THREE.CanvasTexture(mapCv); mapTex.colorSpace = THREE.SRGBColorSpace;
+const mapMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.18),
+  new THREE.MeshBasicMaterial({ map: mapTex, transparent: true, toneMapped: false }));
+mapMesh.rotation.x = -Math.PI / 2; mapMesh.position.y = 0.001; mapMesh.visible = false; scene.add(mapMesh);
+const AUS = [230, 440], CAL = [500, 300];
+function drawMap(t) {
+  const g = mapG, W = 1000, H = 600;
+  g.fillStyle = '#111113'; g.fillRect(0, 0, W, H);
+  // land as a dot field inside a rough blob
+  for (let x = 30; x < W; x += 24) for (let y = 30; y < H; y += 24) {
+    const nx = (x - 500) / 430, ny = (y - 300) / 250;
+    const edge = 0.92 + 0.12 * Math.sin(x * 0.02) + 0.08 * Math.cos(y * 0.031);
+    if (nx * nx + ny * ny < edge * edge) { g.fillStyle = '#34342f'; g.beginPath(); g.arc(x, y, 2.2, 0, Math.PI * 2); g.fill(); }
+  }
+  const p = ease(clamp((t - TL.dotA) / (TL.dotB - TL.dotA)));
+  const dx = CAL[0] - AUS[0], dy = CAL[1] - AUS[1], len = Math.hypot(dx, dy);
+  const bulge = Math.sin(Math.PI * p) * 46;
+  const px = AUS[0] + dx * p - (dy / len) * bulge, py = AUS[1] + dy * p + (dx / len) * bulge;
+  // route so far
+  g.setLineDash([4, 7]); g.strokeStyle = '#66665F'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(AUS[0], AUS[1]); g.lineTo(px, py); g.stroke(); g.setLineDash([]);
+  // the machine: a pulsing ring at the centre
+  const pulse = (t * 0.9) % 1;
+  g.strokeStyle = `rgba(240,240,236,${0.6 * (1 - pulse)})`; g.lineWidth = 3;
+  g.beginPath(); g.arc(CAL[0], CAL[1], 16 + pulse * 46, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#F0F0EC'; g.beginPath(); g.arc(CAL[0], CAL[1], 7, 0, Math.PI * 2); g.fill();
+  // the order dot
+  g.fillStyle = 'rgba(255,91,31,0.22)'; g.beginPath(); g.arc(px, py, 26, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#FF5B1F'; g.beginPath(); g.arc(px, py, 9, 0, Math.PI * 2); g.fill();
+  // micro labels
+  g.font = '400 22px "Martian Mono", monospace'; g.textBaseline = 'middle';
+  g.fillStyle = '#8E8E8A'; g.fillText('AUSTIN, TX', AUS[0] - 40, AUS[1] + 54);
+  g.fillStyle = '#F0F0EC'; g.fillText('CAL HACKS · A1 MINI', CAL[0] + 34, CAL[1] - 34);
+  mapTex.needsUpdate = true;
+}
+
+// ---------- the hero keychain: MAYA, built in mm, scaled up on the table ----------
+function keychainData() {
+  const w = 74, h = 26, r = 6;
+  const plate = new THREE.Shape();
+  plate.moveTo(-w / 2 + r, -h / 2); plate.lineTo(w / 2 - r, -h / 2); plate.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  plate.lineTo(w / 2, h / 2 - r); plate.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); plate.lineTo(-w / 2 + r, h / 2);
+  plate.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); plate.lineTo(-w / 2, -h / 2 + r); plate.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+  const hole = new THREE.Path(); hole.absarc(-29, 0, 4, 0, Math.PI * 2, true); plate.holes.push(hole);
+  // block letters: one closed, non-overlapping outline per letter (14 mm cap height)
+  const LETTER = {
+    M: { outer: [[-4.5, -7], [-2.4, -7], [-2.4, 2.5], [0, -1], [2.4, 2.5], [2.4, -7], [4.5, -7], [4.5, 7], [2.4, 7], [0, 1.8], [-2.4, 7], [-4.5, 7]], holes: [] },
+    A: { outer: [[-5, -7], [-2.5, -7], [-1.9, -4], [1.9, -4], [2.5, -7], [5, -7], [1.4, 7], [-1.4, 7]], holes: [[[-1.2, -1.5], [1.2, -1.5], [0, 3]]] },
+    Y: { outer: [[-5, 7], [-2.2, 7], [0, 2.8], [2.2, 7], [5, 7], [1.3, 0], [1.3, -7], [-1.3, -7], [-1.3, 0]], holes: [] },
+  };
+  const LETTERS = [['M', -13], ['A', 0], ['Y', 13], ['A', 26]];
+  const letterShapes = LETTERS.map(([ch, cx]) => {
+    const L = LETTER[ch];
+    const s = new THREE.Shape(L.outer.map(([x, y]) => new THREE.Vector2(x + cx, y)));
+    L.holes.forEach(h => s.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x + cx, y)))));
+    return s;
+  });
+  const plateGeo = new THREE.ExtrudeGeometry(plate, { depth: 3, bevelEnabled: false, curveSegments: 10 }).rotateX(-Math.PI / 2);
+  const letterGeo = new THREE.ExtrudeGeometry(letterShapes, { depth: 2.2, bevelEnabled: false, curveSegments: 1 }).rotateX(-Math.PI / 2).translate(0, 2.8, 0);
+  // outlines for the 30 layer slices
+  const ex = plate.extractPoints(12);
+  const loops = [ex.shape, ...ex.holes];
+  letterShapes.forEach(s => { loops.push(s.getPoints()); s.holes.forEach(h => loops.push(h.getPoints())); });
+  return { plateGeo, letterGeo, loops };
+}
+const kd = keychainData();
+const heroMat = new THREE.MeshStandardMaterial({ color: '#FF5B1F', roughness: 0.42, envMapIntensity: 0.5, transparent: true, side: THREE.DoubleSide });
+const meshT = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; return m; };
+const heroSolid = new THREE.Group();
+heroSolid.add(meshT(kd.plateGeo, heroMat), meshT(kd.letterGeo, heroMat));
+const lineGeos = kd.loops.map(loop => new THREE.BufferGeometry().setFromPoints(loop.map(v => new THREE.Vector3(v.x, 0, -v.y))));
+const layersG = new THREE.Group();
+const layerGroups = [], layerMats = [];
+for (let i = 0; i < LAYERS; i++) {
+  const m = new THREE.LineBasicMaterial({ color: '#F0F0EC', transparent: true, opacity: 0 });
+  const g = new THREE.Group();
+  lineGeos.forEach(geo => g.add(new THREE.LineLoop(geo, m)));
+  layersG.add(g); layerGroups.push(g); layerMats.push(m);
+}
+const heroG = new THREE.Group();
+heroG.add(heroSolid, layersG);
+heroG.scale.setScalar(MM * HERO_S);
+heroG.visible = false;
+scene.add(heroG);
+
+// the finished keychain stands on a plinth at the end of the loop
+const plinth = kit.rbox(0.13, 0.03, 0.09, 0.008, kit.mat.shell);
+plinth.position.y = 0.015; plinth.visible = false; scene.add(plinth);
+
+// ---------- camera ----------
+const camAt = t => {
+  let i = 0; while (i < CAM.length - 2 && t >= CAM[i + 1][0]) i++;
+  const a = CAM[i], b = CAM[i + 1], e = ease(clamp((t - a[0]) / (b[0] - a[0])));
+  return { dist: lerp(a[1], b[1], e), az: lerp(a[2], b[2], e), el: lerp(a[3], b[3], e), tx: lerp(a[4], b[4], e) };
+};
+const camMul = () => { const a = innerWidth / innerHeight; return a < 0.75 ? 1.3 : a < 1.2 ? 1.12 : 1; };
+// explode amount of the layer stack during slicing (0 = solid, 1 = fully opened)
+const explodeAt = t => { const sU = (t - 6.4) / 4.0; return smooth(0.17, 0.5, sU) - smooth(0.7, 0.9, sU); };
+// height of the exploded stack in metres (layers are in mm inside heroG, scaled by MM * HERO_S)
+const stackH = e => (0.2 + 2.8 * e) * (LAYERS - 1) * MM * HERO_S;
+// height of the thing in the centre: the table, the stack, then the bed, then the plinth
+const focusY = t => {
+  if (t < 10.2) return stackH(explodeAt(t)) / 2 + 0.005;
+  if (t < 11.2) return lerp(0.02, 0.086, ease(t - 10.2));
+  if (t < 19.4) return 0.086;
+  if (t < 20.4) return lerp(0.086, 0.05, ease(t - 19.4));
+  return lerp(0.05, 0.02, ease((t - 20.4) / 1.0));
+};
+
+// ---------- the frame ----------
+const vfEl = document.getElementById('vf'), scanEl = document.getElementById('scan'), codeEl = document.getElementById('code');
+const jobBar = document.getElementById('jobbar'), fillEl = document.getElementById('fill');
+const ticksEl = document.getElementById('ticks');
+STAGES.forEach((s, i) => {
+  const d = document.createElement('div'); d.className = 'tk';
+  d.style.left = ((i + 0.5) / STAGES.length * 100) + '%';
+  d.innerHTML = `<div class="lbl"><b>${String(i + 1).padStart(2, '0')}</b><span>${s.name}</span></div>`;
+  ticksEl.appendChild(d);
+});
+const tickEls = [...ticksEl.children];
+
+function update(t) {
+  const si = stageAt(t), S = STAGES[si];
+  const u = clamp((t - S.start) / (S.end - S.start));
+  const q = clamp((t - TL.printA) / (TL.printB - TL.printA));
+  const etaS = Math.round((1 - q) * 12 * 60);
+  const job = { q, layer: Math.min(LAYERS, Math.floor(q * LAYERS)), pct: Math.round(q * 100),
+    eta: `${Math.floor(etaS / 60)}:${String(etaS % 60).padStart(2, '0')}` };
+
+  // order card: lands, then flattens out into the map
+  const cardOp = Math.min(smooth(0, 0.5, t), 1 - smooth(3.0, 3.5, t));
+  card.visible = cardOp > 0.002;
+  card.material.opacity = cardOp;
+  card.position.y = 0.002 + 0.12 * (1 - easeOut(t / 0.8));
+  card.scale.setScalar(1 + 0.25 * smooth(3.0, 3.5, t));
+
+  // map: the dot pulls toward the machine
+  const mapOp = Math.min(smooth(3.1, 3.6, t), 1 - smooth(6.1, 6.6, t));
+  mapMesh.visible = mapOp > 0.002;
+  mapMesh.material.opacity = mapOp;
+  mapMesh.scale.setScalar(0.9 + 0.1 * smooth(3.1, 3.6, t));
+  if (mapMesh.visible) drawMap(t);
+
+  // slicing: the keychain explodes into 30 layers and reassembles
+  const sU = (t - 6.4) / 4.0;
+  const solidOp = smooth(0, 0.07, sU) * (1 - smooth(0.12, 0.17, sU)) + smooth(0.9, 1.0, sU);
+  const layerOp = smooth(0.12, 0.17, sU) * (1 - smooth(0.9, 0.95, sU));
+  const explode = smooth(0.17, 0.5, sU) - smooth(0.7, 0.9, sU);
+  const spacing = 0.2 + 2.8 * explode;                     // mm between layers
+  const active = (sU > 0.17 && sU < 0.9) ? Math.min(LAYERS - 1, Math.floor((sU - 0.17) / 0.73 * LAYERS)) : -1;
+  for (let i = 0; i < LAYERS; i++) {
+    layerGroups[i].position.y = spacing * i;
+    const on = i === active;
+    layerMats[i].color.set(on ? '#FF5B1F' : '#F0F0EC');
+    layerMats[i].opacity = on ? layerOp : 0.4 * layerOp;
+  }
+
+  const heroSlice = t >= 6.4 && t < TL.sendB + 0.1;
+  const heroReady = t >= TL.plinthA && t < 21.9;
+  heroG.visible = heroSlice || heroReady;
+  if (heroSlice) {
+    const rise = smooth(6.3, 6.9, t), sendK = smooth(TL.sendA, TL.sendB, t);
+    heroG.position.set(0, lerp(-0.004, 0, rise), 0);
+    heroG.rotation.y = 0;
+    heroG.scale.setScalar(MM * HERO_S * lerp(0.85, 1, rise) * lerp(1, 0.2, sendK));
+    heroMat.opacity = solidOp * (1 - sendK);
+  } else if (heroReady) {
+    const drop = easeOut((t - TL.dropA) / 0.7);
+    heroG.position.set(0, lerp(0.2, 0.03, drop), 0);
+    heroG.rotation.y = Math.max(0, t - TL.dropA) * 0.35;
+    heroG.scale.setScalar(MM * HERO_S);
+    heroMat.opacity = smooth(TL.dropA, TL.dropA + 0.4, t) * (1 - smooth(TL.goneA, TL.goneB, t));
+  }
+  plinth.visible = heroReady;
+  plinth.scale.y = Math.max(0.001, smooth(TL.plinthA, TL.dropA, t) * (1 - smooth(TL.goneA, TL.goneB, t)));
+
+  // the A1 mini: slides in, prints, slides out with the finished part
+  const arr = ease((t - TL.arriveA) / (TL.arriveB - TL.arriveA));
+  const lv = ease((t - TL.leaveA) / (TL.leaveB - TL.leaveA));
+  const off = 1.2 * (1 - clamp(arr)) - 1.2 * clamp(lv);
+  printer.position.set(0.035 + off, 0, -0.004);
+  a1.update(q, t);
+
+  // camera: one continuous move along the track, always looking at the centre
+  const k = camAt(t), mul = camMul(), d = k.dist * mul, fy = focusY(t);
+  const cos = Math.cos(THREE.MathUtils.degToRad(k.el)), sin = Math.sin(THREE.MathUtils.degToRad(k.el));
+  const az = THREE.MathUtils.degToRad(k.az);
+  camera.position.set(k.tx * mul + d * cos * Math.sin(az), fy + d * sin, d * cos * Math.cos(az));
+  camera.lookAt(0, fy, 0);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  const liftY = innerWidth / innerHeight < 0.75 ? 0.13 : 0;   // narrow screens: item centred in the space above the caption
+  if (liftY) camera.setViewOffset(innerWidth, innerHeight, 0, liftY * innerHeight, innerWidth, innerHeight);
+  else camera.clearViewOffset();
+
+  // checking: camera frame with a scan line
+  const vfOp = smooth(16.4, 16.9, t) * (1 - smooth(19.0, 19.4, t));
+  vfEl.style.opacity = vfOp;
+  scanEl.style.top = ((((t - 16.4) * 0.6) % 1) * 100) + '%';
+
+  // ready: pickup code
+  codeEl.style.opacity = smooth(19.9, 20.4, t) * (1 - smooth(21.0, 21.6, t));
+
+  // HUD
+  say('num', `${String(si + 1).padStart(2, '0')} / 0${STAGES.length}`);
+  say('caph', S.title);
+  say('caps', S.sub(job));
+  say('status', S.name);
+  jobBar.style.width = (si === 3 ? job.pct : u * 100) + '%';
+  fillEl.style.width = ((si + u) / STAGES.length * 100 + 100 / (2 * STAGES.length)) + '%';
+  tickEls.forEach((el, i) => { el.classList.toggle('on', i === si); el.classList.toggle('done', i < si); });
+}
+
+// '#t=SECONDS' freezes the clock, '#stage=name' jumps to the middle of a stage and freezes it.
+function clockAt(now) {
+  if (P.stage) { const s = STAGES.find(x => x.id === P.stage); if (s) return (s.start + s.end) / 2; }
+  if (P.t !== undefined && !isNaN(parseFloat(P.t))) return ((parseFloat(P.t) % T_LOOP) + T_LOOP) % T_LOOP;
+  return ((now - t0) / 1000) % T_LOOP;
+}
+const t0 = performance.now();
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); });
+function frame(now) {
+  update(clockAt(now));
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

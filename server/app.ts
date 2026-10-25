@@ -1600,7 +1600,7 @@ export function createApp(
     }),
   );
   app.use(express.static(webDirectory, { index: "index.html" }));
-  for (const page of ["/owner", "/make", "/relief", "/live"])
+  for (const page of ["/owner", "/make", "/relief", "/live", "/fabyn", "/fabyn/order", "/fabyn/seller"])
     app.get(page, (req, res) =>
       res.sendFile("index.html", { root: webDirectory }),
     );
