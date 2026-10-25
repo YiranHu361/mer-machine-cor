@@ -1729,8 +1729,8 @@ export class Orchestrator {
   }
   /**
    * Hardware work is always paid. In testnet payment mode a simulated registry
-   * machine is paid like hardware too when FABYN_CHARGE_SIMULATED=1; mock mode
-   * keeps it estimate-only. Simulated relief
+   * machine is paid and picked up like hardware too, unless
+   * FABYN_CHARGE_SIMULATED=0; mock mode keeps it estimate-only. Simulated relief
    * network work is never charged.
    */
   private chargeable(mode: ExecutionMode, source: "registry" | "network") {
@@ -1739,7 +1739,7 @@ export class Orchestrator {
       source === "registry" &&
       this.service.config.paymentMode === "testnet" &&
       this.service.payment.mode === "testnet" &&
-      this.service.config.chargeSimulated === true
+      this.service.config.chargeSimulated !== false
     );
   }
   /** Save a new immutable plan version with its offer; the old offer stops being confirmable. */

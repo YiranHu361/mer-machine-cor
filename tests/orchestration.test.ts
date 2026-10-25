@@ -1806,7 +1806,14 @@ test("x402 order HTTP challenge, wallet signature, durable settlement and produc
     const o = (await agent.get(`/api/orders/${orderId}`).expect(200)).body
       .order;
     assert.equal(o.draft.stage, "proposed");
-    assert.ok(o.plan.simulatedEstimateCents > 0);
+    // In testnet mode the simulated machines are paid like the real one.
+    assert.equal(o.plan.simulatedEstimateCents, 0);
+    assert.ok(o.plan.assignments.some((a: any) => a.executionMode === "simulation"));
+    assert.ok(o.plan.assignments.every((a: any) => a.chargeable));
+    assert.equal(
+      o.plan.payableCents,
+      o.plan.assignments.reduce((t: number, a: any) => t + a.price.totalCents, 0),
+    );
     const body = confirmBody(o, "x402-payment-key");
     const endpoint = `/api/orders/${orderId}/pay`;
     await agent
@@ -1875,8 +1882,9 @@ test("x402 order HTTP challenge, wallet signature, durable settlement and produc
     assert.equal(f.device.runs.length, 3, "retries never repeat fabrication");
     const state = await f.service.read();
     const charged = Object.values(state.jobs).filter((j) => j.chargeable);
-    assert.equal(charged.length, 1);
-    assert.equal(charged[0].requesterAddress, payment.payer.address);
+    assert.equal(charged.length, 3);
+    for (const j of charged)
+      assert.equal(j.requesterAddress, payment.payer.address);
   } finally {
     f.close();
   }
@@ -1984,6 +1992,101 @@ test("the built-in test wallet is only made in testnet mode, and a bad key is ne
   );
 });
 
+test("in testnet mode a simulated machine is paid with the test wallet, made, and handed off with a pickup code", async () => {
+  const f = fixture();
+  try {
+    const run = f.device.call;
+    const payment = testnetPayment(f);
+    f.device.call = run; // let the simulated machine finish its run
+    await f.ready(["instax_01"]);
+    const app = createApp(f.service, undefined, {
+      orchestrator: f.orchestrator,
+      testWallet: new BaseSepoliaTestWallet(
+        payment.payer,
+        "0x2222222222222222222222222222222222222222",
+        2000,
+      ),
+    });
+    const agent = request.agent(app);
+    await agent.post("/api/session").send({ role: "requester" }).expect(200);
+    const ownerId = Object.values((await f.service.read()).sessions).find(
+      (s) => s.role === "requester",
+    )!.id;
+    const created = await agent
+      .post("/api/orders")
+      .set("Idempotency-Key", "sim-paid-create")
+      .send({ photoAssetIds: [await f.photo(ownerId)] })
+      .expect(202);
+    const orderId = created.body.order.id;
+    await f.orchestrator.settle(orderId);
+    const o = (await agent.get(`/api/orders/${orderId}`).expect(200)).body
+      .order;
+    const [a] = o.plan.assignments;
+    assert.equal(a.executionMode, "simulation");
+    assert.equal(a.chargeable, true);
+    assert.ok(o.plan.payableCents > 0);
+    assert.equal(o.plan.payableCents, a.price.totalCents);
+    assert.equal(o.plan.simulatedEstimateCents, 0);
+    const body = confirmBody(o, "sim-paid-key-1");
+    const endpoint = `/api/orders/${orderId}/test-wallet-pay`;
+    // Nothing is made before the payment is confirmed.
+    await agent.post(endpoint).send(body).expect(200);
+    assert.equal(f.device.runs.length, 0);
+    payment.confirm();
+    await f.orchestrator.tick();
+    const paid = (await agent.post(endpoint).send(body).expect(200)).body.order;
+    assert.equal(paid.makeIntent.payment.status, "confirmed");
+    assert.equal(payment.settlements(), 1);
+    assert.deepEqual(f.device.runs.map((r) => r.mode), ["simulation"]);
+    const jobId = paid.plan.assignments[0].child.id;
+    let job = (await f.service.read()).jobs[jobId];
+    assert.equal(job.executionMode, "simulation");
+    assert.equal(job.chargeable, true);
+    assert.equal(job.productionState, "produced");
+    assert.equal(
+      (await f.service.read()).operations[job.collectionOperationId!].amountCents,
+      a.price.totalCents,
+    );
+    // The owner stores the piece: a real pickup code, shown only to the requester.
+    await f.service.prepare(jobId, {
+      removed: true,
+      labeled: true,
+      stored: true,
+      cleared: true,
+    });
+    job = (await f.service.read()).jobs[jobId];
+    assert.equal(job.fulfillmentState, "ready_for_pickup");
+    assert.match(job.pickup!.code, /^[0-9A-F]{12}$/);
+    const first = job.pickup!.code;
+    const view = (await agent.get(`/api/orders/${orderId}`).expect(200)).body
+      .order;
+    assert.equal(view.plan.assignments[0].child.pickupCode, first);
+    // An expired code is renewed like hardware, and only the new one works, once.
+    await mutate(f.store, (s) => {
+      s.jobs[jobId].pickup!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    });
+    job = (await f.service.read()).jobs[jobId];
+    const renewed = await f.service.renewPickup(jobId, {
+      idempotencyKey: "sim-paid-renew-1",
+      expectedVersion: job.version,
+      expectedExpiresAt: job.pickup!.expiresAt,
+    });
+    assert.notEqual(renewed.pickup!.code, first);
+    await assert.rejects(f.service.redeem(jobId, first), /does not match/);
+    const collected = await f.service.redeem(
+      jobId,
+      renewed.pickup!.code.toLowerCase(),
+    );
+    assert.equal(collected.fulfillmentState, "collected");
+    await assert.rejects(
+      f.service.redeem(jobId, renewed.pickup!.code),
+      /already been used/,
+    );
+  } finally {
+    f.close();
+  }
+});
+
 test("unknown x402 settlement remains pending across restart without another charge or job run", async () => {
   const f = fixture({ allowed: ["hardware"] });
   try {
@@ -2024,10 +2127,11 @@ test("unknown x402 settlement remains pending across restart without another cha
   }
 });
 
-test("testnet mode does not ask for a wallet or collect funds for simulated-only plans", async () => {
+test("with FABYN_CHARGE_SIMULATED=0, testnet mode does not ask for a wallet or collect funds for simulated-only plans", async () => {
   const f = fixture();
   try {
     const payment = testnetPayment(f);
+    f.service.config.chargeSimulated = false;
     await f.ready(["instax_01"]);
     const photo = await f.photo(requester.id);
     const { order } = await f.orchestrator.createOrder(
