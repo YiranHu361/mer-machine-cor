@@ -74,3 +74,54 @@ def test_offer_to_result(tmp_path):
         await asyncio.gather(node_task, server_task, return_exceptions=True)
 
     asyncio.run(go())
+
+
+def test_check_connects_to_the_machine_and_reports_back(tmp_path):
+    async def go():
+        port = free_port()
+        app = create_app(frames_dir=tmp_path / "frames")
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+        server_task = asyncio.create_task(server.serve())
+        await wait_for(lambda: asyncio.sleep(0, server.started))
+
+        manifest = json.loads((ROOT / "node/machines/m_photo_01.json").read_text())
+        manifest["adapter"].update(transport="file", out_dir=str(tmp_path / "printer_out"))
+        hub = f"http://127.0.0.1:{port}"
+        node = NodeClient(manifest, hub, tmp_path / "work")
+        node_task = asyncio.create_task(node.run())
+
+        async with httpx.AsyncClient(base_url=hub, timeout=30) as http:
+            async def online():
+                ms = (await http.get("/machines")).json()
+                return ms and ms[0]["status"] != "offline"
+            await wait_for(online)
+
+            answered = (await http.post("/dev/check", json={"machine_id": "m_photo_01"})).json()
+            assert answered == {"machine_id": "m_photo_01", "ok": True, "detail": "answered"}
+
+            async def asleep():
+                raise RuntimeError("INSTAX-71659090 not found; is it on and not connected to the phone app?")
+            node.adapter.probe = asleep
+            silent = (await http.post("/dev/check", json={"machine_id": "m_photo_01"})).json()
+            assert silent["ok"] is False and "not found" in silent["detail"]
+            # A failed check is an answer about the printer, not an error state for the node.
+            assert (await http.get("/machines")).json()[0]["status"] == "idle"
+
+            assert (await http.post("/dev/check", json={"machine_id": "nobody"})).status_code == 404
+
+            # A job that failed only because the printer was out of reach: once a check
+            # reaches it, the node is out of its error state and takes jobs again.
+            del node.adapter.probe
+            node.adapter._state, node.adapter._detail = "error", "INSTAX-71659090 not found; is it on?"
+            assert (await http.post("/dev/check", json={"machine_id": "m_photo_01"})).json()["ok"] is True
+            assert (await node.adapter.status())["state"] == "idle"
+            # Any other error (here: no film) still waits for the owner.
+            node.adapter._state, node.adapter._detail = "error", "out_of_media: the printer reports no film left"
+            await http.post("/dev/check", json={"machine_id": "m_photo_01"})
+            assert (await node.adapter.status())["state"] == "error"
+
+        node_task.cancel()
+        server.should_exit = True
+        await asyncio.gather(node_task, server_task, return_exceptions=True)
+
+    asyncio.run(go())

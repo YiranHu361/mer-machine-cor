@@ -9,6 +9,7 @@ The consumer's hub core mounts it and talks to it through three calls plus event
                                                 # machine.online/offline/updated, job.updated/done/failed
     await gateway.offer_job(job_dict)           # job.offer to job["machine_id"]
     await gateway.cancel_job(machine_id, job_id)
+    await gateway.check_machine(machine_id)     # node connects to its machine once: {"ok", "detail"}
     gateway.machines()                          # manifests with live status, for GET /machines
 """
 from __future__ import annotations
@@ -33,6 +34,8 @@ from node.protocol import (
     JOB_PROGRESS,
     JOB_REJECT,
     JOB_RESULT,
+    MACHINE_CHECK,
+    MACHINE_CHECKED,
     OFFLINE_AFTER_S,
     WELCOME,
     envelope,
@@ -58,6 +61,7 @@ class Gateway:
         self.frames_dir = frames_dir
         self._subs: list[EventHandler] = []
         self._watchdog: asyncio.Task | None = None
+        self._checks: dict[str, asyncio.Future] = {}  # check_id -> the node's answer
         self.router = APIRouter()
         self.router.add_api_websocket_route("/ws/node", self._ws_node)
         self.router.add_api_route("/nodes/{machine_id}/frames", self._upload_frame, methods=["POST"])
@@ -96,6 +100,21 @@ class Gateway:
         conn = self.nodes.get(machine_id)
         if conn and conn.online and conn.ws is not None:
             await conn.ws.send_json(envelope(JOB_CANCEL, {"job_id": job_id}))
+
+    async def check_machine(self, machine_id: str, timeout: float = 90) -> dict[str, Any]:
+        """Ask the node to connect to its machine once, printing nothing, before an order
+        is offered to it. A node online is not proof the printer is on: it may have slept."""
+        conn = self.nodes.get(machine_id)
+        if not conn or not conn.online or conn.ws is None:
+            raise LookupError(f"machine {machine_id} is offline")
+        check_id = uuid.uuid4().hex[:12]
+        answer: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._checks[check_id] = answer
+        try:
+            await conn.ws.send_json(envelope(MACHINE_CHECK, {"check_id": check_id}))
+            return await asyncio.wait_for(answer, timeout)
+        finally:
+            self._checks.pop(check_id, None)
 
     # ---- internals ---------------------------------------------------------
 
@@ -208,6 +227,10 @@ class Gateway:
                 job = self._job_update(conn, d["job_id"], state="verifying", progress=1.0, verification=v,
                                        photo_url=d.get("photo_url"))
                 await self._emit("job.updated", job)
+        elif type_ == MACHINE_CHECKED:
+            answer = self._checks.get(d.get("check_id"))
+            if answer and not answer.done():
+                answer.set_result({"machine_id": mid, "ok": bool(d.get("ok")), "detail": d.get("detail")})
         else:
             log.debug("%s sent unknown type %s", mid, type_)
 

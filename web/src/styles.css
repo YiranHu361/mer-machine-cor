@@ -541,6 +541,46 @@ summary:hover {
   font-size: 13px;
   font-weight: 600;
 }
+.printer-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: calc(100% - 2 * var(--gutter));
+  margin: 4px auto 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.printer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.printer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.printer-pill[data-status="connected"] .printer-dot {
+  background: var(--success);
+}
+.printer-pill[data-status="busy"] .printer-dot,
+.printer-pill[data-status="paused"] .printer-dot {
+  background: var(--warning);
+}
+.printer-pill[data-status="not_answering"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+.printer-pill[data-status="not_answering"] .printer-dot {
+  background: var(--danger);
+}
 #main {
   flex: 1;
   width: 100%;

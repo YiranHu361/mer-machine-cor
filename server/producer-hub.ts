@@ -52,14 +52,14 @@ export class ProducerHubNode {
     this.request = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
-  private async hub(path: string, body?: unknown) {
+  private async hub(path: string, body?: unknown, timeoutMs = this.timeoutMs) {
     const response = await this.request(
       `${this.url.replace(/\/$/, "")}${path}`,
       {
         method: body === undefined ? "GET" : "POST",
         headers: { "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       },
     );
     const text = await response.text();
@@ -70,6 +70,26 @@ export class ProducerHubNode {
         502,
       );
     return JSON.parse(text);
+  }
+  /**
+   * The node connects to its printer once, printing nothing. A node online is
+   * not proof its printer is awake; Bluetooth printers sleep when idle.
+   */
+  async check(theirs: string): Promise<{ ok: boolean; detail: string }> {
+    try {
+      // A Bluetooth check can take three tries; the hub itself waits up to 90 s.
+      const r = await this.hub("/dev/check", { machine_id: theirs }, 100_000);
+      return { ok: r.ok === true, detail: String(r.detail ?? "") };
+    } catch (e) {
+      if (!(e instanceof Problem)) throw e;
+      // A hub without checks cannot tell; it never blocks an order.
+      if (/ answered 404: \{"detail":"not found"\}/i.test(e.message))
+        return { ok: true, detail: "This hub cannot check printers." };
+      // The printer's program never connected, or has stopped.
+      if (/ answered (404|409):/.test(e.message))
+        return { ok: false, detail: "Its printer program is not running." };
+      throw e;
+    }
   }
   async machines(): Promise<HubMachine[]> {
     return this.hub("/machines");

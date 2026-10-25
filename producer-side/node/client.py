@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import random
+import re
 import shutil
 from collections import deque
 from pathlib import Path
@@ -36,6 +37,8 @@ from .protocol import (
     JOB_PROGRESS,
     JOB_REJECT,
     JOB_RESULT,
+    MACHINE_CHECK,
+    MACHINE_CHECKED,
     WELCOME,
     Job,
     envelope,
@@ -45,6 +48,8 @@ log = logging.getLogger("node")
 
 # Keys in node/machines/<id>.json that configure this node only and never go to the hub.
 LOCAL_KEYS = ("adapter", "camera")
+# Adapter errors that only mean the printer could not be reached: nothing was printed.
+UNREACHED = re.compile(r"not found|could not connect", re.I)
 
 
 class NodeClient:
@@ -64,6 +69,9 @@ class NodeClient:
         self.cancelled: set[str] = set()
         self.current: Job | None = None
         self.listed = False
+        # One connection to the machine at a time: a check never races a job.
+        self._machine = asyncio.Lock()
+        self._checks: set[asyncio.Task] = set()
 
         # Job messages survive reconnects; heartbeats don't need to.
         self._outbox: deque[dict[str, Any]] = deque()
@@ -128,6 +136,11 @@ class NodeClient:
                 await self._on_offer(data)
             elif type_ == JOB_CANCEL:
                 await self._on_cancel(data)
+            elif type_ == MACHINE_CHECK:
+                # In the background: a Bluetooth check can take seconds; offers keep flowing.
+                task = asyncio.create_task(self._on_check(data))
+                self._checks.add(task)
+                task.add_done_callback(self._checks.discard)
             elif type_ == WELCOME:
                 pass
             else:
@@ -159,6 +172,28 @@ class NodeClient:
         await self.queue.put(job)
         log.info("accept %s (%s x%d)", job.job_id, job.item_id, job.quantity)
         self.send(JOB_ACCEPT, {"job_id": job.job_id, "reason": None})
+
+    async def _on_check(self, data: dict[str, Any]) -> None:
+        """Connect to the machine once, printing nothing, so the hub learns whether it
+        answers before an order is offered. A printer that slept since the last job
+        wakes up or shows that it is off. A machine working on a job is answering."""
+        if self.current or self._machine.locked():
+            ok, detail = True, "working on a job"
+        else:
+            async with self._machine:
+                try:
+                    await self.adapter.probe()
+                    ok, detail = True, "answered"
+                    # A job that failed only because the printer was out of reach never
+                    # reached it; now that it answers, the node takes jobs again.
+                    st = await self.adapter.status()
+                    clear = getattr(self.adapter, "clear_error", None)
+                    if st["state"] == "error" and clear and UNREACHED.search(st.get("detail") or ""):
+                        clear()
+                except Exception as e:
+                    ok, detail = False, str(e) or type(e).__name__
+        log.info("check %s: %s", "ok" if ok else "no answer", detail)
+        self.send(MACHINE_CHECKED, {"check_id": data.get("check_id"), "ok": ok, "detail": detail})
 
     async def _on_cancel(self, data: dict[str, Any]) -> None:
         job_id = data.get("job_id")
@@ -194,10 +229,11 @@ class NodeClient:
         try:
             self.send(JOB_PROGRESS, {"job_id": jid, "state": "running", "progress": 0.0, "eta_s": None})
             asset = await self._fetch_asset(http, job, dest_dir)
-            native = await self.adapter.prepare(job, asset)
-            async for p in self.adapter.run(job, native):
-                self.send(JOB_PROGRESS, {"job_id": jid, "state": p.state, "progress": p.progress,
-                                         "eta_s": p.eta_s, "message": p.message})
+            async with self._machine:
+                native = await self.adapter.prepare(job, asset)
+                async for p in self.adapter.run(job, native):
+                    self.send(JOB_PROGRESS, {"job_id": jid, "state": p.state, "progress": p.progress,
+                                             "eta_s": p.eta_s, "message": p.message})
             self.send(JOB_PROGRESS, {"job_id": jid, "state": "verifying", "progress": 1.0, "eta_s": 0})
             photo_url, verification = await verify.verify_job(http, self.hub, self.machine_id, job, self.camera)
             log.info("done %s photo=%s verification=%s", jid, photo_url, verification)
@@ -303,6 +339,10 @@ def main() -> None:
         asyncio.run(go())
     except KeyboardInterrupt:
         pass
+    except AdapterError as e:
+        # The startup probe found no machine: one line, and a distinct exit code.
+        log.error("machine not reachable: %s", e)
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

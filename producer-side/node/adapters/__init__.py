@@ -13,7 +13,7 @@ from .base import Adapter, AdapterError, Progress
 # adapter.type -> "package:Class"
 REGISTRY: dict[str, str] = {
     "phomemo_m02pro": "phomemo:PhomemoM02Pro",
-    # "instax_mini": "instax:InstaxMini",       # photo_print, TODO
+    "instax_mini": "instax:InstaxMini",
     "bambu_a1mini": "bambu:BambuA1Mini",
     # "sim": "sim:SimAdapter",                  # every simulated process, TODO
 }
