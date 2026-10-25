@@ -527,6 +527,36 @@ test("definite prerequisite failure retries same transfer allocation, ambiguous 
     f.close();
   }
 });
+test("a transfer blocked on configuration keeps one history entry and backs off background retries", async () => {
+  class Payments extends MockPayment {
+    attempts = 0;
+    override async transfer(j: Job, m: Machine, op: Operation) {
+      if (++this.attempts > 0)
+        throw new Error("TREASURY_PRIVATE_KEY_REQUIRED: no signer");
+      return super.transfer(j, m, op);
+    }
+  }
+  const payment = new Payments(),
+    f = fixture(payment);
+  try {
+    const j = await paid(f);
+    await mutate(f.store, (s) => {
+      s.jobs[j.id].productionState = "produced";
+    });
+    await f.service.transfer(j.id, "release");
+    for (let i = 0; i < 3; i++) await f.service.reconcile(j.id);
+    assert.equal(payment.attempts, 4);
+    const blocked = () =>
+      f.service
+        .job(j.id)
+        .then((x) => x.history.filter((h) => h.event === "transfer_blocked").length);
+    assert.equal(await blocked(), 1);
+    await f.service.tick();
+    assert.equal(payment.attempts, 4);
+  } finally {
+    f.close();
+  }
+});
 test("explicit calibration intent journals once and normal jobs cannot masquerade as calibration", async () => {
   const f = fixture();
   try {

@@ -1457,7 +1457,16 @@ export class Service {
           allocation.retryable = true;
           allocation.reason = `Transfer not submitted: ${message}`;
           allocation.updatedAt = now();
+          const history = s.jobs[jobId].history;
           record(s.jobs[jobId], "transfer_blocked", allocation.reason);
+          // The same block again keeps its first entry instead of growing the job.
+          const [blocked, retry, again] = history.slice(-3);
+          if (
+            blocked?.event === "transfer_blocked" &&
+            retry?.event === `${kind}_retry` &&
+            again?.reason === blocked.reason
+          )
+            history.splice(-2, 2);
         });
       } else await this.pending(op.id, `Transfer outcome unknown: ${message}`);
     }
@@ -2350,7 +2359,14 @@ export class Service {
             (o) =>
               o.jobId === j.id &&
               (["pending", "submitting"].includes(o.status) ||
-                (o.status === "failed" && o.retryable === true)),
+                // Treasury and chain settings change only on restart, so a transfer
+                // blocked on them waits a minute between background retries.
+                (o.status === "failed" &&
+                  o.retryable === true &&
+                  (!/^Transfer not submitted: (TREASURY_|WRONG_CHAIN)/.test(
+                    o.reason ?? "",
+                  ) ||
+                    Date.now() - Date.parse(o.updatedAt) >= 60000))),
           ) ||
           (j.paymentState === "refund_pending" &&
             !Object.values(s.operations).some(
