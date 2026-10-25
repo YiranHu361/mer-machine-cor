@@ -9,10 +9,12 @@ export function newKey() {
   return `${Date.now().toString(36)}-${crypto.randomUUID()}`;
 }
 
-/** The anonymous requester session the backend already uses for orders. */
+/** The anonymous requester session the backend already uses for orders. The
+   workshop's owner session has its own cookie, so the seller page open in the
+   same browser never stands in for the customer. */
 export async function ensureSession() {
   const s = await api<{ role: string | null }>("/session");
-  if (s.role === null) await api("/session", { role: "requester" });
+  if (s.role !== "requester") await api("/session", { role: "requester" });
 }
 
 export async function uploadPhotos(files: File[]): Promise<string[]> {
@@ -28,6 +30,8 @@ export async function createOrder(input: {
   photoAssetIds: string[];
   experience: Experience;
   key: string;
+  /** the profile name the order goes under ("Henry's order") */
+  requesterName?: string;
 }): Promise<OrderView> {
   const { order } = await api<{ order: OrderView }>(
     "/orders",
@@ -35,6 +39,7 @@ export async function createOrder(input: {
       requestText: input.requestText,
       photoAssetIds: input.photoAssetIds,
       experience: input.experience,
+      ...(input.requesterName ? { requesterName: input.requesterName } : {}),
     },
     "POST",
     { headers: { "Idempotency-Key": input.key } },
@@ -47,12 +52,23 @@ export async function getOrder(id: string): Promise<OrderView> {
   return order;
 }
 
-export async function changeRequest(o: OrderView, requestText: string) {
+/** A new version of the request. Chat follow-ups send the whole conversation, newest line last. */
+export async function changeRequest(o: OrderView, requestText: string, photoAssetIds?: string[]) {
   const { order } = await api<{ order: OrderView }>(
     `/orders/${o.id}/draft`,
-    { expectedRevision: o.draft.revision, requestText },
+    { expectedRevision: o.draft.revision, requestText, ...(photoAssetIds ? { photoAssetIds } : {}) },
     "PATCH",
   );
+  return order;
+}
+
+export type DeliveryChoice =
+  | { mode: "pickup" }
+  | { mode: "delivery"; to: { lat: number; lng: number; label: string; source: "gps" | "map" }; km: number | null };
+
+/** Pickup or delivery, saved on the order so the maker sees the same choice. */
+export async function chooseDelivery(o: OrderView, choice: DeliveryChoice) {
+  const { order } = await api<{ order: OrderView }>(`/orders/${o.id}/delivery`, choice);
   return order;
 }
 
@@ -76,7 +92,8 @@ export async function moreLikeThis(o: OrderView) {
 export async function addSuggestion(o: OrderView, suggestionId: string, operation: "add" | "replace") {
   const { order } = await api<{ order: OrderView }>(
     `/orders/${o.id}/alternatives/${suggestionId}/select`,
-    { expectedPlanVersion: o.plan!.version, operation },
+    // an unavailable order has no plan yet; its alternative replaces the asked process
+    { expectedPlanVersion: o.plan?.version ?? null, operation },
   );
   return order;
 }

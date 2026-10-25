@@ -38,7 +38,14 @@ export interface Assignment {
     text?: string;
   };
   schedule?: { startSeconds: number; finishSeconds: number };
-  price?: { totalCents: number; terms: { label: string; cents: number }[] };
+  /** the server's price: maker's price + fabyn fee (10%) = total; basis once the server sends it */
+  price?: {
+    totalCents: number;
+    ownerCents?: number;
+    feeCents?: number;
+    terms: { label: string; cents: number }[];
+    basis?: PriceBasis;
+  };
   child?: {
     id: string;
     productionState: string;
@@ -48,6 +55,17 @@ export interface Assignment {
     evidence?: { result: string; source: string };
   };
   sim?: { status: string; progress: number };
+}
+
+/** The pricing policy's inputs: P_owner = max(minimum, handling + quantity × (material × rate + machine)). */
+export interface PriceBasis {
+  quantity: number;
+  materialPerUnit: number;
+  materialUnit: string;
+  materialRateCents: number;
+  machineRateCents: number;
+  handlingCents: number;
+  minimumCents: number;
 }
 
 export interface Candidate {
@@ -68,6 +86,8 @@ export interface CandidateSet {
   recommendedId: string | null;
   selectedId: string | null;
   reason?: string;
+  /** the one item of a several-thing order these drafts are for */
+  itemId?: string;
 }
 
 export interface Plan {
@@ -97,6 +117,27 @@ export interface Suggestion {
   operation: "add" | "replace";
   estimateCents: number;
   note: string;
+  itemId?: string;
+}
+
+/** Pickup or delivery, saved on the order; the maker's courier and its times come from the server. */
+export interface DeliveryCourier {
+  name: string;
+  vehicle: string;
+  /** text only, never a link */
+  phone: string;
+  calledAt: string;
+  pickupAt: string;
+  arriveAt: string;
+}
+
+export interface Delivery {
+  mode: "pickup" | "delivery";
+  to?: { lat: number; lng: number; label: string; source: "gps" | "map" };
+  km: number | null;
+  chosenAt: string;
+  courier?: DeliveryCourier;
+  handedOverAt?: string;
 }
 
 export interface OrderView {
@@ -111,6 +152,8 @@ export interface OrderView {
     photoAssetIds: string[];
     stage: string;
     reason?: string;
+    /** when the busy machine should be free, for an unavailable order */
+    freeAt?: string;
   };
   intent?: { provider: string; outcome: string; question: string | null };
   candidates?: CandidateSet;
@@ -128,6 +171,9 @@ export interface OrderView {
   };
   /** where the order came from: this site or the ASI:One agent */
   source?: "web" | "asi1";
+  delivery?: Delivery;
+  /** the name the person ordered under, when the server keeps it */
+  requesterName?: string;
   events: OrderEvent[];
 }
 

@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { describeError, createOrder, ensureSession, newKey, uploadPhotos, type Experience } from "./orders";
 import { rememberOrder, type Profile } from "./profile";
 import type { OrderView } from "./model";
 import { PLACE_SHORT } from "./model";
+import { Composer, Mark, checkPhotos } from "./Chat";
+import { saveThread, youEntry } from "./thread";
 
-/* The first screen of every visit: one big box, three ways in. Nothing here is
-   restored from earlier visits; each submit creates a real order. */
-
-type Mode = "describe" | "name" | "photos";
-const MAX_PHOTOS = 4;
-const MAX_BYTES = 12 * 1024 * 1024;
-const TYPES = ["image/png", "image/jpeg", "image/webp"];
+/* The first screen of every visit: one chat box. Text, a name or photos all go
+   in the same box; the first message creates a real order and the thread
+   carries on from there. Nothing here is restored from earlier visits. */
 
 /** Keychain text the printer accepts (Lucas's name-tag rule): up to 16 letters,
    digits, spaces or simple marks, with at least one letter or digit. Case is kept. */
@@ -28,64 +26,34 @@ export function Entry({
   profile: Profile;
   onCreated: (order: OrderView) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("describe");
   const [text, setText] = useState("");
-  const [name, setName] = useState(profile.name);
-  const [gift, setGift] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [busy, setBusy] = useState("");
+  const [gift, setGift] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const pickId = `${useId()}-photos`;
   // one Idempotency-Key per payload: a retry of the same request replays the same order
   const keyRef = useRef<{ sig: string; key: string } | null>(null);
-  const uploadedRef = useRef<string[] | null>(null);
-  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
-  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
-
-  const cleanName = keychainName(name);
-  const canSubmit =
-    !busy &&
-    (mode === "describe"
-      ? text.trim().length > 0 && text.trim().length <= 2000
-      : mode === "name"
-        ? cleanName.length > 0
-        : files.length > 0 && files.length <= MAX_PHOTOS);
-
-  const pickFiles = (list: FileList | null) => {
-    const picked = Array.from(list ?? []);
-    setError("");
-    uploadedRef.current = null;
-    if (picked.length > MAX_PHOTOS) {
-      setError(`Choose up to ${MAX_PHOTOS} photos.`);
-      setFiles(picked.slice(0, MAX_PHOTOS));
-      return;
-    }
-    const bad = picked.find((f) => !TYPES.includes(f.type) || f.size > MAX_BYTES);
-    if (bad) setError(`${bad.name}: use a PNG, JPEG or WebP under 12 MB.`);
-    setFiles(picked);
-  };
+  const uploadedRef = useRef<{ files: File[]; ids: string[] } | null>(null);
+  const name = keychainName(profile.name);
 
   const submit = async () => {
+    const requestText = text.trim();
+    if (!requestText && !files.length) return;
     setError("");
-    setBusy("start");
-    const experience: Experience = mode === "describe" && gift ? "gift" : "best_single";
+    setBusy(true);
+    const experience: Experience = gift ? "gift" : "best_single";
     try {
       await ensureSession();
-      let requestText = "";
-      let photoAssetIds: string[] = [];
-      if (mode === "describe") requestText = text.trim();
-      if (mode === "name") {
-        requestText = `A keychain that says "${cleanName}"`;
-      }
-      if (mode === "photos") {
-        requestText = text.trim();
-        if (!uploadedRef.current) uploadedRef.current = await uploadPhotos(files);
-        photoAssetIds = uploadedRef.current;
-      }
-      const sig = JSON.stringify({ requestText, photoAssetIds, experience });
+      if (files.length && uploadedRef.current?.files !== files) uploadedRef.current = { files, ids: await uploadPhotos(files) };
+      const photoAssetIds = files.length ? uploadedRef.current!.ids : [];
+      const sig = JSON.stringify({ requestText, photoAssetIds, experience, name: profile.name });
       if (keyRef.current?.sig !== sig) keyRef.current = { sig, key: newKey() };
-      const order = await createOrder({ requestText, photoAssetIds, experience, key: keyRef.current.key });
+      const requesterName = profile.name.replace(/[<>]/g, "").trim().slice(0, 40);
+      const order = await createOrder({ requestText, photoAssetIds, experience, key: keyRef.current.key, requesterName });
       keyRef.current = null;
       uploadedRef.current = null;
+      saveThread(order.id, [youEntry(requestText, photoAssetIds)]);
       rememberOrder({ id: order.id, title: requestText || "Photo print", at: order.createdAt });
       onCreated(order);
     } catch (e) {
@@ -93,159 +61,74 @@ export function Entry({
       if (!d.unknown) keyRef.current = null;
       setError(
         d.unknown
-          ? "We could not tell whether the order went through. Press the button again to check; it will not make a second order."
+          ? "We could not tell whether the order went through. Press send again to check; it will not make a second order."
           : d.message,
       );
     } finally {
-      setBusy("");
+      setBusy(false);
     }
   };
 
-  const placeholder =
-    mode === "describe"
-      ? "a sticker of a cat, a name keychain…"
-      : mode === "name"
-        ? "your name"
-        : "add a note (optional)";
-  const label = mode === "describe" ? "What do you want made?" : mode === "name" ? "Your name" : "Note for the photo (optional)";
-  const submitLabel =
-    mode === "describe"
-      ? gift
-        ? "make a three-piece gift"
-        : "make it"
-      : mode === "name"
-        ? "make my keychain"
-        : "make it from my photos";
+  const chips = (
+    <>
+      {name && (
+        <button type="button" className="cs-chip" disabled={busy} onClick={() => setText(`A keychain that says "${name}"`)}>
+          use my name · <b>{name}</b>
+        </button>
+      )}
+      <label htmlFor={pickId} className={`cs-chip ${busy ? "is-off" : ""}`}>
+        print my photo
+      </label>
+      <button type="button" className="cs-chip" disabled={busy} onClick={() => setText(`a keychain that says "${name || "Henry"}", a cat sticker and a print of this photo`)}>
+        a few things at once
+      </button>
+      <button type="button" className={`cs-chip ${gift ? "is-on" : ""}`} aria-pressed={gift} disabled={busy} onClick={() => setGift((g) => !g)}>
+        three-piece gift set
+      </button>
+    </>
+  );
 
   return (
-    <section className="cs-entry" aria-labelledby="cs-entry-title">
-      <p className="cs-kicker">start an order · san francisco</p>
-      <h1 id="cs-entry-title" className="cs-title">
-        Tell us what you want to build today
-      </h1>
-      <form
-        className="cs-box"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSubmit) void submit();
-        }}
-      >
-        <label htmlFor="cs-input" className="cs-visually-hidden">
-          {label}
-        </label>
-        <input
-          id="cs-input"
-          className="cs-big-input"
-          value={mode === "name" ? name : text}
-          onChange={(e) => (mode === "name" ? setName(e.target.value) : setText(e.target.value))}
-          placeholder={placeholder}
-          maxLength={mode === "name" ? 16 : 2000}
-          autoComplete={mode === "name" ? "given-name" : "off"}
-          disabled={!!busy}
-          aria-describedby="cs-entry-hint"
-        />
-        {mode === "name" && (
-          <p id="cs-entry-hint" className="cs-hint">
-            Up to 16 letters, printed on the keychain exactly as <b>{cleanName || "Your name"}</b>.
+    <section className="cs-chat cs-chat-new" aria-labelledby="cs-entry-title">
+      <header className="cs-chat-head">
+        <p className="cs-kicker">start an order · san francisco</p>
+        <h1 id="cs-entry-title" className="cs-title">
+          Tell us what you want to build today
+        </h1>
+      </header>
+      <ol className="cs-thread" aria-label="Your conversation with fabyn">
+        <li className="cs-msg is-fabyn">
+          <p className="cs-say">
+            <Mark className="cs-say-mark" />
+            <span>
+              Hi {profile.name}. Tell me what you want made: a sticker, a keychain with your name, a print of a photo, or a few
+              things at once. I&apos;ll find the machines nearby and show you drafts. Nothing is ordered until you confirm.
+            </span>
           </p>
-        )}
-        {mode === "photos" && (
-          <div className="cs-photos">
-            <label className="cs-drop">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                multiple
-                onChange={(e) => pickFiles(e.target.files)}
-                disabled={!!busy}
-              />
-              <span>{files.length ? "choose different photos" : "choose 1 to 4 photos"}</span>
-              <small>PNG, JPEG or WebP · up to 12 MB each</small>
-            </label>
-            {previews.length > 0 && (
-              <ul className="cs-thumbs" aria-label="Chosen photos">
-                {previews.map((src, i) => (
-                  <li key={src}>
-                    <img src={src} alt={`photo ${i + 1}: ${files[i]?.name ?? ""}`} />
-                    <button
-                      type="button"
-                      className="cs-link"
-                      onClick={() => {
-                        uploadedRef.current = null;
-                        setFiles(files.filter((_, j) => j !== i));
-                      }}
-                      disabled={!!busy}
-                    >
-                      remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        {mode === "describe" && (
-          <label className="cs-gift">
-            <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} disabled={!!busy} />
-            make it a three-piece gift set
-          </label>
-        )}
-        <button className="cs-btn cs-btn-main" type="submit" disabled={!canSubmit} aria-busy={busy === "start" || undefined}>
-          {busy ? "starting…" : submitLabel}
-        </button>
-      </form>
-
-      <div className="cs-paths" role="group" aria-label="Other ways to start">
-        <button
-          type="button"
-          className={`cs-path ${mode === "name" ? "is-on" : ""}`}
-          aria-pressed={mode === "name"}
-          onClick={() => {
-            setError("");
-            setMode("name");
-          }}
-        >
-          <span className="cs-path-n">1</span>
-          <span>
-            not sure? <b>use your name</b>
-          </span>
-          <em>suggested</em>
-        </button>
-        <button
-          type="button"
-          className={`cs-path ${mode === "photos" ? "is-on" : ""}`}
-          aria-pressed={mode === "photos"}
-          onClick={() => {
-            setError("");
-            setMode("photos");
-          }}
-        >
-          <span className="cs-path-n">2</span>
-          <span>
-            <b>print your own photo</b>
-          </span>
-        </button>
-        <button
-          type="button"
-          className={`cs-path ${mode === "describe" ? "is-on" : ""}`}
-          aria-pressed={mode === "describe"}
-          onClick={() => {
-            setError("");
-            setMode("describe");
-          }}
-        >
-          <span className="cs-path-n">3</span>
-          <span>
-            <b>describe it</b>, pick a design
-          </span>
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="cs-error">
-          {error}
-        </p>
-      )}
-      <p className="cs-fine">
+        </li>
+      </ol>
+      <Composer
+        big
+        value={text}
+        onChange={setText}
+        files={files}
+        onFiles={(picked) => {
+          const c = checkPhotos(picked, files.length);
+          setError(c.error);
+          uploadedRef.current = null;
+          setFiles([...files, ...c.files]);
+        }}
+        onSend={() => void submit()}
+        placeholder="a sticker of a cat, a name keychain…"
+        label="What do you want made?"
+        canSend={!!text.trim() || files.length > 0}
+        busy={busy}
+        chips={chips}
+        error={error}
+        fileInputId={pickId}
+        sendLabel={gift ? "make the gift set" : "send"}
+      />
+      <p className="cs-fine cs-chat-fine">
         Made on a spare machine near you, at the {PLACE_SHORT}. Nothing is ordered until you confirm.
       </p>
     </section>

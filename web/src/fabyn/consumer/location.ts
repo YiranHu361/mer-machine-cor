@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { PALACE, areaLabel, distanceKm, formatKm, type LatLng } from "../shared/map";
+import type { DeliveryChoice } from "./orders";
 
 export type Where =
   | { state: "idle" }
@@ -109,6 +110,19 @@ export function deliveryFor(spot: LatLng | null, from: LatLng = PALACE): { ok: b
   if (km > DELIVERY_RADIUS_KM)
     return { ok: false, why: `The courier rides up to ${DELIVERY_RADIUS_KM} km from the ${PALACE.short}; you are ${formatKm(km)} away, so it's pickup only.` };
   return { ok: true, why: "" };
+}
+
+/** What to save on the order for this choice: the spot, its neighbourhood and the street-route length. */
+export function deliveryChoice(mode: "pickup" | "delivery", where: Where, route: StreetRoute | null): DeliveryChoice | null {
+  if (mode === "pickup") return { mode };
+  const spot = spotOf(where);
+  if (!spot) return null;
+  const km = route?.streets && route.km > 0 && route.km <= 50 ? Math.round(route.km * 100) / 100 : null;
+  return {
+    mode,
+    to: { lat: spot.lat, lng: spot.lng, label: areaLabel(spot).slice(0, 60), source: where.state === "found" ? "gps" : "map" },
+    km,
+  };
 }
 
 /* ---------- the courier's street route ----------

@@ -1,40 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
 import { Actions, ErrorLine, JobTiles, TitleBlock, type ScreenProps } from "./Screens";
-import { estimateJob, makingStartedAt, rideProgress, rideSecondsFor, walkMinutes, COURIER, mmss } from "./estimate";
+import { clockTime, courierProgress, estimateJob, makingStartedAt, tripMinutes, walkMinutes } from "./estimate";
 import { orderTitle, phaseOf } from "./phase";
-import { stopWork } from "./orders";
-import { PLACE, PLACE_SHORT } from "./model";
+import { chooseDelivery, stopWork } from "./orders";
+import { PLACE, PLACE_SHORT, type OrderView } from "./model";
 import { receiptUrl } from "./checkout";
-import { readHandoff, saveHandoff, type Handoff } from "./profile";
 import { SFMap, BOUNDS, PALACE, areaLabel, boundsAround, distanceKm, formatKm, inBounds, type LatLng, type MapPin } from "../shared/map";
-import { deliveryFor, spotOf, useStreetRoute, useWhere, type StreetRoute } from "./location";
+import { deliveryChoice, deliveryFor, spotOf, useStreetRoute, useWhere, type StreetRoute } from "./location";
 
 /* Steps 7–8: printing on the machine, then delivery or pickup. The progress
-   and the courier ride are estimates (estimate.ts); the job states, the
-   pickup code and the payment receipt are the saved order. */
+   is an estimate (estimate.ts); the job states, the pickup code, the payment
+   receipt, the pickup-or-delivery choice and the maker's courier are the
+   saved order. */
 
-function useHandoff(id: string) {
-  const [h, setH] = useState<Handoff | null>(() => readHandoff(id));
-  const set = useCallback(
-    (next: Handoff) => {
-      saveHandoff(id, next);
-      setH(next);
-    },
-    [id],
-  );
-  return [h, set] as const;
-}
-
-function HandoffChoice({ onPick, reach }: { onPick: (mode: Handoff["mode"]) => void; reach: { ok: boolean; why: string } }) {
+function HandoffChoice({ onPick, reach, busy }: { onPick: (mode: "delivery" | "pickup") => void; reach: { ok: boolean; why: string }; busy: boolean }) {
   return (
     <fieldset className="cs-choice">
       <legend>How do you get it?</legend>
       {!reach.ok && <p className="cs-note">{reach.why}</p>}
       <div className="cs-choice-row">
-        <button type="button" className="cs-btn" disabled={!reach.ok} onClick={() => onPick("delivery")}>
+        <button type="button" className="cs-btn" disabled={!reach.ok || busy} onClick={() => onPick("delivery")}>
           deliver to me
         </button>
-        <button type="button" className="cs-btn" onClick={() => onPick("pickup")}>
+        <button type="button" className="cs-btn" disabled={busy} onClick={() => onPick("pickup")}>
           I&apos;ll pick it up
         </button>
       </div>
@@ -58,12 +45,12 @@ function Receipt({ order }: { order: ScreenProps["order"] }) {
   return null;
 }
 
-const youLabel = (spot: LatLng) =>
-  inBounds(spot, BOUNDS.city) ? `you · ${areaLabel(spot)}` : `you · ${formatKm(distanceKm(spot, PALACE))} away`;
+const youLabel = (spot: LatLng, label?: string) =>
+  inBounds(spot, BOUNDS.city) ? `you · ${label ?? areaLabel(spot)}` : `you · ${formatKm(distanceKm(spot, PALACE))} away`;
 
-const handoffPins = (spot: LatLng | null, highlight = false): MapPin[] => [
+const handoffPins = (spot: LatLng | null, highlight = false, label?: string): MapPin[] => [
   { id: "palace", at: PALACE, label: `Lucas · ${PALACE.short}`, tone: highlight ? "match" : "place", showLabel: true, labelAt: "right" },
-  ...(spot ? [{ id: "home", at: spot, label: youLabel(spot), tone: "home" as const, showLabel: true, labelAt: "left" as const }] : []),
+  ...(spot ? [{ id: "home", at: spot, label: youLabel(spot, label), tone: "home" as const, showLabel: true, labelAt: "left" as const }] : []),
 ];
 
 /** Frame the machine, the person and the route; someone outside the city gets an edge marker on an SF map. */
@@ -72,23 +59,41 @@ const frameFor = (spot: LatLng | null, route: StreetRoute | null) =>
     minKm: spot && !inBounds(spot, BOUNDS.city) ? 7 : 1.6,
   });
 
-/** Delivery is on only when chosen and the person's real spot is within the courier's reach. */
-function useDelivery(handoff: Handoff | null) {
-  const spot = spotOf(useWhere());
-  const reach = deliveryFor(spot);
-  const delivery = handoff?.mode === "delivery" && reach.ok && !!spot;
+/** The saved choice, the spot it goes to, its street route and the courier, if the maker called one. */
+function useDelivery(order: OrderView, now: number) {
+  const where = useWhere();
+  const browserSpot = spotOf(where);
+  const d = order.delivery;
+  // a delivery goes to the spot saved on the order; until then the browser's spot is the person's
+  const delivery = d?.mode === "delivery" && !!d.to;
+  const spot: LatLng | null = delivery ? { lat: d.to!.lat, lng: d.to!.lng } : browserSpot;
+  const place = delivery ? d.to!.label : spot ? areaLabel(spot) : "";
   const route = useStreetRoute(PALACE, delivery ? spot : null);
+  // the route for a delivery not chosen yet, to save its length with the choice
+  const reach = deliveryFor(browserSpot);
+  const pickRoute = useStreetRoute(PALACE, !delivery && reach.ok ? browserSpot : null);
   // until the street route loads, a ride of about 1.3 times the straight line
-  const km = route?.km ?? (spot ? distanceKm(PALACE, spot) * 1.3 : 0);
-  return { spot, reach, delivery, route, km, rideSeconds: rideSecondsFor(km) };
+  const km = d?.km ?? route?.km ?? (spot ? distanceKm(PALACE, spot) * 1.3 : 0);
+  const courier = delivery ? d.courier ?? null : null;
+  const ride = courier ? courierProgress(courier, now) : null;
+  return { where, d, spot, place, reach, delivery, route, pickRoute, km, courier, ride };
+}
+
+/** Save pickup or delivery on the order through the shared action runner. */
+function useChoose(order: OrderView, run: ScreenProps["run"], info: ReturnType<typeof useDelivery>) {
+  return (mode: "delivery" | "pickup") => {
+    const choice = deliveryChoice(mode, info.where, mode === "delivery" ? info.pickRoute : null);
+    if (choice) void run("delivery", () => chooseDelivery(order, choice));
+  };
 }
 
 /* ---------- 7: printing ---------- */
 
 export function PrintingStep({ order, now, run, busy, error, go, onOrders }: ScreenProps) {
   const plan = order.plan!;
-  const [handoff, setHandoff] = useHandoff(order.id);
-  const { spot, reach, delivery, route, km, rideSeconds } = useDelivery(handoff);
+  const info = useDelivery(order, now);
+  const { d, spot, place, reach, delivery, route, km, courier } = info;
+  const choose = useChoose(order, run, info);
   const startedAt = makingStartedAt(order.events);
   const states = plan.assignments.map((a) => estimateJob(a, { now, startedAt, readyEstimateMinutes: plan.readyEstimateMinutes }).state);
   const printed = states.every((s) => s === "handover" || s === "finished");
@@ -110,20 +115,22 @@ export function PrintingStep({ order, now, run, busy, error, go, onOrders }: Scr
         <JobTiles order={order} now={now} />
         <aside className="cs-print-side" aria-label="How you get it">
           <SFMap
-            pins={handoffPins(spot, !delivery)}
+            pins={handoffPins(spot, !delivery, place)}
             route={delivery ? route?.path : undefined}
             bounds={frameFor(spot, delivery ? route : null)}
             hoods
             label={`Map from the ${PALACE.short}${spot ? " to you" : ""}`}
           />
-          {handoff ? (
+          {d ? (
             <p className="cs-note">
               {delivery && spot
-                ? `${COURIER.name} (${COURIER.vehicle}) brings it to you in ${areaLabel(spot)} once Lucas hands it over: ${formatKm(km)}${route?.streets ? " over the streets" : ""}, about ${Math.round(rideSeconds / 60)} min.`
-                : `You collect it from Lucas at the ${PLACE_SHORT}.${handoff.mode === "delivery" && !reach.ok ? ` ${reach.why}` : ""}`}
+                ? courier
+                  ? `${courier.name} (${courier.vehicle}) is coming for it: picks it up about ${clockTime(courier.pickupAt)}, at your door in ${place} about ${clockTime(courier.arriveAt)}.`
+                  : `A courier brings it to you in ${place}: ${formatKm(km)}${route?.streets ? " over the streets" : ""}, about ${Math.round(tripMinutes(km))} min. Lucas calls one as soon as it's made.`
+                : `You collect it from Lucas at the ${PLACE_SHORT}.`}
             </p>
           ) : (
-            <HandoffChoice reach={reach} onPick={(mode) => setHandoff({ mode })} />
+            <HandoffChoice reach={reach} busy={!!busy} onPick={choose} />
           )}
         </aside>
       </div>
@@ -147,43 +154,48 @@ export function PrintingStep({ order, now, run, busy, error, go, onOrders }: Scr
 
 /* ---------- 8: get it ---------- */
 
-export function HandoffStep({ order, now, onNew, onOrders, go }: ScreenProps) {
+export function HandoffStep({ order, now, run, busy, error, onNew, onOrders, go }: ScreenProps) {
   const plan = order.plan!;
-  const [handoff, setHandoff] = useHandoff(order.id);
-  const { spot, reach, delivery, route, rideSeconds } = useDelivery(handoff);
+  const info = useDelivery(order, now);
+  const { d, spot, place, reach, delivery, route, km, courier, ride } = info;
+  const choose = useChoose(order, run, info);
   const ready = phaseOf(order) === "ready";
   const codes = plan.assignments.map((a) => a.child?.pickupCode).filter(Boolean) as string[];
-  // the ride starts the first time this browser sees the order handed over
-  useEffect(() => {
-    if (ready && delivery && handoff && !handoff.rideStartedAt) setHandoff({ ...handoff, rideStartedAt: Date.now() });
-  }, [ready, delivery, handoff, setHandoff]);
-  if (!handoff)
+  if (!d)
     return (
       <section className="cs-ready" aria-labelledby="cs-ready-title">
         <TitleBlock id="cs-ready-title" kicker="get it" title={orderTitle(order)} sub="Choose how you get it." />
-        <HandoffChoice reach={reach} onPick={(mode) => setHandoff({ mode })} />
+        <HandoffChoice reach={reach} busy={!!busy} onPick={choose} />
+        <ErrorLine text={error} />
       </section>
     );
-  const ride = rideProgress(delivery && ready ? handoff.rideStartedAt ?? null : null, now, rideSeconds);
+  const first = courier?.name.split(" ")[0] ?? "";
   const walkKm = spot ? distanceKm(spot, PALACE) : null;
   const title = delivery
-    ? !ready
-      ? "Waiting for Lucas to hand it over"
-      : ride.arrived
-        ? `${COURIER.name.split(" ")[0]} is outside`
-        : `On its way · ${mmss(ride.etaSeconds)}`
-    : ready
-      ? "Ready to collect"
-      : "Almost ready to collect";
+    ? !courier
+      ? ready
+        ? "Waiting for the courier"
+        : "Waiting for Lucas to finish it"
+      : ride!.phase === "to_workshop"
+        ? `${first} is on the way to the workshop`
+        : ride!.phase === "on_the_way"
+          ? `On its way · about ${ride!.minutesLeft} min`
+          : `${first} is outside`
+    : d.handedOverAt
+      ? "Handed over"
+      : ready
+        ? "Ready to collect"
+        : "Almost ready to collect";
+  const kmLeft = ride && route ? route.km * (1 - ride.t) : null;
   return (
     <section className="cs-ready" aria-labelledby="cs-ready-title">
-      <TitleBlock id="cs-ready-title" kicker={delivery ? "get it · delivery" : "get it · pickup"} title={title} sub={`${orderTitle(order)} · ${delivery && spot ? `${PALACE.short} → you in ${areaLabel(spot)}` : PLACE}`} />
+      <TitleBlock id="cs-ready-title" kicker={delivery ? "get it · delivery" : "get it · pickup"} title={title} sub={`${orderTitle(order)} · ${delivery && spot ? `${PALACE.short} → you in ${place}` : PLACE}`} />
       <div className="cs-handoff-grid">
         <SFMap
-          pins={handoffPins(spot, !delivery)}
+          pins={handoffPins(spot, !delivery, place)}
           route={delivery ? route?.path : undefined}
-          progress={delivery && route ? ride.t : undefined}
-          markerLabel={delivery ? `${COURIER.name.split(" ")[0]} · ${COURIER.vehicle}` : undefined}
+          progress={delivery && route && ride ? ride.t : undefined}
+          markerLabel={courier ? `${first} · ${courier.vehicle}` : undefined}
           bounds={frameFor(spot, delivery ? route : null)}
           hoods
           label={delivery ? `Route from the ${PALACE.short} to you` : `Map around the ${PALACE.short}`}
@@ -193,28 +205,42 @@ export function HandoffStep({ order, now, onNew, onOrders, go }: ScreenProps) {
             <dl className="cs-facts cs-facts-tight">
               <div>
                 <dt>courier</dt>
-                <dd>
-                  {COURIER.name} · {COURIER.vehicle}
-                </dd>
+                <dd>{courier ? `${courier.name} · ${courier.vehicle}` : "Lucas calls one when it's made"}</dd>
               </div>
-              <div>
-                <dt>contact</dt>
-                <dd>{COURIER.contact}</dd>
-              </div>
+              {courier && (
+                <div>
+                  <dt>contact</dt>
+                  <dd>
+                    {first} · {courier.phone}
+                  </dd>
+                </div>
+              )}
+              {courier && (
+                <div>
+                  <dt>{ride!.phase === "to_workshop" ? "picks it up" : "picked up"}</dt>
+                  <dd>
+                    {ride!.phase === "to_workshop"
+                      ? `about ${clockTime(courier.pickupAt)} at the ${PALACE.short}`
+                      : `your order at ${clockTime(courier.pickupAt)}`}
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>route</dt>
                 <dd>
-                  {route ? `${formatKm(route.km)} ${route.streets ? "over the streets" : "in a straight line (the street route did not load)"}` : "working out the route…"}
+                  {route
+                    ? `${formatKm(route.km)} ${route.streets ? "over the streets" : "in a straight line (the street route did not load)"}${kmLeft !== null && ride?.phase === "on_the_way" ? ` · ${formatKm(kmLeft)} left` : ""}`
+                    : "working out the route…"}
                 </dd>
               </div>
               <div>
                 <dt>arrives</dt>
                 <dd aria-live="polite">
-                  {!ready
-                    ? `about ${Math.round(rideSeconds / 60)} min after Lucas hands it over`
-                    : ride.arrived
-                      ? `here · ${spot ? areaLabel(spot) : "your spot"}`
-                      : `in about ${mmss(ride.etaSeconds)}`}
+                  {!courier
+                    ? `about ${Math.round(tripMinutes(km))} min after it's picked up`
+                    : ride!.phase === "delivered"
+                      ? `here · ${place}`
+                      : `about ${clockTime(courier.arriveAt)} (${ride!.minutesLeft} min)`}
                 </dd>
               </div>
             </dl>
@@ -245,19 +271,19 @@ export function HandoffStep({ order, now, onNew, onOrders, go }: ScreenProps) {
                 {delivery ? "code for the courier" : "pickup code"} <strong>{codes.join(" · ")}</strong>
               </p>
             ) : ready ? (
-              <p>No pickup code for this print. {delivery ? `${COURIER.name.split(" ")[0]} hands it to you directly.` : "Show this screen at the table and Lucas hands it over."}</p>
+              <p>No pickup code for this print. {delivery ? "The courier hands it to you directly." : "Show this screen at the table and Lucas hands it over."}</p>
             ) : (
-              <p>Lucas has not handed it over yet. {delivery ? "The ride starts" : "A pickup code shows here"} as soon as he does.</p>
+              <p>Lucas has not handed it over yet. {delivery ? "He calls the courier" : "A pickup code shows here"} as soon as it's made.</p>
             )}
           </div>
-          {handoff.mode === "delivery" && !reach.ok && <p className="cs-note">{reach.why}</p>}
-          {(delivery || reach.ok) && (
-            <button className="cs-link" onClick={() => setHandoff({ mode: delivery ? "pickup" : "delivery" })}>
+          {!courier && !d.handedOverAt && (delivery || reach.ok) && (
+            <button className="cs-link" disabled={!!busy} onClick={() => choose(delivery ? "pickup" : "delivery")}>
               {delivery ? "pick it up instead" : "have it delivered instead"}
             </button>
           )}
         </div>
       </div>
+      <ErrorLine text={error} />
       <Actions>
         <button className="cs-btn cs-btn-main" onClick={onNew}>
           start a new order

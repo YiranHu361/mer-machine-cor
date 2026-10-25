@@ -61,10 +61,8 @@ export function phaseOf(o: OrderView): Phase {
 export function processesOf(o: OrderView): Process[] {
   const fromPlan = o.plan?.items.map((i) => i.process);
   if (fromPlan?.length) return [...new Set(fromPlan)];
-  const understood = o.events.find((e) => e.type === "draft.understood");
-  const items = understood?.data?.items as Process[] | undefined;
-  if (items?.length) return [...new Set(items)];
-  return [];
+  // the newest understanding: a chat change is understood again
+  return understoodProcesses(o);
 }
 
 /** The first thing being made: it decides the machine type, the map and the preview. */
@@ -102,9 +100,28 @@ export function preparedSize(a: Assignment | undefined): string {
 
 const short = (s: string, n = 34) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 
-/** What the request was, in a few words. */
+/** What the request was, in a few words: the newest line of a chat conversation. */
 export function requestShort(o: OrderView): string {
-  return o.draft.requestText || (o.draft.photoAssetIds.length ? `${o.draft.photoAssetIds.length} photo${o.draft.photoAssetIds.length > 1 ? "s" : ""}` : "");
+  const lines = o.draft.requestText.split("\n").map((l) => l.trim()).filter(Boolean);
+  return lines[lines.length - 1] || (o.draft.photoAssetIds.length ? `${o.draft.photoAssetIds.length} photo${o.draft.photoAssetIds.length > 1 ? "s" : ""}` : "");
+}
+
+/** What the agent understood the request to be, before any planning. */
+export function understoodProcesses(o: OrderView): Process[] {
+  const understood = [...o.events].reverse().find((e) => e.type === "draft.understood");
+  const items = understood?.data?.items as Process[] | undefined;
+  return items?.length ? [...new Set(items)] : [];
+}
+
+/** When planning made something other than what was understood (a busy machine type), what changed and why. */
+export function processChange(o: OrderView): { from: Process; to: Process; why: string } | null {
+  const plan = o.plan;
+  const asked = understoodProcesses(o);
+  if (!plan || !asked.length) return null;
+  const planned = [...new Set(plan.items.map((i) => i.process))];
+  const from = asked.find((p) => !planned.includes(p));
+  const toItem = plan.items.find((i) => !asked.includes(i.process));
+  return from && toItem ? { from, to: toItem.process, why: toItem.why } : null;
 }
 
 /** The real machines of one process, the free ones first. */

@@ -87,6 +87,114 @@ export function ErrorLine({ text }: { text: string }) {
   ) : null;
 }
 
+/* ---------- price and time, from the plan ---------- */
+
+const amount = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const termCents = (a: Assignment, re: RegExp) => a.price?.terms.find((t) => re.test(t.label))?.cents ?? 0;
+
+/** One item's price in the policy's terms: material, machine, handling → the maker's price, then fabyn's 10% fee. Server numbers only. */
+function PriceSteps({ a }: { a: Assignment }) {
+  const p = a.price!;
+  const b = p.basis;
+  const fee = p.feeCents ?? termCents(a, /fee/i);
+  const owner = p.ownerCents ?? p.totalCents - fee;
+  const minimum = b ? owner === b.minimumCents && termCents(a, /minimum/i) > 0 : termCents(a, /minimum/i) > 0;
+  const parts: { label: string; value: string }[] = [];
+  if (b) {
+    const qty = b.quantity * b.materialPerUnit;
+    const unit = b.materialUnit === "g" ? "g" : `${b.materialUnit}${qty === 1 ? "" : "s"}`;
+    parts.push({ label: "material", value: `${amount(qty)} ${unit} × ${usd(b.materialRateCents)}${b.materialUnit === "g" ? "/g" : ""}` });
+    parts.push({ label: "machine", value: `${b.quantity > 1 ? `${b.quantity} × ` : ""}${usd(b.machineRateCents)}` });
+    parts.push({ label: "handling", value: usd(b.handlingCents) });
+  } else
+    for (const t of p.terms)
+      if (!/fee|minimum/i.test(t.label))
+        parts.push({ label: /unit cost/i.test(t.label) ? "machine" : /handling/i.test(t.label) ? "handling" : t.label.toLowerCase(), value: usd(t.cents) });
+  return (
+    <ol className="cs-price-steps">
+      {parts.map((x) => (
+        <li key={x.label}>
+          <span>{x.label}</span>
+          <span>{x.value}</span>
+        </li>
+      ))}
+      <li className="is-owner">
+        <span>→ maker gets{minimum ? " · minimum price applies" : ""}</span>
+        <span>{usd(owner)}</span>
+      </li>
+      <li>
+        <span>fabyn fee (10%)</span>
+        <span>{usd(fee)}</span>
+      </li>
+      <li className="is-sub">
+        <span>total</span>
+        <span>{usd(p.totalCents)}</span>
+      </li>
+    </ol>
+  );
+}
+
+/** The price and the ready estimate exactly as the server planned them, one
+   block per item. Nothing here makes up or rounds a price; the only sum is a
+   cross-check that the items add up to what checkout charges, shown when
+   they don't. On a phone each item is one line until opened. */
+export function PriceBlock({ order }: { order: OrderView }) {
+  const plan = order.plan;
+  const [wide] = useState(() => typeof window === "undefined" || window.innerWidth > 760);
+  if (!plan || !plan.assignments.length) return null;
+  const many = plan.assignments.length > 1;
+  const itemsCents = plan.assignments.reduce((s, a) => s + (a.price?.totalCents ?? 0), 0);
+  const charge =
+    plan.paymentMode === "mock" ? "order total · demo payment" : plan.payableCents > 0 ? "order total · charged at checkout" : "order total · no charge for this print";
+  return (
+    <div className="cs-estimate" aria-label="Price and time">
+      <p className="cs-kicker">price and time · nothing charged yet</p>
+      <ul className="cs-prices">
+        {plan.assignments.map((a) => {
+          const item = plan.items.find((i) => i.id === a.itemId);
+          const minutes = a.schedule ? Math.max(1, Math.ceil(a.schedule.finishSeconds / 60)) : null;
+          const title = item ? itemTitle(item, order) : "your item";
+          return (
+            <li key={a.id}>
+              <details className="cs-price" open={wide}>
+                <summary>
+                  <span className="cs-price-what">
+                    {title}
+                    <small>
+                      {machineLabel(a.machineId, a.machineName)}
+                      {many && minutes ? ` · about ${minutes} min` : ""}
+                    </small>
+                  </span>
+                  <span className="cs-price-total">{a.price ? usd(a.price.totalCents) : "—"}</span>
+                  <span className="cs-price-how">how this price is made</span>
+                </summary>
+                {a.price ? <PriceSteps a={a} /> : <p className="cs-note">No price for this one.</p>}
+              </details>
+            </li>
+          );
+        })}
+      </ul>
+      <ul className="cs-terms cs-order-total">
+        <li className="is-total">
+          <span>{charge}</span>
+          <span>{usd(plan.payableCents)}</span>
+        </li>
+        {itemsCents !== plan.payableCents && (
+          <li className="is-note">
+            <span>
+              The items add up to {usd(itemsCents)}; checkout charges {usd(plan.payableCents)}.
+            </span>
+          </li>
+        )}
+      </ul>
+      <p className="cs-estimate-time">
+        ready in about <b>{Math.max(1, plan.readyEstimateMinutes)} min</b>
+        {many ? ` · ${plan.assignments.length} machines at the same time` : ""}
+      </p>
+    </div>
+  );
+}
+
 /* ---------- tool calls, revealed one by one ---------- */
 
 /** A plan the backend finishes in a fraction of a second still reads as the

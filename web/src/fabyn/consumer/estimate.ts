@@ -7,7 +7,7 @@
    estimate. When the backend gains real progress numbers, replace the body of
    estimateJob and nothing else needs to change. */
 
-import type { Assignment, OrderEvent } from "./model";
+import type { Assignment, DeliveryCourier, OrderEvent } from "./model";
 
 export interface JobProgress {
   /** 0..100 */
@@ -83,32 +83,36 @@ export function mmss(seconds: number | null) {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/* ---------- delivery (display only) ----------
+/* ---------- delivery ----------
 
-   There is no courier service behind fabyn yet. The courier and the moving
-   marker are display-only; the route and its length come from the street
-   route to the person's real spot (location.ts). The ride starts when the
-   owner hands the item over. */
+   No delivery service is connected. The maker calls a courier from the seller
+   side; the server picks the person and fixes the pickup and arrival times
+   (server/orchestration/delivery.ts), so both sides show the same ones. Before
+   a courier is called, the trip uses the server's rule. */
 
-export const COURIER = {
-  name: "Rosa M.",
-  vehicle: "e-bike",
-  /** text only, never a link */
-  contact: "Rosa · (415) 555-0142",
-};
+/** City traffic: about 2.4 minutes per km, never under 5 minutes (the server's rule). */
+export const tripMinutes = (km: number) => Math.max(5, km * 2.4);
 
-/** City e-bike speed, km/h, including stops. */
-export const COURIER_KMH = 15;
-
-/** How long the ride over a route of this length takes, in seconds. */
-export const rideSecondsFor = (km: number) => Math.max(60, Math.round((km / COURIER_KMH) * 3600));
-
-export function rideProgress(startedAt: number | null, now: number, rideSeconds: number): { t: number; etaSeconds: number | null; arrived: boolean } {
-  if (startedAt === null) return { t: 0, etaSeconds: null, arrived: false };
-  const elapsed = Math.max(0, (now - startedAt) / 1000);
-  const t = clamp(elapsed / rideSeconds, 0, 1);
-  return { t, etaSeconds: t >= 1 ? 0 : Math.ceil(rideSeconds - elapsed), arrived: t >= 1 };
+export interface CourierProgress {
+  phase: "to_workshop" | "on_the_way" | "delivered";
+  /** 0..1 along the route, from the pickup to the arrival */
+  t: number;
+  /** whole minutes until the courier arrives at the person */
+  minutesLeft: number;
 }
+
+export function courierProgress(c: DeliveryCourier, now: number): CourierProgress {
+  const pickup = Date.parse(c.pickupAt);
+  const arrive = Date.parse(c.arriveAt);
+  const minutesLeft = Math.max(0, Math.ceil((arrive - now) / 60000));
+  if (now < pickup) return { phase: "to_workshop", t: 0, minutesLeft };
+  if (now >= arrive) return { phase: "delivered", t: 1, minutesLeft: 0 };
+  return { phase: "on_the_way", t: clamp((now - pickup) / Math.max(1, arrive - pickup), 0, 1), minutesLeft };
+}
+
+/** "3:12 pm" in the viewer's clock. */
+export const clockTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
 
 /** Walking time for a distance, at about 5 km/h. */
 export const walkMinutes = (km: number) => Math.max(1, Math.round((km / 5) * 60));
