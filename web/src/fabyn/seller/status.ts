@@ -90,7 +90,11 @@ export function intakeOf(job: OwnerJob): { label: string; detail: string } {
 }
 
 export function jobTitle(job: OwnerJob): string {
-  return (job.spec.intent ?? "").split(".")[0] || "Order";
+  const intent = job.spec.intent ?? "";
+  const first = intent.split(".")[0] || "Order";
+  // A name keychain or text sticker: show the words too, e.g. A keychain “Lucas”.
+  const words = intent.match(/[“"]([^”"]{1,24})[”"]/)?.[1];
+  return words && !first.includes(words) ? `${first} “${words}”` : first;
 }
 
 export function jobStateLabel(job: OwnerJob): { text: string; tone: "amber" | "green" | "blue" | "neutral" | "red" } {

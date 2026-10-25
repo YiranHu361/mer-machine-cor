@@ -55,7 +55,8 @@ export function Delivery({ dash, busy, act, now }: { dash: Dashboard; busy: stri
         {waiting.map((o) => (
           <li key={o.key} className="sl-delivery">
             <OrderHead o={o} />
-            <Handling o={o} dash={dash} busy={busy} act={act} now={now} />
+            <Handling o={o} dash={dash} busy={busy} act={act} now={now} pickup={false} />
+            {o.jobs.some(waitingPickup) && <p className="sl-fine">The customer has a pickup code. Choose pickup to enter it when they arrive.</p>}
             <p className="sl-fine">
               Going to {HOME.person} · {HOME.label} · {formatKm(tripKm)} away.
             </p>
@@ -178,6 +179,15 @@ function Handling({ o, dash, busy, act, now, pickup = true }: { o: SellerOrder; 
   );
 }
 
+/** "4:10 PM", "tomorrow 12:24 AM" or "Oct 28, 9:00 AM". */
+function until(iso: string, now: number): string {
+  const at = new Date(iso);
+  const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(at) - day(new Date(now))) / 86400000);
+  return days === 0 ? time : days === 1 ? `tomorrow ${time}` : `${at.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
 function PickupNote({ o, now }: { o: SellerOrder; now: number }) {
   const withCode = o.jobs.find((j) => j.pickup?.expiresAt && !j.pickup.redeemedAt);
   if (withCode?.pickup?.expiresAt) {
@@ -186,7 +196,7 @@ function PickupNote({ o, now }: { o: SellerOrder; now: number }) {
       <p className="sl-note">
         {expired
           ? "The customer’s pickup code has expired. Issue a new one below."
-          : `The customer has a pickup code, good until ${new Date(withCode.pickup.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Ask for it and enter it below to hand the order over.`}
+          : `The customer has a pickup code, good until ${until(withCode.pickup.expiresAt, now)}. Ask for it and enter it below to hand the order over.`}
       </p>
     );
   }
