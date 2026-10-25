@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync,existsSync } from 'node:fs';
 import { connectSpacetimeStore } from '../src/spacetime-store.js';
 import { DbConnection } from '../src/module_bindings/index.js';
-const configPath=process.env.FABRARY_SPACETIME_CONFIG;
-if(!configPath||!existsSync(configPath)){console.log(JSON.stringify({status:'BLOCKED',integration:'SpacetimeDB actual local server',missing:['FABRARY_SPACETIME_CONFIG private JSON path to configured running server']}));process.exit(2);}
+const configPath=process.env.FABYN_SPACETIME_CONFIG;
+if(!configPath||!existsSync(configPath)){console.log(JSON.stringify({status:'BLOCKED',integration:'SpacetimeDB actual local server',missing:['FABYN_SPACETIME_CONFIG private JSON path to configured running server']}));process.exit(2);}
 const config = JSON.parse(readFileSync(configPath,'utf8'));
 const initialState = { machines: [], jobs: [], probe: 0 };
 const a = await connectSpacetimeStore<typeof initialState>({ ...config, initialState });

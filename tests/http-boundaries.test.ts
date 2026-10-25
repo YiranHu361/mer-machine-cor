@@ -16,7 +16,7 @@ const image = Buffer.from(
   "base64",
 );
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-http-boundary-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-http-boundary-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   let nodeCalls = 0;
   const service = new Service(

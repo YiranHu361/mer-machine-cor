@@ -62,7 +62,7 @@ async function fixture(page: Page, saved = true) {
   await context.routeWebSocket(/^ws:\/\/127\.0\.0\.1:4317\//, () => {});
   await context.addInitScript(
     (initialId) => {
-      if (initialId) localStorage.setItem("fabrary-current-job", initialId);
+      if (initialId) localStorage.setItem("fabyn-current-job", initialId);
       const refresh: Array<() => void> = [];
       class FixtureEvents {
         onopen: (() => void) | null = null;

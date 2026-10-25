@@ -6,13 +6,13 @@ const credentials = JSON.parse(
 );
 const env = {
   ...process.env,
-  FABRARY_NODE_KEY: process.env.FABRARY_NODE_KEY ?? credentials.nodeKey,
-  FABRARY_TOKEN_SECRET: process.env.FABRARY_TOKEN_SECRET ?? credentials.secret,
-  FABRARY_ASSET_ORIGIN:
-    process.env.FABRARY_ASSET_ORIGIN ?? "http://127.0.0.1:4318/assets",
+  FABYN_NODE_KEY: process.env.FABYN_NODE_KEY ?? credentials.nodeKey,
+  FABYN_TOKEN_SECRET: process.env.FABYN_TOKEN_SECRET ?? credentials.secret,
+  FABYN_ASSET_ORIGIN:
+    process.env.FABYN_ASSET_ORIGIN ?? "http://127.0.0.1:4318/assets",
 };
 const children = [
-  spawn("uv", ["run", "--project", "node", "fabrary-node"], {
+  spawn("uv", ["run", "--project", "node", "fabyn-node"], {
     stdio: "inherit",
     env,
   }),

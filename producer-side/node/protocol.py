@@ -24,8 +24,8 @@ MACHINE_CHECKED = "machine.checked"  # check_id, ok, detail
 WELCOME = "welcome"
 JOB_OFFER = "job.offer"
 JOB_CANCEL = "job.cancel"
-MACHINE_CHECK = "machine.check"  # check_id: connect to the machine once, print nothing
 PLATE_CLEARED = "plate.cleared"  # a person took the last print off the machine
+MACHINE_CHECK = "machine.check"  # check_id: connect to the machine once, print nothing
 
 HEARTBEAT_INTERVAL_S = 5
 OFFLINE_AFTER_S = 15
@@ -49,7 +49,6 @@ class Job(BaseModel):
     progress: float = 0.0
     eta_s: int | None = None
     escrow: str | None = None
-    verification: dict[str, Any] | None = None
 
 
 def now_iso() -> str:

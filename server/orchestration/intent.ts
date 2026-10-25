@@ -10,7 +10,7 @@ export const SINGLE_PROCESSES: Process[] = [
   "photo_print",
   "fdm_print",
 ];
-// The producer's name tag template (node/fabrary_node/nametag.py) takes the same characters.
+// The producer's name tag template (node/fabyn_node/nametag.py) takes the same characters.
 const LETTER = "A-Za-z0-9À-ÖØ-öø-ÿ";
 const TEXT_TAG = new RegExp(`^[${LETTER} .,'&!?+-]{1,16}$`);
 export const NEUTRAL_TAG_TEXT = "FOR YOU";

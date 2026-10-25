@@ -19,6 +19,7 @@ import {
   type State,
 } from "../model.ts";
 import type { Service } from "../service.ts";
+import type { PaymentResult, PaymentTarget } from "../payments.ts";
 import type { ProducerHubNode } from "../producer-hub.ts";
 import {
   createClaudeProvider,
@@ -187,6 +188,21 @@ const label = (p: Process) =>
 
 export class Orchestrator {
   private inflight = new Map<string, Promise<unknown>>();
+  private paymentLocks = new Map<string, Promise<unknown>>();
+  private async withPaymentLock<T>(
+    orderId: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.paymentLocks.get(orderId) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(work);
+    this.paymentLocks.set(orderId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.paymentLocks.get(orderId) === next)
+        this.paymentLocks.delete(orderId);
+    }
+  }
   private lastRecoveryScan = 0;
   /** The latest check of each real printer on the hub, kept in memory only. */
   private printerChecks = new Map<
@@ -210,7 +226,7 @@ export class Orchestrator {
   }
   get designProvider(): DesignProvider {
     if (this.deps.designProvider) return this.deps.designProvider;
-    const env = process.env.FABRARY_DESIGN_PROVIDER;
+    const env = process.env.FABYN_DESIGN_PROVIDER;
     if (
       env === "openai" ||
       env === "nano-banana" ||
@@ -2021,6 +2037,31 @@ export class Orchestrator {
   // ---------- One confirmation ----------
 
   async confirm(actor: Actor, orderId: string, body: any, payload?: any) {
+    return this.withPaymentLock(orderId, () =>
+      this.confirmLocked(actor, orderId, body, payload),
+    );
+  }
+  private paymentTarget(o: Order): PaymentTarget {
+    const offer = o.offer!,
+      plan = o.plan!;
+    return {
+      id: o.id,
+      quote: {
+        id: offer.id,
+        totalCents: offer.payableCents,
+        ownerCents: offer.payableCents - plan.feeCents,
+        platformCents: plan.feeCents,
+        expiresAt: offer.expiresAt,
+      },
+      paymentResourcePath: `/api/orders/${encodeURIComponent(o.id)}/pay?offer=${encodeURIComponent(offer.id)}&plan=${encodeURIComponent(offer.planDigest)}`,
+    };
+  }
+  private async confirmLocked(
+    actor: Actor,
+    orderId: string,
+    body: any,
+    payload?: any,
+  ) {
     const key = body?.idempotencyKey;
     requireThat(
       typeof key === "string" && key.length >= 8 && key.length <= 200,
@@ -2036,6 +2077,7 @@ export class Orchestrator {
         "ORDER_CONFIRMED",
         "This order is already confirmed.",
       );
+      await this.resumePayment(orderId);
       return this.view(actor, orderId);
     }
     requireThat(
@@ -2062,69 +2104,55 @@ export class Orchestrator {
       "This proposal expired. Ask for a fresh one; nothing was charged.",
     );
     requireThat(
-      o.plan.payableCents === 0 || this.service.payment.mode === "mock",
-      "BUNDLE_PAYMENT_UNSUPPORTED",
-      "Testnet collection for a whole plan is not implemented yet; use mock payment mode.",
-      501,
+      o.offer.paymentMode === this.service.payment.mode,
+      "PAYMENT_MODE_CHANGED",
+      "Payment mode changed. Request a fresh proposal before paying.",
     );
-    const allowed = (m: ExecutionMode) => this.service.modeAllowed(m);
-    // Revalidate, create children, reserve machines and save the make intent in one write.
-    await mutate(this.service.store, (s) => {
-      const order = s.orders![orderId];
-      if (order.makeIntent) return;
+    this.validatePaymentPlan((await this.load(orderId)).s, o);
+    if (
+      o.plan.payableCents > 0 &&
+      this.service.payment.mode === "testnet" &&
+      !payload
+    ) {
       requireThat(
-        order.plan?.digest === o.plan!.digest,
-        "STALE_OFFER",
-        "This proposal changed. Review it again.",
+        this.service.payment.challenge,
+        "PAYMENT_UNAVAILABLE",
+        "Test payment service is unavailable.",
+        503,
       );
-      const plan = order.plan!;
-      const mediaUse: Record<string, number> = {};
-      for (const a of plan.assignments) {
-        const receipt = ownValue(s.preparations ?? {}, a.preparationId);
+      const challenge = await this.service.payment.challenge(
+        this.paymentTarget(o),
+      );
+      throw Object.assign(
+        new Problem(
+          "PAYMENT_REQUIRED",
+          "Base Sepolia test payment is required.",
+          402,
+        ),
+        { challenge },
+      );
+    }
+    // Commit the accepted offer, reservations and collection operation before any settlement.
+    const created = await mutate(this.service.store, (s) => {
+      const order = s.orders![orderId];
+      if (order.makeIntent) {
         requireThat(
-          receipt &&
-            receipt.executionMode === a.executionMode &&
-            receipt.machineId === a.machineId,
-          "PREPARATION_CHANGED",
-          "A prepared file changed. Review a fresh proposal; nothing was charged.",
+          order.makeIntent.key === key,
+          "ORDER_CONFIRMED",
+          "This order is already confirmed.",
         );
-        if (a.machineSource === "network") {
-          const m = s.relief?.network.find((x) => x.id === a.machineId);
-          requireThat(
-            m?.status === "online",
-            "PLAN_CHANGED",
-            "A simulated machine went offline. Review a fresh proposal; nothing was charged.",
-          );
-          continue;
-        }
-        const m = s.machines[a.machineId];
-        requireThat(
-          m && m.mode === a.executionMode && allowed(m.mode),
-          "MODE_MISMATCH",
-          "A machine's mode changed. Review a fresh proposal; nothing was charged.",
-        );
-        const still = eligibleRegistryMachines(
-          s,
-          {
-            process: receipt.process,
-            quantity: a.quantity,
-            colorImportant: false,
-          },
-          allowed,
-        );
-        requireThat(
-          still.candidates.some((c) => c.machine.id === m.id),
-          "PLAN_CHANGED",
-          `${m.name} is no longer ready. Review a fresh proposal; nothing was charged.`,
-        );
-        mediaUse[m.id] = (mediaUse[m.id] ?? 0) + a.quantity;
-        requireThat(
-          mediaUse[m.id] <= m.mediaRemaining &&
-            plan.assignments.filter((x) => x.machineId === m.id).length === 1,
-          "PLAN_CHANGED",
-          `${m.name} cannot take all of this work at once. Review a fresh proposal.`,
-        );
+        return false;
       }
+      requireThat(
+        order.plan?.digest === o.plan!.digest &&
+          order.offer?.id === o.offer!.id &&
+          order.draft.stage === "proposed" &&
+          Date.parse(order.offer.expiresAt) > this.clock(),
+        "STALE_OFFER",
+        "This proposal changed or expired. Review it again.",
+      );
+      this.validatePaymentPlan(s, order);
+      const plan = order.plan!;
       const at = now();
       const reservationExpires = new Date(
         Math.max(
@@ -2170,6 +2198,20 @@ export class Orchestrator {
         updatedAt: at,
       };
       order.makeIntent = intent;
+      if (plan.payableCents > 0) {
+        const operationId = `collect:${order.id}:${intent.id}`;
+        intent.payment.operationId = operationId;
+        s.operations[operationId] = {
+          id: operationId,
+          jobId: order.id,
+          kind: "collection",
+          status: "submitting",
+          amountCents: intent.authorizedCents,
+          mode: this.service.payment.mode,
+          createdAt: at,
+          updatedAt: at,
+        };
+      }
       plan.status = "approved";
       order.status = "approved";
       event(order, "plan.approved", {
@@ -2178,53 +2220,97 @@ export class Orchestrator {
       });
       order.version++;
       order.updatedAt = at;
+      return true;
     });
-    const fresh = (await this.load(orderId)).o;
-    if (fresh.makeIntent!.payment.status === "submitting")
+    if (
+      created &&
+      (await this.load(orderId)).o.makeIntent!.payment.status === "submitting"
+    )
       await this.collect(orderId, payload);
-    const after = (await this.load(orderId)).o;
-    if (after.makeIntent!.status === "funded") await this.submit(orderId);
+    await this.resumePayment(orderId);
     return this.view(actor, orderId);
   }
-  /** One payment for the payable (hardware) part; children are funded from it by allocation. */
+  private validatePaymentPlan(s: State, order: Order) {
+    const allowed = (mode: ExecutionMode) => this.service.modeAllowed(mode);
+    const mediaUse: Record<string, number> = {};
+    for (const a of order.plan!.assignments) {
+      const receipt = ownValue(s.preparations ?? {}, a.preparationId);
+      requireThat(
+        receipt &&
+          receipt.executionMode === a.executionMode &&
+          receipt.machineId === a.machineId,
+        "PREPARATION_CHANGED",
+        "A prepared file changed. Review a fresh proposal; nothing was charged.",
+      );
+      if (a.machineSource === "network") {
+        const m = s.relief?.network.find((x) => x.id === a.machineId);
+        requireThat(
+          m?.status === "online",
+          "PLAN_CHANGED",
+          "A simulated machine went offline. Review a fresh proposal; nothing was charged.",
+        );
+        continue;
+      }
+      const m = s.machines[a.machineId];
+      requireThat(
+        m && m.mode === a.executionMode && allowed(m.mode),
+        "MODE_MISMATCH",
+        "A machine's mode changed. Review a fresh proposal; nothing was charged.",
+      );
+      const still = eligibleRegistryMachines(
+        s,
+        {
+          process: receipt.process,
+          quantity: a.quantity,
+          colorImportant: false,
+        },
+        allowed,
+      );
+      requireThat(
+        still.candidates.some((c) => c.machine.id === m.id),
+        "PLAN_CHANGED",
+        `${m.name} is no longer ready. Review a fresh proposal; nothing was charged.`,
+      );
+      mediaUse[m.id] = (mediaUse[m.id] ?? 0) + a.quantity;
+      requireThat(
+        mediaUse[m.id] <= m.mediaRemaining &&
+          order.plan!.assignments.filter((x) => x.machineId === m.id).length ===
+            1,
+        "PLAN_CHANGED",
+        `${m.name} cannot take all of this work at once. Review a fresh proposal.`,
+      );
+    }
+  }
+  /** One settlement funds only the hardware allocations in the accepted plan. */
   private async collect(orderId: string, payload?: any) {
-    const { o } = await this.load(orderId);
-    const intent = o.makeIntent!;
-    const op: Operation = {
-      id: `collect:${o.id}:${intent.id}`,
-      jobId: o.id,
-      kind: "collection",
-      status: "submitting",
-      createdAt: now(),
-      updatedAt: now(),
-      amountCents: intent.authorizedCents,
-      mode: this.service.payment.mode,
-    };
-    await mutate(this.service.store, (s) => {
-      s.orders![orderId].makeIntent!.payment.operationId = op.id;
-    });
-    let result: { status: string; reference: string; reason?: string };
+    const { o, s } = await this.load(orderId);
+    const op = s.operations[o.makeIntent!.payment.operationId!];
+    let result: PaymentResult;
     try {
       result = await this.service.payment.collect(
-        {
-          id: o.id,
-          quote: { totalCents: intent.authorizedCents },
-        } as unknown as Job,
+        this.paymentTarget(o),
         op,
         payload,
       );
     } catch (e) {
       result = {
-        status: "pending",
-        reference: `unknown:${op.id}`,
+        status: (e as any).safeToRetry === true ? "failed" : "pending",
+        reference: `unsubmitted:${op.id}`,
         reason: (e as Error).message,
       };
     }
+    await this.applyOrderPayment(orderId, op.id, result);
+  }
+  private async applyOrderPayment(
+    orderId: string,
+    operationId: string,
+    result: PaymentResult,
+  ) {
     await mutate(this.service.store, (s) => {
-      const order = s.orders![orderId];
-      const mi = order.makeIntent!;
-      if (mi.payment.status === "confirmed" || mi.payment.status === "failed")
-        return;
+      const order = s.orders![orderId],
+        mi = order.makeIntent!;
+      const op = s.operations[operationId];
+      if (["confirmed", "failed"].includes(mi.payment.status)) return;
       if (result.status === "confirmed") {
         const previous = s.paymentReferences[result.reference];
         requireThat(
@@ -2233,45 +2319,103 @@ export class Orchestrator {
           "This payment reference already funded another order.",
         );
         s.paymentReferences[result.reference] = op.id;
-        mi.payment = {
-          operationId: op.id,
-          status: "confirmed",
-          reference: result.reference,
-          reason: result.reason,
-        };
-        mi.status = "funded";
-        this.fundChildren(s, order, result.reference);
+      }
+      // A thrown transport/checkpoint error must never discard a durable nonce or hash.
+      Object.assign(op, result, { updatedAt: now() });
+      if (op.receipt) {
+        op.reference = op.receipt.reference;
+        op.transactionHash = op.receipt.transactionHash;
+      }
+      mi.payment = {
+        operationId: op.id,
+        status: result.status,
+        reference: op.reference,
+        transactionHash: op.transactionHash,
+        reason: result.reason,
+      };
+      if (result.status === "confirmed") {
+        const late =
+          mi.cancelRequested ||
+          order.status === "cancelled" ||
+          Date.parse(order.offer!.expiresAt) <= this.clock() ||
+          order.plan!.assignments.some(
+            (a) =>
+              a.childJobId &&
+              (s.jobs[a.childJobId].productionState === "cancelled" ||
+                s.machines[a.machineId]?.reservation?.jobId !== a.childJobId ||
+                Date.parse(s.machines[a.machineId].reservation!.expiresAt) <=
+                  this.clock()),
+          );
+        this.fundChildren(
+          s,
+          order,
+          result.reference,
+          result.receipt?.payer,
+          !!late,
+        );
+        mi.status = late ? "cancelled" : "funded";
+        if (late) {
+          mi.cancelRequested = true;
+          order.status = order.plan!.status = "needs_review";
+          for (const a of order.plan!.assignments) {
+            if (!a.childJobId) continue;
+            const j = s.jobs[a.childJobId];
+            j.productionState = a.chargeable ? "needs_review" : "cancelled";
+            if (s.machines[a.machineId].reservation?.jobId === j.id)
+              delete s.machines[a.machineId].reservation;
+          }
+          mi.payment.reason =
+            "Payment confirmed after the order stopped or expired. The workshop must review it; production has not started.";
+        }
         event(order, "payment.confirmed", {
           cents: mi.authorizedCents,
           mode: op.mode,
+          transactionHash: op.transactionHash,
         });
       } else if (result.status === "failed") {
-        mi.payment = {
-          operationId: op.id,
-          status: "failed",
-          reference: result.reference,
-          reason: result.reason,
-        };
         mi.status = "payment_failed";
         this.releaseChildren(s, order, "Payment failed; nothing was made.");
-        order.status = "cancelled";
-        order.plan!.status = "cancelled";
+        order.status = order.plan!.status = "cancelled";
         event(order, "payment.failed", { reason: result.reason ?? "" });
       } else {
-        mi.payment = {
-          operationId: op.id,
-          status: "pending",
-          reference: result.reference,
-          reason: result.reason,
-        };
-        mi.status = "payment_pending";
+        if (!mi.cancelRequested) mi.status = "payment_pending";
         event(order, "payment.pending", { reason: result.reason ?? "" });
       }
-      mi.updatedAt = now();
+      mi.updatedAt = order.updatedAt = now();
       order.version++;
     });
   }
-  private fundChildren(s: State, order: Order, reference: string) {
+  /** Reconcile saved transactions only. Never reconstruct or resubmit a payer authorization. */
+  private async resumePayment(orderId: string) {
+    let { o, s } = await this.load(orderId);
+    if (!o.makeIntent) return;
+    const op = s.operations[o.makeIntent.payment.operationId ?? ""];
+    if (op && ["pending", "submitting"].includes(op.status)) {
+      const machine =
+        s.machines[o.plan!.assignments.find((a) => a.chargeable)!.machineId];
+      try {
+        const result = await this.service.payment.reconcile(
+          this.paymentTarget(o),
+          machine,
+          op,
+        );
+        await this.applyOrderPayment(orderId, op.id, result);
+      } catch {
+        /* Leave the durable operation pending for the next poll. */
+      }
+      ({ o, s } = await this.load(orderId));
+    }
+    if (o.makeIntent!.cancelRequested) return;
+    if (["funded", "submitted"].includes(o.makeIntent!.status))
+      await this.submit(orderId);
+  }
+  private fundChildren(
+    s: State,
+    order: Order,
+    reference: string,
+    payer?: string,
+    stopped = false,
+  ) {
     for (const a of order.plan!.assignments) {
       if (!a.childJobId || !a.chargeable) continue;
       const j = s.jobs[a.childJobId];
@@ -2291,8 +2435,9 @@ export class Orchestrator {
       s.operations[op.id] = op;
       s.paymentReferences[op.reference!] = op.id;
       j.collectionOperationId = op.id;
+      j.requesterAddress = payer;
       j.paymentState = "held";
-      j.productionState = "payment_confirmed";
+      j.productionState = stopped ? "needs_review" : "payment_confirmed";
       record(
         j,
         "collection_confirmed",
@@ -2315,6 +2460,16 @@ export class Orchestrator {
   private async submit(orderId: string) {
     await mutate(this.service.store, (s) => {
       const order = s.orders![orderId];
+      if (
+        order.makeIntent!.status === "submitted" ||
+        order.makeIntent!.cancelRequested
+      )
+        return;
+      requireThat(
+        order.makeIntent!.status === "funded",
+        "UNPAID",
+        "Confirmed payment is required before production.",
+      );
       const r = s.relief;
       const network = order.plan!.assignments.filter(
         (a) => a.machineSource === "network" && !a.simJobId,
@@ -2355,6 +2510,8 @@ export class Orchestrator {
     const { o } = await this.load(orderId);
     for (const a of o.plan!.assignments) {
       if (!a.childJobId) continue;
+      const child = await this.service.job(a.childJobId);
+      if (child.attemptId || child.productionState === "cancelled") continue;
       try {
         await this.service.dispatch(a.childJobId);
       } catch (e) {
@@ -2368,6 +2525,11 @@ export class Orchestrator {
     }
   }
   async cancel(actor: Actor, orderId: string) {
+    return this.withPaymentLock(orderId, () =>
+      this.cancelLocked(actor, orderId),
+    );
+  }
+  private async cancelLocked(actor: Actor, orderId: string) {
     const { o } = await this.load(orderId);
     this.owned(o, actor);
     if (!o.makeIntent) {
@@ -2384,6 +2546,14 @@ export class Orchestrator {
       });
       return this.view(actor, orderId);
     }
+    await mutate(this.service.store, (s) => {
+      const order = s.orders![orderId];
+      order.makeIntent!.cancelRequested = true;
+      if (order.makeIntent!.status !== "submitted") {
+        order.makeIntent!.status = "cancelled";
+        order.status = order.plan!.status = "cancelled";
+      }
+    });
     const notes: string[] = [];
     for (const a of o.plan!.assignments) {
       if (a.childJobId) {
@@ -2415,6 +2585,22 @@ export class Orchestrator {
   // ---------- Progress, replanning and the relief demo ----------
 
   async tick() {
+    const payments = await this.service.read();
+    for (const o of Object.values(payments.orders ?? {})) {
+      if (!o.makeIntent || this.paymentLocks.has(o.id)) continue;
+      if (
+        ["submitting", "pending"].includes(o.makeIntent.payment.status) ||
+        o.makeIntent.status === "funded" ||
+        (o.makeIntent.status === "submitted" &&
+          o.plan?.assignments.some(
+            (a) =>
+              a.childJobId &&
+              !payments.jobs[a.childJobId].attemptId &&
+              payments.jobs[a.childJobId].productionState !== "cancelled",
+          ))
+      )
+        await this.withPaymentLock(o.id, () => this.resumePayment(o.id));
+    }
     const s = await this.service.read();
     // Ask every real printer about once a minute: the site shows whether each
     // one answers, and one paused only because it could not be reached comes
@@ -2854,9 +3040,6 @@ function orderView(o: Order, s: State, actor: Actor) {
             paymentState: j.paymentState,
             fulfillmentState: j.fulfillmentState,
             pickupCode: actor.id === o.requesterId ? j.pickup?.code : undefined,
-            evidence: j.evidence
-              ? { result: j.evidence.result, source: j.evidence.source }
-              : undefined,
           }
         : undefined,
       sim: sim ? { status: sim.status, progress: sim.progress } : undefined,

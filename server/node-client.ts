@@ -9,7 +9,6 @@ export interface NodeBoundary {
     scope: string,
     extra?: { targetScope: "dispatch" | "calibration" },
   ): { token: string; expires_at: number };
-  fetchFrame?(url: string, machine: Machine): Promise<Buffer>;
 }
 export function signNodeToken(
   secret: string,
@@ -65,23 +64,6 @@ export class HttpNode implements NodeBoundary {
     extra?: { targetScope: "dispatch" | "calibration" },
   ) {
     return signNodeToken(this.secret, job, machine, scope, extra);
-  }
-  async fetchFrame(url: string, machine: Machine) {
-    const u = new URL(url, machine.nodeUrl ?? this.baseUrl);
-    if (
-      u.origin !== new URL(machine.nodeUrl ?? this.baseUrl).origin ||
-      !u.pathname.startsWith("/frames/")
-    )
-      throw new Error("Frame outside configured camera node");
-    const response = await fetch(u, {
-      headers: { Authorization: `Bearer ${this.key}` },
-      redirect: "error",
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!response.ok) throw new Error("Camera frame unavailable");
-    const b = Buffer.from(await response.arrayBuffer());
-    if (b.length > 8 * 1024 * 1024) throw new Error("Camera frame too large");
-    return b;
   }
   async call(tool: string, input: any, machine?: Machine) {
     const url = new URL(machine?.nodeUrl ?? this.baseUrl);

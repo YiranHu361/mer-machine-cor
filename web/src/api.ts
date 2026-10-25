@@ -21,7 +21,7 @@ export function requestDeadline(path: string, method = "GET") {
   // Four uploads may each spend 30s decoding. Preparation allows 30s,
   // suggestions 45s; payment verification/settlement includes 30s calls.
   if (!["GET", "HEAD"].includes(method.toUpperCase())) return 180_000;
-  // Calibration status can capture evidence with two 12s node calls and save it.
+  // Calibration status allows time for the node observation and durable save.
   return /\/calibration(?:\?|$)/.test(path) ? 90_000 : 30_000;
 }
 

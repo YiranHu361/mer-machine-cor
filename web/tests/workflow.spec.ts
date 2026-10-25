@@ -64,7 +64,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await ownerPage.goto("/owner");
   await ownerPage
     .getByLabel("Owner access code", { exact: true })
-    .fill(process.env.FABRARY_OWNER_CODE || credentials.ownerCode);
+    .fill(process.env.FABYN_OWNER_CODE || credentials.ownerCode);
   await ownerPage
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
@@ -179,10 +179,7 @@ test("requester and owner complete an honest simulated order, independent handli
     }),
   ).toBeVisible({ timeout: 45000 });
   await expect(
-    requestPage.getByText("Simulated evidence", { exact: false }),
-  ).toBeVisible();
-  await expect(
-    requestPage.getByText("Your item passed the output check.", {
+    requestPage.getByText("The machine finished your item.", {
       exact: false,
     }),
   ).toBeVisible();
@@ -443,7 +440,7 @@ test("intake validates specifications, review returns to approval, and expired/o
   await ownerPage.goto("/owner");
   await ownerPage
     .getByLabel("Owner access code", { exact: true })
-    .fill(process.env.FABRARY_OWNER_CODE || credentials.ownerCode);
+    .fill(process.env.FABYN_OWNER_CODE || credentials.ownerCode);
   await ownerPage
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
@@ -537,10 +534,10 @@ test("live subscription updates the open owner dashboard with polling disabled",
   type LiveProbe = { blockedIntervals: number[]; refreshEvents: number };
   await page.addInitScript(() => {
     const target = window as Window & {
-      fabraryLiveProbe?: { blockedIntervals: number[]; refreshEvents: number };
+      fabynLiveProbe?: { blockedIntervals: number[]; refreshEvents: number };
     };
     const probe = { blockedIntervals: [] as number[], refreshEvents: 0 };
-    target.fabraryLiveProbe = probe;
+    target.fabynLiveProbe = probe;
     const originalInterval = window.setInterval.bind(window);
     window.setInterval = ((
       handler: TimerHandler,
@@ -565,14 +562,16 @@ test("live subscription updates the open owner dashboard with polling disabled",
   });
   const health = await (await operator.request.get("/api/health")).json();
   expect(health.mode).toBe("simulation");
+  const expectedStore = process.env.FABYN_BROWSER_STORE ?? "spacetimedb";
+  expect(["spacetimedb", "sqlite-development"]).toContain(expectedStore);
   expect(
     health.store,
-    "This check requires the authoritative SpacetimeDB path",
-  ).toBe("spacetimedb");
+    "Live-update acceptance must use the explicitly selected persistent store",
+  ).toBe(expectedStore);
   const credentials = JSON.parse(
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
-  const ownerCode = process.env.FABRARY_OWNER_CODE || credentials.ownerCode;
+  const ownerCode = process.env.FABYN_OWNER_CODE || credentials.ownerCode;
   expect(
     (
       await operator.request.post("/api/session", {
@@ -595,8 +594,7 @@ test("live subscription updates the open owner dashboard with polling disabled",
   let restoreRequired = false;
   const probe = () =>
     page.evaluate(
-      () =>
-        (window as Window & { fabraryLiveProbe: LiveProbe }).fabraryLiveProbe,
+      () => (window as Window & { fabynLiveProbe: LiveProbe }).fabynLiveProbe,
     );
   try {
     await page.goto("/owner");

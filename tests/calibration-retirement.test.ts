@@ -34,7 +34,7 @@ function deferred<T>() {
   };
 }
 async function fixture(state = "produced", legacy = false) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-retirement-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-retirement-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const calls: { tool: string; body: any }[] = [];
   const controls: { node?: (tool: string, body: any) => Promise<any> } = {};
@@ -128,17 +128,6 @@ async function fixture(state = "produced", legacy = false) {
       ...(legacy
         ? {}
         : { calibrationDeviceContext: calibrationDeviceContext(m) }),
-      ...(state === "produced"
-        ? {
-            evidence: {
-              url: "http://127.0.0.1:1/frames/private.png",
-              capturedAt: now(),
-              machineId: mid,
-              jobId: cid,
-              frame: { attempt_id: aid, source: "simulation" },
-            },
-          }
-        : {}),
     };
     s.calibrations = { [cid]: c };
   });
@@ -199,13 +188,10 @@ test("completed unusable calibration is rejected without rewriting execution and
       m = s.machines[mid];
     assert.equal(c.productionState, "produced");
     assert.deepEqual(c.artifact, before.artifact);
-    assert.deepEqual(c.evidence, before.evidence);
     assert.equal(c.calibrationInspection?.outcome, "rejected");
     assert.equal(c.calibrationInspection?.attemptId, aid);
     assert.equal(result.body.status.execution_status, "completed");
     assert.equal(result.body.lifecycle.canRequestNew, true);
-    assert.equal(result.body.calibration.evidence.frame, undefined);
-    assert.match(result.body.calibration.evidence.url, /calibration\/evidence/);
     assert.equal(m.activeJobId, null);
     assert.equal(m.calibrated, false);
     assert.equal(m.ready, false);

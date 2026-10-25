@@ -1,4 +1,4 @@
-# Fabrary implementation checkpoint
+# Fabyn implementation checkpoint
 
 Photo-to-print orchestration (October 24, 2026): **Just ask** (`/make`) turns a sentence, photos or both into drafts, the exact prepared preview, a total and one confirmation; **Relief** (`/relief`) plans across the team's machines and a simulated 150-machine network and replans after an outage. The producer prepares every file before an offer, each child job keeps its own execution mode, and simulated work is never charged. Shared check passes (317 application, 257 node, 33 payments/Claude, 5 Fetch, 29 wallet); built browser suites pass 265/265/265 in Chromium/Firefox/WebKit with 93 accessibility scans detecting 0 violations; an isolated end-to-end run went from a sentence to a finished simulated order and through a relief outage replan. One live context.dev call confirmed the M02 Pro's 300 DPI from the official page; no hardware, live Claude call or testnet bundle payment was run. [Design status](orchestration-design.md#implementation-status-october-24-2026), [record](evidence/orchestration.json), [report](test-report.md).
 
@@ -10,7 +10,7 @@ Earlier checkpoint: Minimal interface redesign (October 23, 2026): a heading, th
 
 Earlier checkpoint: Minimal requester/provider update: one upload target, automatic exact-machine preparation, optional context/settings, atomic preview approval plus quote, and a compact provider action inbox. Details open on demand; payment/dispatch and physical handling remain explicit. Current shared checks pass260 backend/147 node/31+5 provider/29 web units, and260 full browser cases in each of three engines, with60 automated accessibility scans detecting0 violations. **732 unique/1252 canonical executions.** [Evidence](evidence/minimal-ui-qa.json), [report](test-report.md). Physical/live acceptance remains blocked; earlier endurance incomplete; overnight heartbeat **PAUSED**.
 
-Working directory: `fabrary/` beside read-only project references. Contract is [working-prd.md](working-prd.md). Status vocabulary: implemented/tested in simulation, live verified, partial, blocked, planned. Required physical work remains required even while blocked.
+Working directory: `fabyn/` beside read-only project references. Contract is [working-prd.md](working-prd.md). Status vocabulary: implemented/tested in simulation, live verified, partial, blocked, planned. Required physical work remains required even while blocked.
 
 ## Decisions
 

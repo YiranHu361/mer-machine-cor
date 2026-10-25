@@ -62,7 +62,7 @@ async function unavailableStorage(
     ({ local, session, selected }) => {
       if (selected)
         window.localStorage.setItem(
-          "fabrary-current-job",
+          "fabyn-current-job",
           "job_storage_fixture",
         );
       for (const [name, failure] of [

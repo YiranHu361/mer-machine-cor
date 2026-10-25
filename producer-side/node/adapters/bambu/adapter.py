@@ -116,7 +116,7 @@ def file_kind(path: Path) -> str:
 
 def remote_name_for(job: Job) -> str:
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", f"{job.job_id}")[:48]
-    return f"fabrary_{safe}.gcode.3mf"
+    return f"fabyn_{safe}.gcode.3mf"
 
 
 class BambuA1Mini(Adapter):

@@ -33,5 +33,5 @@ export class NanoBananaProvider {
   }
 }
 export function createNanoBananaProvider(env:NodeJS.ProcessEnv=process.env):NanoBananaProvider {
-  return new NanoBananaProvider({apiKey:env.GEMINI_API_KEY??'',model:env.FABRARY_NANO_BANANA_MODEL});
+  return new NanoBananaProvider({apiKey:env.GEMINI_API_KEY??'',model:env.FABYN_NANO_BANANA_MODEL});
 }

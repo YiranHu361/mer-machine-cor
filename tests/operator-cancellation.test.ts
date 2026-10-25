@@ -26,7 +26,7 @@ function deferred<T>() {
   };
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-operator-cancel-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-operator-cancel-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const gate = deferred<void>();
   let pending: Promise<void> | undefined;
@@ -54,12 +54,6 @@ async function fixture() {
       }),
       async call(tool, body) {
         calls.push(tool);
-        if (tool === "camera_snapshot")
-          throw new Problem(
-            "camera_unavailable",
-            "No camera in isolated fixture",
-            503,
-          );
         if (tool === "run_job") {
           controls.pending = true;
           pending = gate.promise.then(() => {

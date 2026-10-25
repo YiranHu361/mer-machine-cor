@@ -1,5 +1,9 @@
 import type { Express, Request } from "express";
-import { requireThat } from "../model.ts";
+import { Problem, requireThat } from "../model.ts";
+import {
+  decodeX402PaymentSignature,
+  x402PaymentResponseHeader,
+} from "../../integrations/src/payments.ts";
 import { PROCESS_OUTPUT } from "./matching.ts";
 import { PUBLISHED_PROFILES } from "./knowledge.ts";
 import type { Orchestrator } from "./orchestrator.ts";
@@ -93,27 +97,42 @@ export function registerOrchestrationRoutes(
       });
     },
   );
-  app.post("/api/orders/:id/confirm", async (req, res) => {
-    res.json({
-      order: await orchestrator.confirm(
-        await actor(req),
+  for (const action of ["confirm", "pay"]) {
+    app.post(`/api/orders/:id/${action}`, async (req, res) => {
+      const a = await actor(req);
+      let payload = req.body?.paymentPayload;
+      if (req.get("PAYMENT-SIGNATURE")) {
+        try {
+          payload = decodeX402PaymentSignature(req.get("PAYMENT-SIGNATURE")!);
+        } catch {
+          throw new Problem(
+            "INVALID_PAYMENT_HEADER",
+            "The x402 payment signature header is malformed.",
+            422,
+          );
+        }
+      }
+      const order = await orchestrator.confirm(
+        a,
         param(req, "id"),
         req.body,
-        req.body?.paymentPayload,
-      ),
+        payload,
+      );
+      const operation = (await orchestrator.service.read()).operations[
+        order.makeIntent?.payment.operationId ?? ""
+      ];
+      const header =
+        operation?.receipt && x402PaymentResponseHeader(operation.receipt);
+      if (header) {
+        res.setHeader("PAYMENT-RESPONSE", header);
+        res.setHeader(
+          "Access-Control-Expose-Headers",
+          "PAYMENT-REQUIRED, PAYMENT-RESPONSE",
+        );
+      }
+      res.json({ order });
     });
-  });
-  // Compatibility seam for the shared x402 design: it only reports the accepted intent.
-  app.post("/api/orders/:id/pay", async (req, res) => {
-    const order = await orchestrator.view(await actor(req), param(req, "id"));
-    requireThat(
-      order.makeIntent,
-      "CONFIRM_FIRST",
-      "Confirm the exact offer first; payment follows that confirmation.",
-      409,
-    );
-    res.json({ order });
-  });
+  }
   app.post("/api/orders/:id/cancel", async (req, res) => {
     res.json({
       order: await orchestrator.cancel(await actor(req), param(req, "id")),

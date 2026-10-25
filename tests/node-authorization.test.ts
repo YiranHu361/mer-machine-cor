@@ -61,7 +61,7 @@ function pythonVerify(
   expected: unknown,
   configuredMode = "simulation",
 ) {
-  const source = `import json,sys\nfrom fabrary_node.security import verify_token,require_expected_mode,NodeError\nv=json.load(sys.stdin)\ntry:\n p=verify_token(v['token'],v['secret'],scope=v['scope'],expected=v['expected'])\n require_expected_mode(p,v['configured_mode'])\n print(json.dumps({'accepted':True,'expected_mode':p.get('expected_mode')}))\nexcept NodeError as e:\n print(json.dumps({'accepted':False,'code':e.code,'status':e.status}))\n`;
+  const source = `import json,sys\nfrom fabyn_node.security import verify_token,require_expected_mode,NodeError\nv=json.load(sys.stdin)\ntry:\n p=verify_token(v['token'],v['secret'],scope=v['scope'],expected=v['expected'])\n require_expected_mode(p,v['configured_mode'])\n print(json.dumps({'accepted':True,'expected_mode':p.get('expected_mode')}))\nexcept NodeError as e:\n print(json.dumps({'accepted':False,'code':e.code,'status':e.status}))\n`;
   return JSON.parse(
     execFileSync(
       "uv",
@@ -82,7 +82,7 @@ function pythonVerify(
 }
 
 for (const mode of ["simulation", "hardware"] as const)
-  for (const scope of ["dispatch", "calibration", "camera", "abort"])
+  for (const scope of ["dispatch", "calibration", "abort"])
     test(`signed ${scope} authorization binds explicit ${mode} mode and every approved field`, () => {
       const before = Math.floor(Date.now() / 1000),
         signed = node.token(job, machine(mode), scope),

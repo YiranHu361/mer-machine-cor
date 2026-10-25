@@ -61,7 +61,7 @@ Input: a `.gcode` sliced in Bambu Studio / OrcaSlicer **for the A1 mini**, a `.g
       | `out_of_media` | File's grams + `min_spare_g` (2 g) > `media_loaded.remaining_est` |
       | `too_long` | Slicer estimate > `limits.max_job_minutes` |
 
-   3. FTPS upload to the SD card root as `fabrary_<job_id>.gcode.3mf`.
+   3. FTPS upload to the SD card root as `fabyn_<job_id>.gcode.3mf`.
    4. `project_file` over MQTT: bed leveling on, flow/vibration calibration off, external spool.
    5. Follow the reports. The job counts as started when the printer reports PREPARE/RUNNING for our `subtask_name` (120 s limit). Progress maps 0–100 % to 0.05–0.9, then 1.0 on FINISH. FAILED raises with `print_error` and HMS codes.
    6. Subtract the file's grams from `remaining_est`, and set status `error` / `plate_not_cleared`. Policy then rejects jobs until `plate_cleared()` is called: the hub's `plate.cleared` message (`POST /dev/plate-cleared {"machine_id"}`), which the app sends when the owner approves the print or resumes the machine after clearing it. `node.client --probe` also reports a part left from an earlier print (printer FINISH/FAILED) at start; `--plate-cleared` says the plate is empty.

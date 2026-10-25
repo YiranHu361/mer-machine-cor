@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import { LiveOrder, liveEnabled } from "./live";
+import { getCheckoutKey } from "./storage";
 
 /* The orchestrated request flow: describe or add photos, choose a draft when
    new art is needed, review the exact prepared result, confirm once, collect. */
@@ -85,7 +86,10 @@ export type OrderView = {
     planDigest: string;
     expiresAt: string;
   };
-  makeIntent?: { status: string; payment: { status: string; reason?: string } };
+  makeIntent?: {
+    status: string;
+    payment: { status: string; reason?: string; transactionHash?: string };
+  };
   events: { seq: number; type: string; at: string }[];
 };
 export const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -127,7 +131,8 @@ const childLine = (a: Assignment) => {
       ? "Simulated · made, waiting for the owner to finish up"
       : "Made · the owner is getting it ready for pickup";
   if (c.productionState === "needs_review") return "Checking with the workshop";
-  if (["verifying", "produced"].includes(c.productionState)) return "Checking";
+  if (c.productionState === "produced") return "Finished";
+  if (c.productionState === "verifying") return "Waiting for machine status";
   if (["dispatched", "running"].includes(c.productionState)) return "Making";
   if (c.productionState === "failed") return "Not made";
   if (c.productionState === "cancelled") return "Cancelled";
@@ -148,7 +153,6 @@ export function MakeApp() {
   const [error, setError] = useState("");
   const [permission, setPermission] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
-  const confirmKey = useRef(key());
   const orderId = order?.id;
   const load = useCallback(async (id: string) => {
     const { order } = await api<{ order: OrderView }>(`/orders/${id}`);
@@ -213,7 +217,6 @@ export function MakeApp() {
         { headers: { "Idempotency-Key": key() } },
       );
       history.replaceState(null, "", `/make?order=${order.id}`);
-      confirmKey.current = key();
       setOrder(order);
     });
   if (!order)
@@ -272,7 +275,11 @@ export function MakeApp() {
           className="make-request make-nametag"
           onSubmit={(e) => {
             e.preventDefault();
-            void start("best_single", `A name tag that says "${tagName.trim()}"`, false);
+            void start(
+              "best_single",
+              `A name tag that says "${tagName.trim()}"`,
+              false,
+            );
           }}
         >
           <label htmlFor="make-name">Or make a name tag</label>
@@ -336,6 +343,25 @@ export function MakeApp() {
     });
   const confirm = () =>
     run("confirm", async () => {
+      const idempotencyKey = getCheckoutKey({
+        id: o.id,
+        quote: { id: o.offer!.id, version: plan!.version },
+      });
+      if (plan!.paymentMode === "testnet" && plan!.payableCents > 0) {
+        const { checkoutWithWallet } = await import("./wallet");
+        const result = await checkoutWithWallet<{ order: OrderView }>({
+          jobId: o.id,
+          quote: {
+            id: o.offer!.id,
+            totalCents: plan!.payableCents,
+            expiresAt: o.offer!.expiresAt,
+          },
+          order: { planVersion: plan!.version, planDigest: plan!.digest },
+          idempotencyKey,
+        });
+        setOrder(result.order);
+        return;
+      }
       setOrder(
         (
           await api<{ order: OrderView }>(`/orders/${o.id}/confirm`, {
@@ -344,7 +370,7 @@ export function MakeApp() {
             planDigest: plan!.digest,
             permission: true,
             consent: { payment: true, production: true },
-            idempotencyKey: confirmKey.current,
+            idempotencyKey,
           })
         ).order,
       );
@@ -374,7 +400,19 @@ export function MakeApp() {
         {stage === "proposed" && !confirmed && "Check the preview and total."}
         {confirmed &&
           plan &&
-          (plan.status === "done" ? "All done." : "Your order is under way.")}
+          (["pending", "submitting"].includes(o.makeIntent!.payment.status)
+            ? "Waiting for test payment confirmation."
+            : o.makeIntent!.payment.status === "failed"
+              ? "Payment failed; production has not started."
+              : plan.status === "needs_review"
+                ? "The workshop needs to review this order."
+                : plan.status === "cancelled"
+                  ? "Production stopped."
+                  : plan.status === "partial"
+                    ? "Some items could not be made."
+                    : plan.status === "done"
+                      ? "All done."
+                      : "Your order is under way.")}
       </p>
       {limited && (
         <p className="make-limit" role="alert">
@@ -632,7 +670,7 @@ export function MakeApp() {
               <p className="fine-print">
                 {plan.paymentMode === "mock"
                   ? "Mock payment: no funds move."
-                  : "Base Sepolia test payment."}
+                  : "Pay with test USDC on Base Sepolia. Your wallet will ask you to approve."}
               </p>
               <button
                 className="primary"
@@ -667,7 +705,30 @@ export function MakeApp() {
             </button>
           )}
           {o.makeIntent?.payment.status === "pending" && (
-            <p role="status">Checking your existing order…</p>
+            <p role="status">
+              Confirming your test payment… Production starts after
+              confirmation.
+            </p>
+          )}
+          {plan.paymentMode === "testnet" &&
+            o.makeIntent?.payment.transactionHash &&
+            /^0x[0-9a-fA-F]{64}$/.test(
+              o.makeIntent.payment.transactionHash,
+            ) && (
+              <p>
+                <a
+                  href={`https://sepolia.basescan.org/tx/${o.makeIntent.payment.transactionHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {o.makeIntent.payment.status === "confirmed"
+                    ? "Test payment confirmed · view transaction"
+                    : "View pending test payment"}
+                </a>
+              </p>
+            )}
+          {o.status === "needs_review" && o.makeIntent?.payment.reason && (
+            <p role="status">{o.makeIntent.payment.reason}</p>
           )}
           {o.makeIntent?.payment.status === "failed" && (
             <p role="alert">

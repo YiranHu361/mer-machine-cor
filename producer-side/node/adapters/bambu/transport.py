@@ -341,7 +341,7 @@ class LanTransport(Transport):
             if reason_code.is_failure:
                 log.warning("MQTT disconnected (%s); paho will reconnect", reason_code)
 
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"fabrary-{os.getpid()}",
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"fabyn-{os.getpid()}",
                              protocol=mqtt.MQTTv311)
         client.username_pw_set(USERNAME, self.access_code)
         client.tls_set_context(_tls_context())

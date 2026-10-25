@@ -81,7 +81,7 @@ async function fixture(
   await page.routeWebSocket(/^ws:\/\/127\.0\.0\.1:4317\//, () => {});
   if (initial[0])
     await page.addInitScript(
-      (id) => localStorage.setItem("fabrary-current-job", id),
+      (id) => localStorage.setItem("fabyn-current-job", id),
       initial[0].id,
     );
   await page.route("**/deadline-preview.png", async (route) =>
@@ -269,7 +269,7 @@ test("an interrupted creation stops spinning, recovers its late committed order 
     "Recover a stalled creation",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
   ).toBe(committed.id);
   expect(state.sessions).toBe(0);
   state.held = "";
@@ -462,7 +462,7 @@ for (const action of ["checkout", "dispatch"] as const)
     expect(state.posts).toHaveLength(1);
     expect(state.jobs[0].id).toBe(saved.id);
     if (action === "checkout")
-      expect(checkoutKey).toMatch(/^fabrary-checkout-v1:/);
+      expect(checkoutKey).toMatch(/^fabyn-checkout-v1:/);
     expect(state.sessions).toBe(0);
   });
 

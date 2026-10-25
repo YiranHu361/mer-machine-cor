@@ -1,6 +1,6 @@
-# Fabrary
+# Fabyn
 
-A local requester and owner application that starts with pictures. Upload images and Fabrary recommends a supported output and a suitable machine from the registered database. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
+A local requester and owner application that starts with pictures. Upload images and Fabyn recommends a supported output and a suitable machine from the registered database. The working build uses real SpacetimeDB with an explicitly labeled Python device simulator and mock payments. Required physical, funded testnet and ASI:One acceptance is **not complete**.
 
 Open the running application at **http://127.0.0.1:4318**. Requester sessions are private; owner access comes from ignored `.data/local-credentials.json` (`ownerCode`). Do not copy that file into reports.
 
@@ -29,7 +29,7 @@ npm run spacetime
 npm run demo
 ```
 
-This session has the installed SpacetimeDB 2.13.0 runtime and persistent data under ignored `.data/spacetime-runtime/`, and a private `.env` connected to `fabrary-app`. A fresh checkout needs local database publication and a publishing-identity token; see [the runbook](docs/demo-runbook.md). SQLite is available only as an explicitly selected isolated development mode.
+This session has the installed SpacetimeDB 2.13.0 runtime and persistent data under ignored `.data/spacetime-runtime/`, and a private `.env` selecting the database through `FABYN_SPACETIME_DATABASE`. A fresh checkout needs local database publication and a publishing-identity token; see [the runbook](docs/demo-runbook.md). SQLite is available only as an explicitly selected isolated development mode.
 
 ## MVP: a sticker from a picture, a name tag from a name
 
@@ -37,7 +37,7 @@ One command starts the producer side's hub, the Phomemo M02 Pro node and this ap
 
 ```sh
 python3 -m venv producer-side/.venv && producer-side/.venv/bin/pip install -r producer-side/requirements.txt   # once
-npm run convex:push        # once per change to convex/: needs CONVEX_DEPLOY_KEY and FABRARY_PUBLISH_SECRET in .env
+npm run convex:push        # once per change to convex/: needs CONVEX_DEPLOY_KEY and FABYN_PUBLISH_SECRET in .env
 npm run mvp                # add -- --dry-run to write the printer bytes under producer-side/.work/ instead of printing
 ```
 
@@ -45,24 +45,24 @@ Each computer keeps its own `.env` (never committed). For the MVP it needs:
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| `FABRARY_ALLOWED_MODES` | `hardware` | Orders go to real machines only (`npm run mvp` uses this when unset) |
-| `FABRARY_PRODUCER_HUB_URL` | `http://127.0.0.1:8000` | The producer side's hub (the default) |
-| `FABRARY_AUTO_ACCEPT_PRINTS` | `1` | A finished hub print completes the order and frees the printer (`npm run mvp` sets it); `0` keeps the owner's check |
+| `FABYN_ALLOWED_MODES` | `hardware` | Orders go to real machines only (`npm run mvp` uses this when unset) |
+| `FABYN_PRODUCER_HUB_URL` | `http://127.0.0.1:8000` | The producer side's hub (the default) |
+| `FABYN_AUTO_PREPARE_PRINTS` | `1` | A finished hub print completes the order and frees the printer (`npm run mvp` sets it); `0` requires separate output handling |
 | `ANTHROPIC_API_KEY` | optional | Reads requests (and draws line-art designs when there is no Gemini key); without it, photos still work by local rules |
 | `OPENAI_API_KEY` or `GEMINI_API_KEY` | optional | OpenAI (first) or Nano Banana draws the design drafts as pictures: black-and-white for stickers, colour for photo prints, three per round. Both need billing on that account. Without one of these or the Claude key, words-only requests cannot be drawn |
-| `CONVEX_URL`, `FABRARY_PUBLISH_SECRET` | optional | The live view (below); any long random secret |
+| `CONVEX_URL`, `FABYN_PUBLISH_SECRET` | optional | The live view (below); any long random secret |
 
-**Convex on your own computer, no account:** run `npm run convex:local` in its own terminal and keep it running (the first run downloads Convex's local backend). Once, store the same secret there with `npx convex env set FABRARY_PUBLISH_SECRET <the value from .env>`, and set `CONVEX_URL=http://127.0.0.1:3210` in `.env`. Its data stays in the ignored `.convex/` folder.
+**Convex on your own computer, no account:** run `npm run convex:local` in its own terminal and keep it running (the first run downloads Convex's local backend). Once, store the same secret there with `npx convex env set FABYN_PUBLISH_SECRET <the value from .env>`, and set `CONVEX_URL=http://127.0.0.1:3210` in `.env`. Its data stays in the ignored `.convex/` folder.
 
-Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. There is no camera check yet, so `npm run mvp` sets `FABRARY_AUTO_ACCEPT_PRINTS=1`: as soon as the printer reports a print finished, the order gets its pickup code and the printer takes the next order. The print is recorded as accepted without inspection, never as a camera pass; a failed or declined print still pauses the printer for the owner. Set `FABRARY_AUTO_ACCEPT_PRINTS=0` to check each print yourself in **Owner workshop** ("Printed fine · approve and free the printer").
+Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press **Start**, tick the permission box and **Pay & make** (mock payment). The printer must be on and not connected to the Phomemo phone app; see [producer-side/README.md](producer-side/README.md). Moving the machine onto the hub records the owner's confirmation of a good test print, so print one with `node.tools.run_job` first. Jobs complete as soon as the machine reports success. `npm run mvp` sets `FABYN_AUTO_PREPARE_PRINTS=1` so finished stickers get a pickup code and the printer takes the next order. A failed or uncertain machine result still pauses for recovery. Set `FABYN_AUTO_PREPARE_PRINTS=0` to record output handling yourself in **Owner workshop**.
 
 ### Name tags on the Bambu Lab A1 mini
 
-`npm run mvp` also starts the A1 mini's node and moves the **Model counter** onto the hub (`-- --no-3d` leaves it out). On `/make`, type a name under **Or make a name tag** (up to 16 letters, digits, spaces and `. , ' & ! ? + -`) and press **Make a name tag**; typing "a name tag that says Maya" in the main box works too. OpenSCAD engraves the name into a 20 mm plate with a keyring hole ([nametag.scad](node/fabrary_node/nametag.scad)), the requester sees the preview and price, and after **Pay & make** the A1 mini's node slices the model with Bambu Studio's standard A1 mini settings (white Bambu PLA Basic, Textured PEI Plate) and prints it: about 13 min for a short name, 19 min for 16 characters.
+`npm run mvp` also starts the A1 mini's node and moves the **Model counter** onto the hub (`-- --no-3d` leaves it out). On `/make`, type a name under **Or make a name tag** (up to 16 letters, digits, spaces and `. , ' & ! ? + -`) and press **Make a name tag**; typing "a name tag that says Maya" in the main box works too. OpenSCAD engraves the name into a 20 mm plate with a keyring hole ([nametag.scad](node/fabyn_node/nametag.scad)), the requester sees the preview and price, and after **Pay & make** the A1 mini's node slices the model with Bambu Studio's standard A1 mini settings (white Bambu PLA Basic, Textured PEI Plate) and prints it: about 13 min for a short name, 19 min for 16 characters.
 
 - Once: `brew install --cask openscad@snapshot`; Bambu Studio in `/Applications`; the printer set up as in [the adapter README](producer-side/node/adapters/bambu/README.md) (LAN Only and Developer Mode, `BAMBU_ACCESS_CODE` in `producer-side/.env`, PLA on the external spool, microSD card). On the printer's iPhone hotspot, switch the Mac's network Location first ([MAC_NETWORK_SETUP.md](producer-side/MAC_NETWORK_SETUP.md)).
 - The node checks the printer at start; with the plate empty but the printer still showing its last print as finished, start with `npm run mvp -- --plate-cleared`.
-- A 3D print stays on the plate, so it never completes by itself: take it off, then press **Printed fine · approve and free the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
+- A 3D job completes when the machine reports success. Before the next print, take the item off the plate and press **Item removed · clear the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
 
 ## Convex live state
 
@@ -72,14 +72,14 @@ Convex is the live read model every screen watches ([design doc](https://claude.
 | --- | --- | --- |
 | `machines` | both hubs | §2 manifest with live status; registry machines link to the node that prints them |
 | `plans` | this app | §3 plan per order: stage, status, items, assignments, payment status |
-| `jobs` | both hubs, separate fields | §4 job: order-side states from this app; hub job id, progress and verification from the gateway |
+| `jobs` | both hubs, separate fields | §4 job: order-side states from this app; hub job id, progress and machine completion from the gateway |
 | `events` | both hubs | Append-only feed of state changes |
 
 No requester ids, pickup codes, signed file links or device settings are published. Schema and functions are in [convex/](convex/).
 
 ## Use
 
-The requester starts with one upload target for 1–4 pictures. There is no empty preview or empty order list, and no output, machine or model picker. Fabrary recommends a supported result and a saved machine. After uploading, **Add a note** and **Optional print settings** offer secondary refinements; the selected machine stays bound to the order. With no vision key, limited local image statistics are labeled clearly and uncertain pictures need clarification. Confirm artwork permission explicitly, then select **Preview your item** to inspect the actual production file. **Approve preview & see price** approves that file and obtains its quote together. Payment confirmation and **Start production** remain separate deliberate actions; analysis and preview approval never pay or dispatch. A newly unavailable device requires a fresh recommendation.
+The requester starts with one upload target for 1–4 pictures. There is no empty preview or empty order list, and no output, machine or model picker. Fabyn recommends a supported result and a saved machine. After uploading, **Add a note** and **Optional print settings** offer secondary refinements; the selected machine stays bound to the order. With no vision key, limited local image statistics are labeled clearly and uncertain pictures need clarification. Confirm artwork permission explicitly, then select **Preview your item** to inspect the actual production file. **Approve preview & see price** approves that file and obtains its quote together. Payment confirmation and **Start production** remain separate deliberate actions; analysis and preview approval never pay or dispatch. A newly unavailable device requires a fresh recommendation.
 
 For providers, open Owner workshop with the private local code. **Orders** starts with the work inbox: only orders needing action are shown, with search and other views available. **Machines** shows the next setup step, **Machine checks** holds inspection/calibration controls, and **Settings** holds media, pricing, hours and policy. **Add a machine** first identifies the machine from its typed name or, with a Claude key, a photo of its label (Claude only reads the label; fixed rules decide whether it is supported), then gives a one-command setup: run it on the computer next to the machine, and the connector dials out to the workshop, runs a fixed checklist (each hardware step only after you allow it in the workshop), writes the machine config and registers the machine. Manual registration of a node configured in the app’s private local setup remains available; the browser never asks for a node URL. Register a **simulation** device for the software demo, confirm its simulated calibration, list it, inspect/clear and resume. Production, payment, collection and recovery details remain available through native disclosures. **Payments** contains the mock/testnet ledger. After actual handling, one explicit checkbox confirms removal, labeling, safe storage and machine clearance; **Record steps separately** retains the four individual confirmations. Mark ready for pickup, resume independently of collection, and redeem the code once at handoff. Prepared 3D remains a reviewed backend catalog and owner-calibration capability; pictures do not become printable 3D files.
 
@@ -87,14 +87,14 @@ The interface is deliberately minimal: a heading, the pictures and one next acti
 
 The requester action uses `POST /api/jobs/:id/approve-and-quote` with the displayed `artifactSha256`, `specVersion`, `recommendedMachineId` (or `null` for a legacy unbound order), and optional `autoAccept`. Approval, current machine checks, reservation and quote commit atomically; a failed quote does not leave a newly approved intermediate state. This endpoint does not collect payment or dispatch work. Budget-based quote acceptance still requires the requester’s explicit mandate, and checkout and production consent remain separate.
 
-Testnet mode uses the browser's development wallet through EIP1193 and the official x402 client; there are no browser private keys or production payment rails. It requires a funded Base Sepolia payer/treasury, signer, RPC and owner payout address. A signature alone never counts as collected payment.
+Testnet mode supports **Pay & make** through the browser's EIP1193 wallet and the official x402 client. It collects free Base Sepolia test USDC for the hardware portion of the plan, waits for confirmed settlement, then starts production and shows a transaction link. Collection needs a faucet-funded payer, a recipient address, RPC and public origin; no CDP API key or treasury private key is needed. A signature alone never counts as collected payment. See the [x402 demo guide](docs/x402-demo.md) for a standalone **0.01 test USDC payment** with no printer, payout or refund required.
 
 ## Check
 
 ```sh
 npm run check
 npm run test:acceptance
-FABRARY_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser
+FABYN_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser
 npm run diagnose
 ```
 

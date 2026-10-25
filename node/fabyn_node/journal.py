@@ -41,9 +41,6 @@ class Journal:
           binding TEXT NOT NULL, target_scope TEXT NOT NULL, expected_mode TEXT NOT NULL, cancelled_at TEXT NOT NULL,
           UNIQUE(machine_id,job_id)
         );
-        CREATE TABLE IF NOT EXISTS frames (frame_id TEXT PRIMARY KEY, machine_id TEXT NOT NULL,
-          job_id TEXT NOT NULL, attempt_id TEXT NOT NULL, phase TEXT NOT NULL, source TEXT NOT NULL,
-          captured_at TEXT NOT NULL, metadata TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY, at TEXT NOT NULL,
           machine_id TEXT NOT NULL, attempt_id TEXT, event TEXT NOT NULL, reason TEXT);
         """)

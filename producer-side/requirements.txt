@@ -7,7 +7,6 @@ bleak>=0.22          # Phomemo over BLE (macOS default)
 pyserial>=3.5        # Phomemo over SPP/RFCOMM serial (Pi, or macOS /dev/cu.*)
 paho-mqtt>=2.1       # Bambu A1 mini over LAN MQTT (FTPS upload uses the stdlib)
 simplepyble==1.2.0   # Instax mini Link over BLE (the vendored InstaxBLE protocol code)
-# opencv-python>=4.10  # uncomment once a webcam is aimed at the output tray
 
 # hub/gateway.py and the stub hub
 fastapi>=0.115

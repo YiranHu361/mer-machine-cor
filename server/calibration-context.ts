@@ -9,7 +9,7 @@ import {
   machineDeviceFingerprint,
   machineInspectionFingerprint,
 } from "./machine-settings.ts";
-import { latestCalibration } from "./evidence.ts";
+import { latestCalibration } from "./calibration-state.ts";
 
 export const calibrationDeviceContext = (machine: Machine) =>
   hash({
@@ -31,7 +31,6 @@ export function calibrationStartObservation(state: State, machineId: string) {
           attemptId: latest.attemptId,
           version: latest.version,
           productionState: latest.productionState,
-          evidence: latest.evidence ?? null,
         }
       : null,
   });
@@ -114,7 +113,6 @@ export function calibrationLifecycle(
       machine.activeJobId === calibration.id &&
       ["dispatched", "needs_review"].includes(calibration.productionState) &&
       !calibration.executionCancellation &&
-      !calibration.evidence &&
       !calibration.history.some((entry) =>
         [
           "calibration_accepted",
@@ -252,7 +250,6 @@ export function calibrationOperationContext(
           attemptId: calibration.attemptId,
           version: calibration.version,
           productionState: calibration.productionState,
-          evidence: calibration.evidence ?? null,
         }
       : null,
   });

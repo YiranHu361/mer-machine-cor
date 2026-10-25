@@ -29,7 +29,7 @@ const manifest = (version: string, media = 17, seconds = 100) => ({
   blockers: [],
 });
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-registration-regression-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-registration-regression-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const calls: { tool: string; body: any; selected: Machine | undefined }[] =
     [];
@@ -351,7 +351,7 @@ test("unrelated global revisions do not reject registration and configured URL o
     f.controls.capabilities = async (selected) => {
       assert.equal(
         selected?.nodeUrl,
-        process.env.FABRARY_PHOMEMO_NODE_URL ?? "http://127.0.0.1:2",
+        process.env.FABYN_PHOMEMO_NODE_URL ?? "http://127.0.0.1:2",
       );
       await mutate(f.store, (state) => {
         state.machines.instax_01.reason =
@@ -377,7 +377,7 @@ test("unrelated global revisions do not reject registration and configured URL o
     assert.equal(state.machines.phomemo_01.adapterVersion, "accepted-adapter");
     assert.equal(
       state.machines.phomemo_01.nodeUrl,
-      process.env.FABRARY_PHOMEMO_NODE_URL ?? "http://127.0.0.1:2",
+      process.env.FABYN_PHOMEMO_NODE_URL ?? "http://127.0.0.1:2",
     );
     assert.equal(
       state.machines.instax_01.reason,

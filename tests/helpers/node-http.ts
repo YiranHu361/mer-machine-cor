@@ -34,7 +34,7 @@ async function freePort() {
   return port;
 }
 export async function nodeHttpFixture() {
-  const dir = await mkdtemp(join(tmpdir(), "fabrary-cancel-http-"));
+  const dir = await mkdtemp(join(tmpdir(), "fabyn-cancel-http-"));
   const entered = latch(),
     released = latch();
   const artifact = execFileSync(resolve("node/.venv/bin/python"), [
@@ -68,19 +68,19 @@ export async function nodeHttpFixture() {
     ]),
   );
   const child: ChildProcess = spawn(
-    resolve("node/.venv/bin/fabrary-node"),
+    resolve("node/.venv/bin/fabyn-node"),
     [],
     {
       env: {
         ...process.env,
-        FABRARY_NODE_KEY: key,
-        FABRARY_TOKEN_SECRET: key,
-        FABRARY_NODE_DATA: join(dir, "node"),
-        FABRARY_MACHINES_FILE: machinePath,
-        FABRARY_NODE_HOST: "127.0.0.1",
-        FABRARY_NODE_PORT: new URL(nodeOrigin).port,
-        FABRARY_NODE_URL: nodeOrigin,
-        FABRARY_ASSET_ORIGIN: assetOrigin,
+        FABYN_NODE_KEY: key,
+        FABYN_TOKEN_SECRET: key,
+        FABYN_NODE_DATA: join(dir, "node"),
+        FABYN_MACHINES_FILE: machinePath,
+        FABYN_NODE_HOST: "127.0.0.1",
+        FABYN_NODE_PORT: new URL(nodeOrigin).port,
+        FABYN_NODE_URL: nodeOrigin,
+        FABYN_ASSET_ORIGIN: assetOrigin,
       },
       stdio: "ignore",
     },

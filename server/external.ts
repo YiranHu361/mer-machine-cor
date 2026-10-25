@@ -5,7 +5,11 @@ import {
   type PaymentReceipt,
 } from "../integrations/src/payments.ts";
 import type { Job, Machine, Operation } from "./model.ts";
-import type { PaymentBoundary, PaymentResult } from "./payments.ts";
+import type {
+  PaymentBoundary,
+  PaymentResult,
+  PaymentTarget,
+} from "./payments.ts";
 import type { Store } from "./store.ts";
 import { mutate } from "./store.ts";
 import { requireThat, record, now } from "./model.ts";
@@ -22,7 +26,7 @@ export class IntegratedPayment implements PaymentBoundary {
     this.mode = this.adapter.mode;
   }
   operation(
-    j: Job,
+    j: PaymentTarget,
     op: Operation,
     m?: Machine,
     payload?: any,
@@ -31,6 +35,7 @@ export class IntegratedPayment implements PaymentBoundary {
       jobId: j.id,
       operationId: op.id,
       quote: j.quote!,
+      resourcePath: j.paymentResourcePath,
       payload,
       requesterAddress: j.requesterAddress,
       ownerAddress: m?.ownerAddress,
@@ -50,11 +55,12 @@ export class IntegratedPayment implements PaymentBoundary {
           stored.transactionHash = receipt.transactionHash;
           stored.status = "pending";
           stored.updatedAt = now();
-          record(
-            s.jobs[j.id],
-            "transaction_submitted",
-            "Transaction outcome is pending confirmation.",
-          );
+          if (s.jobs[j.id])
+            record(
+              s.jobs[j.id],
+              "transaction_submitted",
+              "Transaction outcome is pending confirmation.",
+            );
         });
       },
     };
@@ -62,11 +68,12 @@ export class IntegratedPayment implements PaymentBoundary {
   result(r: PaymentReceipt): PaymentResult {
     return { ...r, receipt: r };
   }
-  async challenge(j: Job) {
+  async challenge(j: PaymentTarget) {
     return this.adapter.challenge({
       jobId: j.id,
       operationId: `collect:${j.id}`,
       quote: j.quote!,
+      resourcePath: j.paymentResourcePath,
     });
   }
   private async submissionError(op: Operation, error: unknown) {
@@ -81,7 +88,7 @@ export class IntegratedPayment implements PaymentBoundary {
       { safeToRetry: !stored?.receipt },
     );
   }
-  async collect(j: Job, op: Operation, payload?: any) {
+  async collect(j: PaymentTarget, op: Operation, payload?: any) {
     this.inFlight.add(op.id);
     try {
       return this.result(
@@ -116,7 +123,11 @@ export class IntegratedPayment implements PaymentBoundary {
       this.inFlight.delete(op.id);
     });
   }
-  async reconcile(j: Job, m: Machine, op: Operation): Promise<PaymentResult> {
+  async reconcile(
+    j: PaymentTarget,
+    m: Machine,
+    op: Operation,
+  ): Promise<PaymentResult> {
     if (this.inFlight.has(op.id))
       return {
         status: "pending",

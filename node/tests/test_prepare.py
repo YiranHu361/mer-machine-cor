@@ -1,8 +1,8 @@
 import hashlib
 import pytest
 from PIL import Image, ImageDraw
-from fabrary_node.prepare import prepare
-from fabrary_node.adapters import Phomemo
+from fabyn_node.prepare import prepare
+from fabyn_node.adapters import Phomemo
 
 
 @pytest.mark.parametrize("format,extension",[("PNG","png"),("JPEG","jpg"),("WEBP","webp")])
@@ -42,7 +42,7 @@ def test_unsupported_inputs_rejected(tmp_path):
 
 
 def test_instax_candidate_bounds_jpeg_and_orientation_without_device(tmp_path):
-    from fabrary_node.adapters import InstaxLink3
+    from fabyn_node.adapters import InstaxLink3
     source=tmp_path/"instax.png"
     im=Image.new("RGB",(600,800),"white")
     ImageDraw.Draw(im).rectangle((0,0,600,300),fill="black")

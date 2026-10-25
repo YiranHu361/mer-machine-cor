@@ -1,6 +1,6 @@
 """Pure production preparation: canonical design in, exact artifact, preview and estimates out.
 
-`fabrary-producer` reads one JSON request on stdin and writes one JSON result on stdout. It reads
+`fabyn-producer` reads one JSON request on stdin and writes one JSON result on stdout. It reads
 only the declared input files and writes derived files into output_dir: no network, devices,
 reservations or payment. Identical input yields byte-identical outputs and hashes.
 """
@@ -712,7 +712,7 @@ def main() -> None:
         sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
         sys.stdout.flush()
     except Exception as exc:  # unexpected crash: short message and a nonzero exit
-        print(f"fabrary-producer: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        print(f"fabyn-producer: internal error: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise SystemExit(1) from None
 
 

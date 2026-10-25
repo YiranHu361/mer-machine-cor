@@ -34,7 +34,7 @@ const spec = (assetId: string) => ({
   crop: "contain",
 });
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-storage-fault-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-storage-fault-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const service = new Service(
     store,
@@ -209,7 +209,7 @@ test("a failed preparer removes its partial new output without touching existing
     // This isolated executable models an encoder/disk failure after writing a partial PNG.
     writeFileSync(
       join(bin, "uv"),
-      `#!${process.execPath}\nconst fs = require('node:fs'); const args = process.argv.slice(2); if (args[3] !== 'fabrary-prepare') process.exit(90); fs.writeFileSync(args[5], 'partial PNG'); process.exit(2);\n`,
+      `#!${process.execPath}\nconst fs = require('node:fs'); const args = process.argv.slice(2); if (args[3] !== 'fabyn-prepare') process.exit(90); fs.writeFileSync(args[5], 'partial PNG'); process.exit(2);\n`,
       { mode: 0o755 },
     );
     process.env.PATH = `${bin}:${originalPath ?? ""}`;

@@ -28,6 +28,5 @@
     "scan_s": 12,
     "job_timeout_s": 120,
     "eject_s": 15
-  },
-  "camera": {"index": null, "warmup_frames": 8, "delay_s": 90.0}
+  }
 }

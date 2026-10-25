@@ -22,7 +22,6 @@ type ActionJob = {
   approvedSpecHash?: string;
   productionState: string;
   fulfillmentState: string;
-  evidence?: unknown;
   quote?: { collectionPoint: string };
   pickup?: { code?: string; expiresAt?: string; redeemedAt?: string };
   history?: Array<{ event: string }>;
@@ -70,7 +69,6 @@ export function ownerActionDraftKey(kind: ActionKind, job: ActionJob) {
           attemptId: job.attemptId,
           productionState: job.productionState,
           fulfillmentState: job.fulfillmentState,
-          evidence: job.evidence,
           collectionPoint: job.quote?.collectionPoint,
           ...(kind === "pickup" || kind === "renewal"
             ? { pickup: job.pickup }

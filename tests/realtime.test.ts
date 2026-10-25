@@ -15,7 +15,7 @@ test(
   "repeated live-dashboard connections release subscriptions and reject expired sessions",
   { timeout: 15000 },
   async () => {
-    const dir = await mkdtemp(join(tmpdir(), "fabrary-realtime-"));
+    const dir = await mkdtemp(join(tmpdir(), "fabyn-realtime-"));
     const initial = initialState();
     initial.sessions.fixture = {
       id: "fixture_requester",
@@ -64,7 +64,7 @@ test(
     try {
       assert.equal((await fetch(url)).status, 401);
       assert.equal(
-        (await fetch(url, { headers: { Cookie: "fabrary_session=expired" } }))
+        (await fetch(url, { headers: { Cookie: "fabyn_session=expired" } }))
           .status,
         401,
       );
@@ -74,7 +74,7 @@ test(
             const controller = new AbortController();
             controllers.push(controller);
             const response = await fetch(url, {
-              headers: { Cookie: "fabrary_session=fixture" },
+              headers: { Cookie: "fabyn_session=fixture" },
               signal: controller.signal,
             });
             assert.equal(response.status, 200);

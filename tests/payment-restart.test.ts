@@ -13,10 +13,10 @@ import type {
   PaymentReceipt,
 } from "../integrations/src/payments.ts";
 async function fixture() {
-  const dir = await mkdtemp(join(tmpdir(), "fabrary-payment-restart-"));
+  const dir = await mkdtemp(join(tmpdir(), "fabyn-payment-restart-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const boundary = new IntegratedPayment(store, {
-    FABRARY_PAYMENT_MODE: "mock",
+    FABYN_PAYMENT_MODE: "mock",
   });
   boundary.mode = "testnet";
   const config: Config = {
@@ -230,7 +230,7 @@ test("restart retries a provably unsubmitted release with the same allocation; s
     const opId = "release:" + f.j.id;
     await mutate(f.store, (s) => {
       const j = s.jobs[f.j.id];
-      j.evidence = { result: "pass" };
+      j.productionState = "produced";
       j.paymentState = "release_pending";
       s.operations[opId] = {
         id: opId,

@@ -1,8 +1,8 @@
-# Fabrary consumer orchestration from request to finished jobs
+# Fabyn consumer orchestration from request to finished jobs
 
 **Design · October 24, 2026 · Implemented and tested in simulation (see [implementation status](#implementation-status-october-24-2026)) · Original baseline: `3a03a90`**
 
-Fabrary should turn pictures, a short request, or both into a concrete, priced production plan. A person can upload a photo or simply say “I want a cat sticker.” The agent generates design drafts when needed, lets the person pick a favorite, and adapts it for suitable registered machines using their validated documentation. It can also suggest useful ways to make the chosen design, including supported 3D items. The requester chooses the design and approves the result and total; the app handles production.
+Fabyn should turn pictures, a short request, or both into a concrete, priced production plan. A person can upload a photo or simply say “I want a cat sticker.” The agent generates design drafts when needed, lets the person pick a favorite, and adapts it for suitable registered machines using their validated documentation. It can also suggest useful ways to make the chosen design, including supported 3D items. The requester chooses the design and approves the result and total; the app handles production.
 
 The normal experience is **add photos or describe an idea → choose a draft when needed → review the prepared result and price → confirm → collect**. Suggested formats and edits remain optional. Machine selection, documentation retrieval, production settings, file conversion, scheduling and recovery belong to the app.
 
@@ -20,7 +20,7 @@ This plan is implemented end to end **in simulation with mock payments**. No har
 | Intent | [intent](../server/orchestration/intent.ts), [Claude parsers](../integrations/src/claude.ts) | Claude when configured, otherwise a labeled local reading that never invents names; gifts use editable **FOR YOU** text |
 | Machine knowledge | [knowledge](../server/orchestration/knowledge.ts), [context.dev wrapper](../server/orchestration/context-dev.ts), `npm run profile:build` | Published profiles for the three team models with a basis per field; hardware refuses critical fields that are only assumptions. The builder reads at most two public pages at onboarding time only, keeps a value only when its quote is on the page and the field applies to the process. One live call read the official M02 Pro page and confirmed 300 DPI with no conflict |
 | Eligibility and pricing | [matching](../server/orchestration/matching.ts), [pricing](../server/orchestration/pricing.ts) | Intended result before price (a colour photo never goes to the thermal printer); `price-card-v1` in integer cents with a 10% fee rounded half up |
-| Producer preparation | [`fabrary-producer`](../node/fabrary_node/producer.py), [contract](node-integration.md#production-preparation-fabrary-producer) | Pure CLI: canonical design in; exact artifact, preview, hashes and estimates out. Sticker 1-bit PNG at 300 dpi, Instax 600×800, simulation-only text-tag 3MF, simulated catalog items |
+| Producer preparation | [`fabyn-producer`](../node/fabyn_node/producer.py), [contract](node-integration.md#production-preparation-fabyn-producer) | Pure CLI: canonical design in; exact artifact, preview, hashes and estimates out. Sticker 1-bit PNG at 300 dpi, Instax 600×800, simulation-only text-tag 3MF, simulated catalog items |
 | Per-assignment modes and children | [service](../server/service.ts) | Each child job carries its own immutable mode; simulated children are estimate-only, never charged and end without a pickup code; evidence must match the mode |
 | Relief | [relief](../server/relief/), [coordinator page](../web/src/ReliefApp.tsx) | Team machines first, then a seeded 150-machine simulated network (min-heap split, time-scaled engine); outage or new-machine replanning moves only never-started simulated work, within 125% of the simulated estimate |
 | Requester and coordinator pages | [`/make`](../web/src/MakeApp.tsx), `/relief` | Request, drafts, exact preview, extras, one confirm, progress; relief plan, confirm, outage, restore, add machine, time scale |
@@ -48,7 +48,7 @@ For photo-only gifts, propose editable neutral keychain text such as “FOR YOU�
 
 ## 2. The requester experience
 
-| State | What the person sees | What Fabrary does |
+| State | What the person sees | What Fabyn does |
 | --- | --- | --- |
 | Request | One short request field with **Add photos** beside it; either input works alone | Validates text and any owned images, starts a versioned draft |
 | Designing | A stable preview area; “Designing your cat sticker…” or “Preparing your photo…” | Understands intent, checks feasible machine formats and resolves profiles; generates drafts when new artwork is needed |
@@ -92,7 +92,7 @@ flowchart TD
 | Owner | Owns | Handoff |
 | --- | --- | --- |
 | Consumer orchestration | Intent planning, knowledge profiles, canonical design candidates/selection, feasible format suggestions, matching, preparation calls, pricing, plan versions, replanning, make intents and consumer APIs/events | Sends owned canonical designs for preparation, then approved preparation receipts and child jobs for execution |
-| Producer | Device-correct compilation and preflight through a pure preparation interface, gateway transport, manifests/live status, adapters, execution journal, progress, camera evidence and handling requirements | Returns immutable production artifacts/previews and estimates before offers; reports readiness and execution outcomes separately |
+| Producer | Device-correct compilation and preflight through a pure preparation interface, gateway transport, manifests/live status, adapters, execution journal, progress, completion and handling requirements | Returns immutable production artifacts/previews and estimates before offers; reports readiness and execution outcomes separately |
 | UI | Upload, editable plan, consent, payment interaction, progress and actionable recovery | Renders saved server state and sends version-bound actions |
 | Payment component | Collection, reconciliation, ledger allocations, release/refund and transaction receipts | Reports confirmed/pending/failed outcomes for a saved payment operation |
 
@@ -109,7 +109,7 @@ The shared artifact describes a FastAPI `hub/`; the current repository uses an E
 | Approval | Exact artifact/specification/machine approval and atomic approval-plus-quote | A proposal offer before approval, then one durable make authorization |
 | Execution | Persisted payment/job state, exact-machine dispatch, attempt IDs and node reconciliation; a global execution mode | Parent plans, billable child allocations, immutable per-assignment modes and recoverable mixed-mode submission |
 
-Implementation anchors: [recommendations](../server/recommendations.ts), [HTTP routes](../server/app.ts), [job service](../server/service.ts), [model](../server/model.ts), [image preparation](../node/fabrary_node/prepare.py) and [node integration](node-integration.md). Keep their existing ownership, consent and unknown-outcome protections.
+Implementation anchors: [recommendations](../server/recommendations.ts), [HTTP routes](../server/app.ts), [job service](../server/service.ts), [model](../server/model.ts), [image preparation](../node/fabyn_node/prepare.py) and [node integration](node-integration.md). Keep their existing ownership, consent and unknown-outcome protections.
 
 One important integration trap: `POST /api/jobs` currently prepares the original uploaded pictures again. A separately generated design would be discarded if its draft were sent through that path unchanged. Add a server-owned **create from saved design draft** path that loads the producer's saved preparation receipt/final artifact and uses the existing `createWithResult` service seam. Never trust a browser-supplied artifact hash or silently rebuild from the originals after approval.
 
@@ -200,7 +200,7 @@ Retrieval flow:
 
 Effective capability is the **intersection of the tested adapter contract, validated documented bounds and current owner policy/media**. Documentation may narrow eligibility; it cannot grant device readiness, expand executable drivers, authorize a print or override local node checks. Current status and media are live operational facts, not documentation-cache entries.
 
-context.dev exposes cache freshness controls and cache metadata. Its output formats can have different cached ages; request the needed outputs together with an appropriate freshness requirement when snapshot consistency matters. Pin Fabrary's own source hashes and profile version independently. A proposed seven-day review interval for stable manuals is an application policy, not a claim about vendor defaults. ([Freshness and caching](https://docs.context.dev/scrape/freshness-and-caching))
+context.dev exposes cache freshness controls and cache metadata. Its output formats can have different cached ages; request the needed outputs together with an appropriate freshness requirement when snapshot consistency matters. Pin Fabyn's own source hashes and profile version independently. A proposed seven-day review interval for stable manuals is an application policy, not a claim about vendor defaults. ([Freshness and caching](https://docs.context.dev/scrape/freshness-and-caching))
 
 Only public model identifiers and documentation URLs go to context.dev. User photographs belong in the separately disclosed vision/design path. Validate public HTTPS destinations and redirects; reject internal/local addresses and credential-bearing URLs. Treat manuals and extracted text as untrusted data: never execute their commands or follow embedded instructions to change permissions, spend funds or disclose data. Check per-output success and empty/truncated extraction, use bounded timeouts/retries, honor rate-limit backoff and record request IDs without secrets. ([Operational guidance](https://docs.context.dev/optimization/best-practices))
 
@@ -210,7 +210,7 @@ Keep the shared design's separation between **item** (what is wanted), **assignm
 
 Keep three meanings of mode separate: product experience (`best_single`, `gift`, `relief`), per-assignment execution (`hardware` or `simulation`) and payment (`mock` or testnet). Map the artifact's gift/relief `mode` explicitly; the single-item experience and mixed-mode fields require agreed contract extensions. **Mixed real/simulated Relief is a P0 requirement**, not a later simulation-only phase. The current server still uses one configured execution mode, so implementing the coordinator/gateway and child-scoped checks is required before claiming mixed-mode support.
 
-Each assignment's immutable authorized `executionMode` must agree with its registered machine and propagate through matching, producer preparation, readiness/quoting/checkout, payment eligibility, job/attempt records, signed `expected_mode`, node routing, progress, evidence, events, recovery and replanning. Deployment policy may restrict allowed modes but cannot substitute a global default for a child's identity. Derive mode from authenticated registry/assignment state, never an untrusted event or browser flag. Hardware evidence must come from the authorized physical node/camera; simulated evidence is valid only for a simulation child. A mismatch pauses verification/release for review. Simulator events cannot select hardware, bypass a physical-start authorization or create a funded payout.
+Each assignment's immutable authorized `executionMode` must agree with its registered machine and propagate through matching, producer preparation, readiness/quoting/checkout, payment eligibility, job/attempt records, signed `expected_mode`, node routing, progress, evidence, events, recovery and replanning. Deployment policy may restrict allowed modes but cannot substitute a global default for a child's identity. Derive mode from authenticated registry/assignment state, never an untrusted event or browser flag. Completion must come from the authorized node for that assignment; simulated completion is valid only for a simulation child. Simulator events cannot select hardware, bypass a physical-start authorization or create a funded payout.
 
 | Record | Required identity and content |
 | --- | --- |
@@ -236,7 +236,7 @@ Separate draft preparation state from order, payment, production and fulfillment
 
 - Preparation: `created → understanding → resolving_profiles → designing → producer_preparing → preflighting → proposed`, with `generating_candidates → awaiting_design_choice` before final design when needed, and `needs_clarification`, `unavailable`, `failed` and `superseded` exits. `producer_preparing` invokes the pure compiler; `preflighting` validates/stores its receipt and aggregate feasibility. Ordinary photo fitting bypasses candidate selection.
 - Shared plan summary: `proposed → approved → in_progress → done`, with explicit cancelled/partial/needs-review outcomes added to the agreed contract before use. Never call a partially completed bundle `done`.
-- Child production, payment and fulfillment retain their existing independent state machines. A passed camera check does not mean the output was removed or is ready for pickup.
+- Child production, payment and fulfillment retain their existing independent state machines. A machine completion report does not mean the output was removed or is ready for pickup.
 
 These are proposed contract additions, not replacements for the current `Job` enums. Provide explicit mappings in the API adapter and fixtures. Store source lineage so a replan preserves finished jobs, spent material, confirmed charges and uncertain operations.
 
@@ -307,7 +307,7 @@ Machine offline, job failure and a newly available machine can trigger evaluatio
 | Failed visible-output check | Route to review/failure resolution; do not automatically make another physical item without authorized retry scope and a definitive prior outcome |
 | New machine joins | Evaluate uncommitted work; do not move accepted jobs merely to make the map animate |
 
-Proof of nonacceptance must cover the exact execution attempt: a durable rejection guaranteeing that attempt cannot later start, or a cancellation barrier that also blocks delayed acceptance. A generic HTTP error, `404`, missing status record, heartbeat timeout or an empty camera view is not that proof.
+Proof of nonacceptance must cover the exact execution attempt: a durable rejection guaranteeing that attempt cannot later start, or a cancellation barrier that also blocks delayed acceptance. A generic HTTP error, `404`, missing status record, heartbeat timeout  is not that proof.
 
 The default consumer policy requires a new visible proposal for a different machine. Automatic relief replanning needs a separately displayed mandate covering equivalent process/material/output hash, physical dimensions/color/crop, per-item quantity, collection location, dependencies, mode, deadline bounds and an aggregate price cap. Save its exact scope. It permits only confirmed unstarted work to move, and never permits extra charge beyond the accepted cap. Identical file bytes alone do not establish an equivalent physical result. Replanning can use a changed total within a cap only under that explicit policy; ordinary gift/single-item checkout has no such implicit permission.
 
@@ -328,7 +328,7 @@ Agree on shared DTOs and checked-in fixtures before UI and producer integration.
 | `POST /orders/{id}/alternatives/{id}/select` | Expected design/plan version and explicit replace/add operation. Rechecks feasibility and creates a new proposal/total before confirmation |
 | `POST /orders/{id}/confirm` | Expected plan version/digest, offer ID, permission and consent to the disclosed physical jobs/payable total and labeled simulated plan, idempotency key. Returns the saved make intent; may require wallet action |
 | `POST /orders/{id}/pay` | Compatibility seam for shared x402. Uses the accepted offer's billable hardware total and allocation digest, excluding simulated estimates; zero-payable simulation needs no funded payment. A 402 challenge alone never authorizes production |
-| `GET /machines` | Reduced public capability/availability information; no credentials, private node addresses or unrestricted camera access |
+| `GET /machines` | Reduced public capability/availability information; no credentials, private node addresses |
 | Event subscription | Shared `/ws/events` or current SSE adapter, with stable event ID/order version and replay/resync behavior |
 
 The shared artifact's `POST /orders → Plan` can remain a synchronous fixture for UI work; real preparation should not depend on one long HTTP response surviving image generation and document retrieval. The contract must distinguish `preparing` from `proposed`. Persist the order identity before returning either result.
@@ -382,7 +382,7 @@ Meaningful regression coverage:
 - **Documentation:** exact-model mismatch, conflicting sources/units, missing nullable fields, outside-media versus image-area confusion, stale/revoked profile, rate limit/partial extraction, malicious instructions and internal-address redirects. Orders perform no external lookup; unknown required facts never become guessed capability.
 - **Matching/design:** text-only, photo-only and combined intake; reject both inputs empty; bounded generation failure/retry; stale or foreign candidate selection; color fidelity versus lowest price; text/subject preservation; empty/invalid raster; unsupported material/size/mode; changed live media; generated-design bytes surviving final order creation; feasible optional 3D suggestions and explicit replace/add totals.
 - **Producer preparation:** authenticated input ownership; no device/start/stop/reservation/payment effects; idempotent receipt reuse; mode/profile/compiler/input mismatch rejection; 3D slicing/estimates before offer; preview bound to the final artifact; exact prepared artifact/parameters consumed after payment with no recompile.
-- **Mixed Relief P0:** one plan with both execution modes and required real processes; correct signed node routing; simulated events cannot dispatch hardware; hardware rejects synthetic or mismatched evidence; real camera evidence cannot be relabeled to fund simulated work; physical and simulated counters/readiness remain separate; only simulation is time-scaled; mode/receipt survives restart and replan.
+- **Mixed Relief P0:** one plan with both execution modes and required real processes; correct signed node routing; simulated events cannot dispatch hardware; hardware rejects synthetic or mismatched execution; simulated work cannot fund a hardware payout; physical and simulated counters/readiness remain separate; only simulation is time-scaled; mode/receipt survives restart and replan.
 - **Plans/scheduling:** gift process cardinality, split quantity conservation, cumulative media, same-machine conflicts, dependency cycles, fixed seed plus recorded planner result, and totals/allocations with exact rounding.
 - **Consent/execution:** edited child invalidates whole-plan approval; duplicate confirm; payment timeout/reload/restart; node accepts then disconnects; refund pending; one rejected child after siblings start; no second charge, child creation or physical attempt; simulation-to-hardware changes require a new approved revision.
 - **Mixed funding/cancellation:** billable totals equal hardware allocations including fees exactly once; simulated estimates cannot create collection, funded payout or refund; pending money remains encumbered; cancellation of simulated children cannot erase an uncertain physical attempt or make a real refund appear complete.

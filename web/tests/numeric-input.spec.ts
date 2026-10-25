@@ -53,7 +53,7 @@ async function fixture(page: Page) {
     recommendations: [] as any[],
   };
   await page.addInitScript((id) => {
-    localStorage.setItem("fabrary-current-job", id);
+    localStorage.setItem("fabyn-current-job", id);
   }, state.job.id);
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;

@@ -13,8 +13,8 @@ import re
 import time
 import uuid
 import httpx
-from PIL import Image, ImageDraw, ImageFilter
-from .adapters import Bambu, adapter_for, capture_camera, normalized_catalog_color
+from PIL import Image
+from .adapters import Bambu, adapter_for, normalized_catalog_color
 from .journal import Journal, now
 from .security import NodeError, canonical, require_expected_mode, validate_artifact_url, verify_token
 
@@ -30,7 +30,7 @@ class NodeService:
                  asset_origin: str = "http://127.0.0.1:4318/assets", machines: list[dict] | None = None,
                  public_url: str = "http://127.0.0.1:8788", artifact_transport=None):
         if not key or len(key) < 16:
-            raise ValueError("FABRARY_NODE_KEY must be configured with at least 16 characters")
+            raise ValueError("FABYN_NODE_KEY must be configured with at least 16 characters")
         self.key, self.token_secret = key, token_secret or key
         self.data_dir = (data_dir or Path(".data/node")).resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -40,8 +40,6 @@ class NodeService:
         except BlockingIOError:
             self.process_lock.close()
             raise RuntimeError("Another node owns this journal; run one process per node") from None
-        self.frames = self.data_dir / "frames"
-        self.frames.mkdir(exist_ok=True)
         self.artifacts = self.data_dir / "artifacts"
         self.artifacts.mkdir(exist_ok=True)
         self.asset_origin, self.public_url = asset_origin, public_url.rstrip("/")
@@ -62,12 +60,12 @@ class NodeService:
             config.setdefault("material", model["material"])
             self.machines[config["id"]] = config
             self.adapters[config["id"]] = adapter_for(config)
-            # Calibration belongs to an exact device, transport, and camera,
+            # Calibration belongs to an exact device and transport,
             # never just its human-readable machine ID. Hash private config so
-            # camera URLs or other local connection details stay out of state.
+            # private connection details stay out of state.
             calibration_fields = ("mode", "model", "outputType", "material", "bluetoothAddress", "rfcommChannel",
                 "serviceUUID", "writeCharUUID", "notifyCharUUID", "flipVertical", "compatibilityValidated",
-                "host", "serial", "cameraCommand", "cameraUrl")
+                "host", "serial")
             calibration_config = {key: config.get(key) for key in calibration_fields}
             calibration_config["adapterVersion"] = self.adapters[config["id"]].version
             configuration_binding = hashlib.sha256(canonical(calibration_config).encode()).hexdigest()
@@ -85,7 +83,7 @@ class NodeService:
                     existing_state.update(paired=simulation or bool(config.get("paired")), configured=simulation,
                         calibrated=simulation, listed=simulation, ready=simulation, paused=not simulation,
                         mediaRemaining=100 if simulation else 0, material=config["material"],
-                        reason="Simulation fixture calibrated; no physical device" if simulation else "Device or capture configuration changed; physical calibration and explicit owner resume are required")
+                        reason="Simulation fixture calibrated; no physical device" if simulation else "Device configuration changed; physical calibration and explicit owner resume are required")
                 # Pairing is a current owner confirmation, not a one-time
                 # calibration result. Reflect both confirmation and revocation
                 # without requiring a new journal for the same physical device.
@@ -107,14 +105,14 @@ class NodeService:
 
     @classmethod
     def from_environment(cls):
-        path = os.environ.get("FABRARY_MACHINES_FILE")
+        path = os.environ.get("FABYN_MACHINES_FILE")
         machines = json.loads(Path(path).read_text()) if path else None
         if isinstance(machines, dict):
             machines = machines["machines"]
-        return cls(key=os.environ.get("FABRARY_NODE_KEY", ""), token_secret=os.environ.get("FABRARY_TOKEN_SECRET"),
-            data_dir=Path(os.environ.get("FABRARY_NODE_DATA", ".data/node")),
-            asset_origin=os.environ.get("FABRARY_ASSET_ORIGIN", "http://127.0.0.1:4318/assets"), machines=machines,
-            public_url=os.environ.get("FABRARY_NODE_URL", "http://127.0.0.1:8788"))
+        return cls(key=os.environ.get("FABYN_NODE_KEY", ""), token_secret=os.environ.get("FABYN_TOKEN_SECRET"),
+            data_dir=Path(os.environ.get("FABYN_NODE_DATA", ".data/node")),
+            asset_origin=os.environ.get("FABYN_ASSET_ORIGIN", "http://127.0.0.1:4318/assets"), machines=machines,
+            public_url=os.environ.get("FABYN_NODE_URL", "http://127.0.0.1:8788"))
 
     def machine(self, machine_id: str) -> dict:
         if not isinstance(machine_id, str) or machine_id not in self.machines:
@@ -124,7 +122,7 @@ class NodeService:
     def require_configuration_binding(self, machine_id: str, binding: str | None) -> None:
         current = self.journal.machine(machine_id).get("configurationBinding")
         if not isinstance(binding, str) or not binding or binding != current:
-            raise NodeError("configuration_binding", "Attempt belongs to another device or capture configuration; this authorization cannot be applied to the current setup", 403)
+            raise NodeError("configuration_binding", "Attempt belongs to another device configuration; this authorization cannot be applied to the current setup", 403)
 
     def transport_pending(self, machine_id: str) -> bool:
         entry = self.transport_tasks.get(machine_id)
@@ -177,7 +175,6 @@ class NodeService:
             "mode": config["mode"], "adapter_version": adapter.version, "output_types": [config["outputType"]],
             "materials": [state["material"]], "color_modes": ["monochrome" if config["outputType"] == "sticker" else "single-color" if config["outputType"] == "3d" else "color"],
             "dimensions_mm": {"widths": state["widthsMm"], "height_min": 5, "height_max": 150} if config["outputType"] == "sticker" else {"width": 54, "height": 86} if config["outputType"] == "instax" else {"catalog_only": True},
-            "camera": "simulation" if config["mode"] == "simulation" else "configured" if config.get("cameraCommand") or config.get("cameraUrl") else "unconfigured",
             "abort_support": "confirmed" if config["mode"] == "simulation" else "requested" if isinstance(adapter, Bambu) else "unsupported",
             "paired": state["paired"], "configured": not blockers, "calibrated": state["calibrated"],
             "listed": state["listed"], "ready": bool(state["ready"] and not state["paused"] and not blockers and not self.journal.active(machine_id) and not self.stop_pending(machine_id) and not self.transport_pending(machine_id)),
@@ -321,7 +318,7 @@ class NodeService:
             if existing["binding"] != binding or existing["scope"] != _scope:
                 raise NodeError("attempt_conflict", "Attempt ID already binds different approved content", 409)
             return self.acceptance(existing, False)
-        # Mode and the private device/camera binding must still describe the
+        # Mode and the private device binding must still describe the
         # configuration authorized before download. Exact durable replay above
         # stays read-only, including for older tokens and configurations.
         config = self.machine(machine_id)
@@ -337,7 +334,9 @@ class NodeService:
                 state.update(calibrated=False, paused=True, ready=False, reason="Calibration attempt in progress; owner inspection required")
             self.journal.save_machine(machine_id, state)
             self.tasks[attempt_id] = asyncio.create_task(self._execute(row, path, parameters, expected_mode))
-            if row["outcome"] == "lost_ack":
+            if expected_mode == "simulation" and row["outcome"] == "fail":
+                status, credible, reason = "failed", False, "Simulated machine failure"
+            if expected_mode == "simulation" and row["outcome"] in {"review", "lost_ack"}:
                 raise NodeError("simulated_lost_ack", "Simulation: acknowledgment lost after durable acceptance; reconcile this attempt", 503)
         return self.acceptance(row, created)
 
@@ -373,7 +372,7 @@ class NodeService:
             require_expected_mode({"expected_mode": expected_mode}, self.machine(machine_id)["mode"])
             self.require_configuration_binding(machine_id, row["configuration_binding"])
         except NodeError:
-            self.journal.update(attempt_id, "failed", reason="Device or capture configuration changed before any physical start; no device operation was issued")
+            self.journal.update(attempt_id, "failed", reason="Device configuration changed before any physical start; no device operation was issued")
             return
         # FULL-sync commit MUST complete before anything can reach hardware.
         self.journal.update(attempt_id, "running", artifact_path=str(path))
@@ -398,7 +397,9 @@ class NodeService:
                 status, credible, reason = await asyncio.wait_for(asyncio.shield(task), timeout)
             else:
                 status, credible, reason = await asyncio.wait_for(self.adapters[machine_id].run(path, parameters, attempt_id), timeout)
-            if row["outcome"] == "lost_ack":
+            if expected_mode == "simulation" and row["outcome"] == "fail":
+                status, credible, reason = "failed", False, "Simulated machine failure"
+            if expected_mode == "simulation" and row["outcome"] in {"review", "lost_ack"}:
                 status, credible, reason = "uncertain", False, "Simulation: physical outcome intentionally uncertain after lost acknowledgment; do not reprint"
             self.journal.update(attempt_id, status, reason=reason, credible=credible, account_consumption=True)
         except asyncio.CancelledError:
@@ -420,66 +421,6 @@ class NodeService:
                     pass
             stop = await self.request_device_stop(machine_id, attempt_id)
             self.journal.update(attempt_id, "uncertain", reason="Execution error after possible start (" + type(exc).__name__ + "); " + stop["reason"])
-
-    async def camera_snapshot(self, *, token: str, machine_id: str, job_id: str,
-                              attempt_id: str, phase: str = "result") -> dict:
-        payload = verify_token(token, self.token_secret, scope="camera", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
-        config = self.machine(machine_id)
-        require_expected_mode(payload, config["mode"])
-        configuration_binding = self.journal.machine(machine_id).get("configurationBinding")
-        if not isinstance(phase, str) or phase not in {"baseline", "result"}:
-            raise NodeError("camera_phase", "Camera phase must be baseline or result", 422)
-        row = self.journal.get(attempt_id)
-        if row and (row["machine_id"] != machine_id or row["job_id"] != job_id):
-            raise NodeError("attempt_binding", "Camera context is not associated with this attempt", 403)
-        if row:
-            self.require_configuration_binding(machine_id, row["configuration_binding"])
-        if phase == "result" and not row:
-            raise NodeError("unknown_attempt", "Result capture requires a journaled attempt", 404)
-        if phase == "result" and row["status"] not in {"completed", "failed", "uncertain"}:
-            raise NodeError("camera_too_early", "Device has not reported an execution outcome", 409)
-        result = {"captured_at": now(), "machine_id": machine_id, "job_id": job_id,
-            "attempt_id": attempt_id, "phase": phase, "source": "simulation" if config["mode"] == "simulation" else "camera",
-            "completion_credible": bool(row and row["completion_credible"] and row["status"] == "completed")}
-        if config["mode"] == "simulation":
-            observation = "missing" if phase == "baseline" or row and row["outcome"] == "fail" else "ambiguous" if row and row["outcome"] in {"review", "lost_ack"} else "visible"
-            image = Image.new("RGB", (800, 600), "#ddd9cf")
-            drawing = ImageDraw.Draw(image)
-            drawing.rectangle((60, 80, 740, 540), outline="#77736c", width=3)
-            if observation == "visible" and row and row["artifact_path"]:
-                try:
-                    with Image.open(row["artifact_path"]) as artwork:
-                        artwork.thumbnail((400, 380))
-                        image.paste(artwork.convert("RGB"), ((800-artwork.width)//2, 100))
-                except Exception:
-                    drawing.rectangle((280, 180, 520, 420), fill="#aaa28f")
-            if observation == "ambiguous":
-                image = image.filter(ImageFilter.GaussianBlur(12))
-                drawing = ImageDraw.Draw(image)
-            drawing.rectangle((0, 0, 800, 55), fill="#4a4b42")
-            drawing.text((20, 16), "SIMULATION / NO PHYSICAL CAMERA — " + phase.upper(), fill="white")
-            drawing.text((20, 565), machine_id + " / " + job_id + " / " + result["captured_at"], fill="black")
-            stream = io.BytesIO()
-            image.save(stream, "PNG")
-            data = stream.getvalue()
-            result["observation"] = observation
-        else:
-            data = await capture_camera(config)
-            result["captured_at"] = now()
-        # A capture may finish after a configuration change. Never publish its
-        # bytes under metadata for a different mode, device, or camera setup.
-        require_expected_mode(payload, self.machine(machine_id)["mode"])
-        self.require_configuration_binding(machine_id, configuration_binding)
-        frame_id = uuid.uuid4().hex + ".png"
-        # Normalize camera bytes after validation; source metadata stays truthful.
-        with Image.open(io.BytesIO(data)) as image:
-            image.convert("RGB").save(self.frames / frame_id, "PNG")
-        result["frame_url"] = self.public_url + "/frames/" + frame_id
-        (self.frames / (frame_id + ".json")).write_text(json.dumps(result))
-        with self.journal.transaction():
-            self.journal.db.execute("INSERT INTO frames VALUES (?,?,?,?,?,?,?,?)",
-                (frame_id,machine_id,job_id,attempt_id,phase,result["source"],result["captured_at"],canonical(result)))
-        return result
 
     async def abort(self, *, token: str, machine_id: str, job_id: str, attempt_id: str) -> dict:
         payload = verify_token(token, self.token_secret, scope="abort", expected={"machine_id": machine_id, "job_id": job_id, "attempt_id": attempt_id})
@@ -579,33 +520,18 @@ class NodeService:
         if self.journal.active(machine_id):
             raise NodeError("machine_busy", "Resolve the active or uncertain attempt before calibration", 409)
         source = "simulation"
-        frame_id = None
         if config["mode"] == "hardware":
             attempt = self.journal.get(attempt_id) if isinstance(attempt_id, str) else None
             if not attempt or attempt["machine_id"] != machine_id or attempt["status"] != "completed" or attempt["scope"] != "calibration":
                 return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "A completed attempt authorized specifically for calibration and physical inspection are required. Installing an adapter is not calibration."})
             if attempt["configuration_binding"] != state["configurationBinding"]:
-                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration attempt belongs to another device or capture configuration; run a new physical calibration for this setup"})
-            if not attempt["completion_credible"]:
-                if not (attempt["reason"] or "").startswith("Operator inspected:") or not isinstance(reason,str) or len(reason.strip()) < 10:
-                    return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Transport-only calibration requires a resolved completed attempt and an explicit physical inspection reason (at least 10 characters)"})
-                source = "owner-inspection"
-            else:
-                source = "device-and-owner-inspection"
-            evidence = self.journal.db.execute("SELECT * FROM frames WHERE machine_id=? AND job_id=? AND attempt_id=? AND phase='result' AND source='camera' ORDER BY captured_at DESC LIMIT 1",
-                (machine_id,attempt["job_id"],attempt_id)).fetchone()
-            if not evidence:
-                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration requires a fresh associated result camera frame"})
-            captured = datetime.fromisoformat(evidence["captured_at"].replace("Z","+00:00"))
-            age = (datetime.now(timezone.utc) - captured).total_seconds()
-            if not 0 <= age <= 600 or evidence["captured_at"] < (attempt["started_at"] or attempt["accepted_at"]):
-                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration frame is stale or predates this physical attempt; capture a fresh result"})
-            frame_id = evidence["frame_id"]
-        calibration_reason = "Simulation calibration fixture inspected" if config["mode"] == "simulation" else "Owner inspected calibration output: " + (reason.strip() if isinstance(reason,str) and reason.strip() else "Successful device completion and fresh result image inspected")
+                return response({"status": "blocked", "calibrated": False, "mode": "hardware", "reason": "Calibration attempt belongs to another device configuration; run a new physical calibration for this setup"})
+            source = "device-completion"
+        calibration_reason = "Simulation calibration fixture inspected" if config["mode"] == "simulation" else "Owner inspected calibration output: " + (reason.strip() if isinstance(reason,str) and reason.strip() else "Successful device completion")
         state.update(calibrated=True, paused=True, ready=False, configured=True, reason=calibration_reason + "; explicitly inspect/clear and resume before production")
         self.journal.save_machine(machine_id, state)
-        self.journal.audit(machine_id, attempt_id, "calibrated", canonical({"source":source,"frame_id":frame_id,"reason":calibration_reason}))
-        return response({"status": "passed", "calibrated": True, "mode": config["mode"], "source": source, "frame_id":frame_id, "reason": state["reason"]})
+        self.journal.audit(machine_id, attempt_id, "calibrated", canonical({"source":source,"reason":calibration_reason}))
+        return response({"status": "passed", "calibrated": True, "mode": config["mode"], "source": source, "reason": state["reason"]})
 
     def reconcile(self, *, machine_id: str, job_id: str, attempt_id: str, inspected: bool, result: str, reason: str) -> dict:
         self.machine(machine_id)

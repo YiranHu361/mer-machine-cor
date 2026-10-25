@@ -18,7 +18,7 @@ function deferred<T>() {
 }
 
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-ordering-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-ordering-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device: NodeBoundary = {
     token: () => ({
@@ -27,7 +27,6 @@ async function fixture() {
     }),
     async call(tool) {
       if (tool === "get_status") return { execution_status: "running" };
-      if (tool === "camera_snapshot") throw Error("No camera in this fixture");
       return { calibrated: true, execution_status: "running" };
     },
   };
@@ -92,14 +91,6 @@ async function fixture() {
       result: "failed",
       reason: "Owner inspected failed output and cleared the isolated fixture",
     });
-  const frame = (serial: number) => ({
-    frame_url: `http://127.0.0.1:1/fixture-frame-${serial}.png`,
-    captured_at: new Date(Date.now() + serial).toISOString(),
-    machine_id: "phomemo_01",
-    job_id: calibration.id,
-    attempt_id: calibration.attemptId,
-    source: "simulation",
-  });
   return {
     store,
     service,
@@ -108,7 +99,6 @@ async function fixture() {
     saved,
     start,
     resolveFailed,
-    frame,
     close() {
       store.close();
       rmSync(dir, { recursive: true, force: true });
@@ -148,7 +138,7 @@ test("late calibration status cannot undo a recorded operator failure", async ()
   }
 });
 
-test("an older running observation cannot replace a newer completion and matching evidence", async () => {
+test("an older running observation cannot replace a newer completion", async () => {
   const f = await fixture(),
     entered = deferred<void>(),
     pending = deferred<any>();
@@ -163,7 +153,6 @@ test("an older running observation cannot replace a newer completion and matchin
         }
         return { execution_status: "completed" };
       }
-      if (tool === "camera_snapshot") return f.frame(2);
       return original(tool, input, machine);
     };
     const old = f.service.calibrationStatus("phomemo_01");
@@ -171,53 +160,12 @@ test("an older running observation cannot replace a newer completion and matchin
     await f.service.calibrationStatus("phomemo_01");
     const before = await f.saved();
     assert.equal(before.productionState, "produced");
-    assert(before.evidence);
     pending.resolve({ execution_status: "running" });
     const reply = await old;
     assert.deepEqual(await f.saved(), before);
     assert.equal(reply.status.execution_status, "completed");
-    assert.deepEqual(reply.calibration?.evidence, before.evidence);
   } finally {
     pending.resolve({ execution_status: "running" });
-    f.close();
-  }
-});
-
-test("a slow older frame cannot replace the newer captured calibration frame", async () => {
-  const f = await fixture(),
-    entered = deferred<void>(),
-    pending = deferred<any>();
-  try {
-    let frames = 0;
-    const oldFrame = f.frame(1),
-      newFrame = f.frame(2);
-    const original = f.device.call.bind(f.device);
-    f.device.call = async (tool, input, machine) => {
-      if (tool === "get_status") return { execution_status: "completed" };
-      if (tool === "camera_snapshot") {
-        if (++frames === 1) {
-          entered.resolve();
-          return pending.promise;
-        }
-        return newFrame;
-      }
-      return original(tool, input, machine);
-    };
-    const old = f.service.calibrationStatus("phomemo_01");
-    await entered.promise;
-    await f.service.calibrationStatus("phomemo_01");
-    const before = await f.saved();
-    pending.resolve(oldFrame);
-    await old;
-    assert.deepEqual(await f.saved(), before);
-    assert.equal(before.evidence?.url, newFrame.frame_url);
-    assert.equal(
-      before.history.filter((entry) => entry.event === "calibration_status")
-        .length,
-      1,
-    );
-  } finally {
-    pending.resolve(f.frame(1));
     f.close();
   }
 });
@@ -352,7 +300,6 @@ test("a device configuration change fences a pending calibration observation", a
         entered.resolve();
         return pending.promise;
       }
-      if (tool === "camera_snapshot") return f.frame(1);
       return original(tool, input, machine);
     };
     const old = f.service.calibrationStatus("phomemo_01");

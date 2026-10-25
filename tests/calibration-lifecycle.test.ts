@@ -44,7 +44,7 @@ function deferred<T>() {
   };
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-lifecycle-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-lifecycle-")),
     store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const calls: { tool: string; input: any }[] = [],
     controls = new Map<string, (input: any) => Promise<any>>();
@@ -266,7 +266,7 @@ test("new attempts store their device context while proved mismatches cannot con
   }
 });
 
-test("requested-key lookup returns only exact stored machine history with bound owner evidence and never polls an archived request", async () => {
+test("requested-key lookup returns only exact stored machine history with saved machine status and never polls an archived request", async () => {
   const f = await fixture();
   try {
     await mutate(f.store, (s) => {
@@ -277,13 +277,6 @@ test("requested-key lookup returns only exact stored machine history with bound 
         attemptId: "archived_attempt",
         checkoutKey: "archived-request-key",
         createdAt: "2020-01-01T00:00:00.000Z",
-        evidence: {
-          url: "http://127.0.0.1:1/frames/private.png",
-          capturedAt: now(),
-          machineId: mid,
-          jobId: "archived",
-          frame: { private: "raw frame must not be returned" },
-        },
       };
       s.calibrations!.other_machine = {
         ...structuredClone(saved),
@@ -298,11 +291,6 @@ test("requested-key lookup returns only exact stored machine history with bound 
     assert.equal(found.calibration.id, "saved");
     assert.equal(found.requestedCalibration.id, "archived");
     assert.equal(found.lifecycle.canRequestNew, true);
-    assert.match(
-      found.requestedCalibration.evidence.url,
-      /calibration\/evidence\?frame=[0-9a-f]{64}&calibration=archived$/,
-    );
-    assert.equal(found.requestedCalibration.evidence.frame, undefined);
     for (const requestKey of ["missing-request-key", "other-machine-key"]) {
       const missing = (await f.get(`?requestKey=${requestKey}`).expect(200))
         .body;

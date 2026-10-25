@@ -87,7 +87,7 @@ function fakeHub() {
 }
 
 const ready = existsSync(
-  join(process.cwd(), "node", ".venv", "bin", "fabrary-producer"),
+  join(process.cwd(), "node", ".venv", "bin", "fabyn-producer"),
 )
   ? false
   : "the node project environment is not installed";
@@ -107,18 +107,9 @@ test("hub states map to our node vocabulary", () => {
   const printed = hubStatus({
     job_id: "j",
     machine_id: "m",
-    state: "verifying",
-    verification: {
-      pass: null,
-      reason: "no camera frame; needs manual approval",
-    },
+    state: "done",
   });
   assert.equal(printed.execution_status, "completed");
-  assert.equal(
-    printed.completion_credible,
-    false,
-    "an unchecked print is never credible on its own",
-  );
   assert.equal(
     hubStatus({
       job_id: "j",
@@ -141,7 +132,7 @@ test(
     const hub = fakeHub();
     await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
     const address = hub.server.address() as { port: number };
-    const dir = mkdtempSync(join(tmpdir(), "fabrary-hub-"));
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-hub-"));
     const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
     const config: Config = {
       mode: "simulation",
@@ -250,7 +241,7 @@ test(
         [
           offer.params.width_mm,
           offer.params.sha256,
-          offer.params.fabrary_job_id,
+          offer.params.fabyn_job_id,
         ],
         [48, a.artifactSha256, a.child!.id],
       );
@@ -265,7 +256,7 @@ test(
         a.artifactSha256,
       );
 
-      // Printed but unchecked: the owner reviews it here.
+      // The machine report completes the job; handling stays separate.
       hub.report(offer, { state: "running", progress: 0.5 });
       await service.reconcile(a.child!.id);
       assert.equal(
@@ -273,23 +264,19 @@ test(
         "running",
       );
       hub.report(offer, {
-        state: "verifying",
+        state: "done",
         progress: 1,
-        verification: {
-          pass: null,
-          reason: "no camera frame; needs manual approval",
-        },
       });
       await service.reconcile(a.child!.id);
       const printed = (await service.read()).jobs[a.child!.id];
-      assert.equal(printed.productionState, "needs_review");
+      assert.equal(printed.productionState, "produced");
       assert.equal(
         printed.paymentState,
-        "held",
-        "nothing is released before the owner's check",
+        "released",
+        "machine completion releases the payment",
       );
 
-      // Until the owner checks it, a new order hears the printer is busy.
+      // Until handling clears it, a new order hears the printer is busy.
       const waiting = await orchestrator.createOrder(
         requester,
         { requestText: "I want a cat sticker" },
@@ -307,23 +294,16 @@ test(
       assert.equal(w.draft.stage, "unavailable");
       assert.match(w.draft.reason!, /finishing another order/);
 
-      // No camera on the producer side: the owner's own check approves the
-      // print, records handling and frees the printer in one step.
+      // Handling frees the printer independently of completion.
       const approve = (body: object) =>
-        owner.post(`/api/owner/jobs/${a.child!.id}/approve-print`).send(body);
+        owner.post(`/api/owner/jobs/${a.child!.id}/clear-print`).send(body);
       await approve({}).expect(422);
-      await approve({ checked: true }).expect(200);
+      await approve({ cleared: true }).expect(200);
       const approved = (await service.read()).jobs[a.child!.id];
       assert.equal(approved.productionState, "produced");
       assert.equal(approved.fulfillmentState, "ready_for_pickup");
-      assert.equal(approved.evidence.source, "owner_inspection");
-      assert.equal(approved.evidence.manual, true);
       assert.ok(
         ["release_pending", "released"].includes(approved.paymentState),
-      );
-      assert.deepEqual(
-        hub.approvals.map(({ machine_id, job_id }) => ({ machine_id, job_id })),
-        [{ machine_id: "m_sticker_live", job_id: offer.job_id }],
       );
       const freed = (await service.read()).machines.phomemo_01;
       assert.deepEqual(
@@ -331,23 +311,18 @@ test(
         [true, false, null],
       );
 
-      // With the camera check off, a finished print completes the order and
-      // frees the printer by itself, labeled as accepted without inspection.
-      config.autoAcceptHubPrints = true;
+      // Self-ejecting sticker output can be handled automatically.
+      config.autoPrepareHubPrints = true;
       const auto = await order("hub-order-auto");
       const autoJob = auto.plan!.assignments[0].child!.id;
       hub.report(hub.offers.at(-1), {
-        state: "verifying",
+        state: "done",
         progress: 1,
-        verification: { pass: null, reason: "no camera frame" },
       });
       await service.reconcile(autoJob);
       const accepted = (await service.read()).jobs[autoJob];
       assert.equal(accepted.productionState, "produced");
       assert.equal(accepted.fulfillmentState, "ready_for_pickup");
-      assert.equal(accepted.evidence.source, "accepted_unchecked");
-      assert.equal(accepted.evidence.manual, false);
-      assert.match(hub.approvals.at(-1).reason, /without inspection/);
       const free = (await service.read()).machines.phomemo_01;
       assert.deepEqual(
         [free.ready, free.paused, free.activeJobId],
@@ -355,7 +330,7 @@ test(
       );
 
       // A declined job is refunded and never retried by itself; failures
-      // still wait for the owner even with the camera check off.
+      // still wait for recovery.
       const second = await order("hub-order-2");
       const declined = hub.offers.at(-1);
       hub.report(declined, {
@@ -397,50 +372,6 @@ test(
   },
 );
 
-test("a printer check asks the hub to connect once and reads its answer", async () => {
-  const calls: { url: string; body: any }[] = [];
-  const hub = new ProducerHubNode("http://hub.test", {
-    fetch: (async (url: string, init: RequestInit) => {
-      const body = JSON.parse(String(init.body));
-      calls.push({ url, body });
-      if (body.machine_id === "m_gone")
-        return new Response("machine m_gone is offline", { status: 409 });
-      if (body.machine_id === "m_old_hub")
-        return new Response('{"detail":"Not Found"}', { status: 404 });
-      if (body.machine_id === "m_never")
-        return new Response('{"detail":"m_never never connected"}', {
-          status: 404,
-        });
-      return new Response(
-        JSON.stringify({
-          machine_id: body.machine_id,
-          ok: body.machine_id === "m_photo_01",
-          detail: body.machine_id === "m_photo_01" ? "answered" : "not found",
-        }),
-        { status: 200 },
-      );
-    }) as typeof fetch,
-  });
-  assert.deepEqual(await hub.check("m_photo_01"), {
-    ok: true,
-    detail: "answered",
-  });
-  assert.deepEqual(await hub.check("m_sticker_01"), {
-    ok: false,
-    detail: "not found",
-  });
-  assert.equal(calls[0].url, "http://hub.test/dev/check");
-  assert.deepEqual(calls[0].body, { machine_id: "m_photo_01" });
-  // The printer's program is offline or never connected: not answering.
-  assert.deepEqual(await hub.check("m_gone"), {
-    ok: false,
-    detail: "Its printer program is not running.",
-  });
-  assert.equal((await hub.check("m_never")).ok, false);
-  // A hub from before checks existed cannot tell, so it never blocks an order.
-  assert.equal((await hub.check("m_old_hub")).ok, true);
-});
-
 test(
   "a name tag goes to the A1 mini as a model to slice and waits for the owner to clear the plate",
   { skip: openscad, timeout: 120_000 },
@@ -448,7 +379,7 @@ test(
     const hub = fakeHub();
     await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
     const address = hub.server.address() as { port: number };
-    const dir = mkdtempSync(join(tmpdir(), "fabrary-nametag-"));
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-nametag-"));
     const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
     const config: Config = {
       mode: "simulation",
@@ -462,7 +393,7 @@ test(
       dataDir: dir,
       nodeUrl: "http://127.0.0.1:9",
       allowedModes: ["hardware"],
-      autoAcceptHubPrints: true,
+      autoPrepareHubPrints: true,
     };
     const service = new Service(
       store,
@@ -536,18 +467,17 @@ test(
         .expect(200);
       assert.equal(model.body.subarray(0, 4).toString("latin1"), "PK\x03\x04");
 
-      // Even with unchecked prints accepted, a 3D print waits for the owner,
-      // whose approval also tells the printer its plate is clear.
-      hub.report(offer, { state: "verifying", progress: 1, verification: null });
+      // A 3D job completes from the machine report, then waits for plate clearance.
+      hub.report(offer, { state: "done", progress: 1 });
       await service.reconcile(a.child!.id);
       assert.equal(
         (await service.read()).jobs[a.child!.id].productionState,
-        "needs_review",
+        "produced",
       );
       assert.deepEqual(hub.plateCleared, []);
       await owner
-        .post(`/api/owner/jobs/${a.child!.id}/approve-print`)
-        .send({ checked: true })
+        .post(`/api/owner/jobs/${a.child!.id}/clear-print`)
+        .send({ cleared: true })
         .expect(200);
       assert.equal(
         (await service.read()).jobs[a.child!.id].fulfillmentState,
@@ -579,3 +509,47 @@ test(
     }
   },
 );
+
+test("a printer check asks the hub to connect once and reads its answer", async () => {
+  const calls: { url: string; body: any }[] = [];
+  const hub = new ProducerHubNode("http://hub.test", {
+    fetch: (async (url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      calls.push({ url, body });
+      if (body.machine_id === "m_gone")
+        return new Response("machine m_gone is offline", { status: 409 });
+      if (body.machine_id === "m_old_hub")
+        return new Response('{"detail":"Not Found"}', { status: 404 });
+      if (body.machine_id === "m_never")
+        return new Response('{"detail":"m_never never connected"}', {
+          status: 404,
+        });
+      return new Response(
+        JSON.stringify({
+          machine_id: body.machine_id,
+          ok: body.machine_id === "m_photo_01",
+          detail: body.machine_id === "m_photo_01" ? "answered" : "not found",
+        }),
+        { status: 200 },
+      );
+    }) as typeof fetch,
+  });
+  assert.deepEqual(await hub.check("m_photo_01"), {
+    ok: true,
+    detail: "answered",
+  });
+  assert.deepEqual(await hub.check("m_sticker_01"), {
+    ok: false,
+    detail: "not found",
+  });
+  assert.equal(calls[0].url, "http://hub.test/dev/check");
+  assert.deepEqual(calls[0].body, { machine_id: "m_photo_01" });
+  // The printer's program is offline or never connected: not answering.
+  assert.deepEqual(await hub.check("m_gone"), {
+    ok: false,
+    detail: "Its printer program is not running.",
+  });
+  assert.equal((await hub.check("m_never")).ok, false);
+  // A hub from before checks existed cannot tell, so it never blocks an order.
+  assert.equal((await hub.check("m_old_hub")).ok, true);
+});

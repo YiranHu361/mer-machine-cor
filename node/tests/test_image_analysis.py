@@ -6,7 +6,7 @@ import sys
 from PIL import Image, ImageDraw
 import pytest
 
-from fabrary_node.image_analysis import analyze_paths
+from fabyn_node.image_analysis import analyze_paths
 
 
 def graphic(path, *, transparent=False):
@@ -76,7 +76,7 @@ def test_mixed_artwork_keeps_per_image_evidence_and_aggregate_uncertainty(tmp_pa
 
 def test_actual_cli_outputs_only_limited_statistics_and_no_private_path(tmp_path):
     path = graphic(tmp_path / "private-owner-artwork.png")
-    reply = subprocess.run([sys.executable, "-m", "fabrary_node.image_analysis", "--", str(path)], capture_output=True, text=True, timeout=10)
+    reply = subprocess.run([sys.executable, "-m", "fabyn_node.image_analysis", "--", str(path)], capture_output=True, text=True, timeout=10)
     assert reply.returncode == 0 and reply.stderr == ""
     assert json.loads(reply.stdout) == analyze_paths([path])
     assert str(path) not in reply.stdout
@@ -85,7 +85,7 @@ def test_actual_cli_outputs_only_limited_statistics_and_no_private_path(tmp_path
 def test_actual_cli_decoder_failure_is_generic_without_private_path_or_trace(tmp_path):
     path = tmp_path / "private-sensitive-owner-name.png"
     path.write_bytes(b"not an image")
-    reply = subprocess.run([sys.executable, "-m", "fabrary_node.image_analysis", "--", str(path)], capture_output=True, text=True, timeout=10)
+    reply = subprocess.run([sys.executable, "-m", "fabyn_node.image_analysis", "--", str(path)], capture_output=True, text=True, timeout=10)
     assert reply.returncode == 1 and reply.stderr == ""
     assert json.loads(reply.stdout)["error"]["code"] == "IMAGE_ANALYSIS_UNAVAILABLE"
     assert str(path) not in reply.stdout and "Traceback" not in reply.stdout
