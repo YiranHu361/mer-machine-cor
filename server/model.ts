@@ -240,7 +240,7 @@ export interface Job {
   requesterAddress?: string;
   /** Fixed when the job is authorized; legacy jobs use the configured mode. */
   executionMode?: "simulation" | "hardware";
-  /** false for estimate-only simulated children, which never collect or release funds. */
+  /** false for estimate-only simulated children (mock mode), which never collect or release funds. */
   chargeable?: boolean;
   orderId?: string;
   assignmentId?: string;

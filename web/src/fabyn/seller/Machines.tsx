@@ -2,16 +2,17 @@
 // orders on it. Every control is shown only when the server allows it now.
 import { useState } from "react";
 import { api } from "../../api";
+import { checkPrinter, checkedAgo } from "./printers";
 import { MachineViewport } from "./MachineViewport";
 import { JobActions, type Act } from "./JobActions";
 import { estimateJob, formatEta, type JobEstimate } from "./estimate";
-import { finished, intakeOf, jobStateLabel, jobTitle, machineStatus, MACHINE_LABEL, needsHandling, needsMaker, onLine, stopReason, waitingPickup, type MachineKey } from "./status";
-import type { Connector, OwnerJob, OwnerMachine } from "./data";
+import { finished, intakeOf, jobStateLabel, jobTitle, machineStatus, MACHINE_LABEL, needsHandling, needsMaker, onLine, stopReason, supplyOf, viaAgent, waitingPickup, type MachineKey } from "./status";
+import type { Connector, OwnerJob, OwnerMachine, PrinterCheck, PrinterStatusRow } from "./data";
 
-const MODE_LABEL = { simulation: "demo machine", hardware: "connected machine" } as const;
+const MODE_LABEL = { simulation: "runs on the workshop node", hardware: "connected printer" } as const;
 const ORDER_PRIORITY = (j: OwnerJob) => (["dispatched", "running", "verifying"].includes(j.productionState) ? 0 : needsMaker(j) ? 1 : 2);
 
-export function Machines({ machines, jobs, connectors, busy, act, now }: { machines: OwnerMachine[]; jobs: OwnerJob[]; connectors: Connector[]; busy: string; act: Act; now: number }) {
+export function Machines({ machines, jobs, connectors, printers = [], busy, act, now }: { machines: OwnerMachine[]; jobs: OwnerJob[]; connectors: Connector[]; printers?: PrinterStatusRow[]; busy: string; act: Act; now: number }) {
   if (machines.length === 0)
     return (
       <div className="sl-panel">
@@ -22,13 +23,13 @@ export function Machines({ machines, jobs, connectors, busy, act, now }: { machi
   return (
     <div className="sl-machines">
       {machines.map((m) => (
-        <MachineCard key={m.id} machine={m} jobs={jobs} connector={connectors.find((c) => c.machineId === m.id)} busy={busy} act={act} now={now} />
+        <MachineCard key={m.id} machine={m} jobs={jobs} connector={connectors.find((c) => c.machineId === m.id)} printer={printers.find((p) => p.id === m.id)} busy={busy} act={act} now={now} />
       ))}
     </div>
   );
 }
 
-function MachineCard({ machine: m, jobs, connector, busy, act, now }: { machine: OwnerMachine; jobs: OwnerJob[]; connector?: Connector; busy: string; act: Act; now: number }) {
+function MachineCard({ machine: m, jobs, connector, printer, busy, act, now }: { machine: OwnerMachine; jobs: OwnerJob[]; connector?: Connector; printer?: PrinterStatusRow; busy: string; act: Act; now: number }) {
   const status = machineStatus(m, connector, jobs);
   const mine = jobs.filter((j) => j.machineId === m.id);
   const line = mine.filter(onLine).sort((a, b) => ORDER_PRIORITY(a) - ORDER_PRIORITY(b) || a.createdAt.localeCompare(b.createdAt));
@@ -60,9 +61,10 @@ function MachineCard({ machine: m, jobs, connector, busy, act, now }: { machine:
         </header>
         <p className="sl-fine">
           {m.model} · {modeLabel}
-          {m.producerHub ? " · via the producer side’s hub" : ""} · {m.mediaRemaining} media left
+          {m.producerHub ? " · through the producer hub" : ""} · {m.mediaRemaining} {supplyOf(m).unit}
         </p>
         <p className="sl-note">{status.note}</p>
+        <PrinterCheckRow machine={m} printer={printer} now={now} />
         <MachineControls machine={m} busy={busy} act={act} />
         <section className="sl-queue" aria-label={`Queue on ${m.name}`}>
           <h4 className="sl-h4">
@@ -176,13 +178,44 @@ function MachineControls({ machine: m, busy, act }: { machine: OwnerMachine; bus
           </div>
         </div>
       )}
-      {m.mediaRemaining < 30 && (
+      {m.mediaRemaining < 20 && (
         <div className="sl-actions">
-          <button className="sl-btn ghost" type="button" disabled={Boolean(busy)} onClick={() => void patch("media", { mediaRemaining: 100 }, "Media topped up to 100.")}>
-            {busyHere("media") ? "Saving…" : "Top up media to 100"}
+          <button className="sl-btn ghost" type="button" disabled={Boolean(busy)} onClick={() => void patch("media", { mediaRemaining: supplyOf(m).capacity }, `${supplyOf(m).refill} done.`)}>
+            {busyHere("media") ? "Saving…" : `${supplyOf(m).refill} · ${supplyOf(m).capacity}`}
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Asks the machine to answer once (printing nothing) and shows what it said. */
+function PrinterCheckRow({ machine: m, printer, now }: { machine: OwnerMachine; printer?: PrinterStatusRow; now: number }) {
+  const [state, setState] = useState<{ checking: boolean; result: PrinterCheck | null; error: string }>({ checking: false, result: null, error: "" });
+  const latest: PrinterCheck | null =
+    state.result ?? (printer ? { ok: printer.status === "connected" || printer.status === "busy", detail: printer.detail, checkedAt: printer.checkedAt } : null);
+  const run = async () => {
+    setState((s) => ({ ...s, checking: true, error: "" }));
+    try {
+      const result = await checkPrinter(m);
+      setState({ checking: false, result, error: "" });
+    } catch (error) {
+      setState({ checking: false, result: null, error: error instanceof Error ? error.message : "The check did not go through. Try again." });
+    }
+  };
+  return (
+    <div className="sl-check-row" aria-live="polite">
+      <button className="sl-btn ghost sl-btn-sm" type="button" disabled={state.checking} onClick={() => void run()}>
+        {state.checking ? "Checking…" : "Check printer"}
+      </button>
+      {latest && !state.checking && (
+        <span className={`sl-check-result ${latest.ok ? "ok" : "bad"}`}>
+          <i aria-hidden="true" />
+          {latest.ok ? "Answered" : "No answer"} · {checkedAgo(latest.checkedAt, now)}
+          {latest.detail ? <em> · {latest.detail}</em> : null}
+        </span>
+      )}
+      {state.error && <span className="sl-check-result bad">{state.error}</span>}
     </div>
   );
 }
@@ -209,6 +242,7 @@ function JobRow({ job, est, machine, allJobs, busy, act, now }: { job: OwnerJob;
           <span className="from" title={intake.detail}>
             from · {intake.label}
           </span>
+          {viaAgent(job) && <span className="agent">via ASI:One</span>}
           {job.orderId && (
             <span>
               order {job.orderId.slice(-6)}

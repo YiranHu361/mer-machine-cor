@@ -189,7 +189,7 @@ export default function Home() {
             <br />
             <b data-shipped>1,284</b> things shipped
             <br />
-            demo payment
+            x402 test payments
           </div>
         </nav>
         <div className="hm-scenes" aria-hidden="true">

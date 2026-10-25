@@ -57,6 +57,8 @@ export interface Config {
   catalog?: any[];
   /** Execution modes this deployment may authorize; defaults to [mode]. */
   allowedModes?: ("simulation" | "hardware")[];
+  /** Testnet only: true charges simulated machines like hardware (FABYN_CHARGE_SIMULATED=1). */
+  chargeSimulated?: boolean;
   /** Automatically handle finished, self-ejecting hub prints. */
   autoPrepareHubPrints?: boolean;
 }

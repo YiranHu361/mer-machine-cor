@@ -34,9 +34,13 @@ export function finished(job: OwnerJob): boolean {
   return job.productionState === "cancelled" || recovered(job) || job.fulfillmentState === "collected" || job.fulfillmentState === "simulation_complete";
 }
 
-/** Server wording is for operators; keep the demo's own words on screen. */
+/** Server wording is for operators; machines that run on the local node are just "local" on screen. */
 export function plain(text: string): string {
-  return text.replace(/\bsimulated\b/gi, "demo").replace(/\bsimulation\b/gi, "demo");
+  return text
+    .replace(/\bSimulated\b/g, "Local")
+    .replace(/\bsimulated\b/gi, "local")
+    .replace(/\bsimulation\b/gi, "local run")
+    .replace(/\bdemo\b/gi, "local");
 }
 
 /** Why a job stopped, in the maker's words, from the job's own history. */
@@ -62,9 +66,16 @@ export function machineStatus(m: OwnerMachine, connector: Connector | undefined,
   if (mine.some(needsMaker)) return { key: "attention", note: "A job on this machine is waiting for you." };
   if (!m.calibrated) return { key: "attention", note: "Calibration is needed before orders can run." };
   if (m.activeJobId) return { key: "printing", note: "Working on the order below." };
+  if (m.paused && /plate_not_cleared|build plate/i.test(m.reason))
+    return { key: "paused", note: "Paused with the last print on the build plate. Take it off, then resume to clear the plate and take the next order." };
   if (m.paused) return { key: "paused", note: /resume/i.test(m.reason) ? "Done with the last job. Resume it to take the next order." : plain(m.reason) };
   if (!m.listed) return { key: "unlisted", note: "Hidden from new orders until you list it." };
   return { key: "available", note: "Ready for the next order." };
+}
+
+/** Placed through the Fabyn agent in an ASI:One chat rather than on the fabyn site. */
+export function viaAgent(job: OwnerJob): boolean {
+  return job.source === "asi1";
 }
 
 export function intakeOf(job: OwnerJob): { label: string; detail: string } {
@@ -75,7 +86,7 @@ export function intakeOf(job: OwnerJob): { label: string; detail: string } {
     return { label: "their own photo", detail: "Started from a photo the customer uploaded." };
   if (/drawn from the request/i.test(intent))
     return { label: "design picked", detail: "The customer chose this design from previews." };
-  return { label: "custom order", detail: "Placed by a customer on fabyn." };
+  return { label: "custom order", detail: viaAgent(job) ? "Placed in a chat with the Fabyn agent on ASI:One." : "Placed by a customer on fabyn." };
 }
 
 export function jobTitle(job: OwnerJob): string {
@@ -86,14 +97,22 @@ export function jobStateLabel(job: OwnerJob): { text: string; tone: "amber" | "g
   if (job.productionState === "needs_review") return { text: "Needs your review", tone: "amber" };
   if (recovered(job)) return { text: "Stopped · machine cleared", tone: "neutral" };
   if (job.productionState === "failed") return { text: "Didn’t pass · clear the machine", tone: "red" };
-  if (needsHandling(job)) return { text: "Made · prepare for pickup", tone: "amber" };
+  if (needsHandling(job)) return { text: "Made · take it off and hand over", tone: "amber" };
   if (waitingPickup(job)) return { text: "Ready for pickup", tone: "blue" };
   if (job.fulfillmentState === "collected") return { text: "Collected", tone: "green" };
-  if (job.fulfillmentState === "simulation_complete") return { text: "Made · handed off", tone: "green" };
+  if (job.fulfillmentState === "simulation_complete") return { text: "Made · off the machine", tone: "green" };
+  if (job.productionState === "produced" && job.fulfillmentState === "awaiting_owner") return { text: "Made · take it off and hand over", tone: "amber" };
   if (job.productionState === "produced") return { text: "Made", tone: "green" };
   if (job.productionState === "cancelled") return { text: "Cancelled", tone: "neutral" };
   if (job.productionState === "verifying") return { text: "Checking the result", tone: "blue" };
   if (["dispatched", "running"].includes(job.productionState)) return { text: "Printing", tone: "blue" };
   if (job.paymentState === "unpaid" && job.chargeable !== false) return { text: "Waiting for payment", tone: "neutral" };
   return { text: "Queued for this machine", tone: "neutral" };
+}
+
+/** What a machine uses up, so supplies read in the machine's own units. */
+export function supplyOf(m: Pick<OwnerMachine, "model" | "outputType" | "material">): { noun: string; unit: string; refill: string; capacity: number } {
+  if (m.outputType === "3d" || /a1|bambu/i.test(m.model)) return { noun: "PLA filament", unit: "prints left on the spool", refill: "Load a new spool", capacity: 100 };
+  if (m.outputType === "instax" || /instax/i.test(m.model)) return { noun: "instax mini film", unit: "shots left", refill: "Load new film packs", capacity: 100 };
+  return { noun: "label paper", unit: "labels left on the roll", refill: "Load a new roll", capacity: 100 };
 }

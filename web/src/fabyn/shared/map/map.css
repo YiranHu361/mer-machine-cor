@@ -1,0 +1,156 @@
+/* fabyn map: dark flat city, one orange. Classes are prefixed fm-. */
+.fm-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  background: #090c10;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--f-mono), monospace;
+  user-select: none;
+}
+.fm-water {
+  fill: #090c10;
+}
+.fm-land {
+  fill: #19191c;
+  stroke: #3a3a40;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+.fm-park {
+  fill: #1c201d;
+  stroke: #262b27;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.fm-street {
+  fill: none;
+  stroke: #2c2c32;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fm-hood {
+  fill: #55554f;
+  text-transform: lowercase;
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.fm-route {
+  fill: none;
+  stroke: #6a6a6e;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fm-route-done {
+  fill: none;
+  stroke: var(--acc);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fm-pin .fm-dot {
+  fill: #6e6e6a;
+  stroke: #0b0b0c;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.fm-pin.is-busy .fm-dot {
+  fill: #8e8e8a;
+}
+.fm-pin.is-far .fm-dot {
+  fill: #4e4e4b;
+}
+.fm-pin.is-type .fm-dot {
+  fill: #0b0b0c;
+  stroke: #5a5a56;
+  stroke-width: 1.5;
+}
+.fm-pin.is-offline .fm-dot circle {
+  fill: #1a1a1c;
+  stroke: #4a4a47;
+  stroke-width: 1.5;
+}
+.fm-pin.is-offline .fm-dot path {
+  stroke: #6a6a66;
+  stroke-width: 1.6;
+}
+.fm-pin.is-place .fm-dot {
+  fill: #f0f0ec;
+}
+.fm-pin.is-match .fm-dot,
+.fm-pin.is-courier .fm-dot {
+  fill: var(--acc);
+  stroke: #0b0b0c;
+}
+.fm-pin.is-home .fm-dot {
+  fill: none;
+  stroke: #f0f0ec;
+  stroke-width: 2;
+}
+.fm-pin.is-home .fm-core {
+  fill: #f0f0ec;
+}
+.fm-pulse {
+  fill: var(--acc);
+  opacity: 0.18;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fm-pulse 1.8s ease-out infinite;
+}
+.fm-pin.is-place.is-selected .fm-pulse,
+.fm-pin.is-home .fm-pulse {
+  fill: #f0f0ec;
+}
+@keyframes fm-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.32;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+.fm-hit {
+  fill: transparent;
+}
+.fm-pin.is-interactive {
+  cursor: pointer;
+}
+.fm-pin.is-interactive:hover .fm-dot,
+.fm-pin.is-interactive:focus-visible .fm-dot {
+  stroke: #f0f0ec;
+}
+.fm-pin:focus {
+  outline: none;
+}
+.fm-pin.is-interactive:focus-visible .fm-hit {
+  stroke: var(--acc);
+  stroke-width: 1.5;
+}
+.fm-label-main {
+  fill: #f0f0ec;
+  paint-order: stroke;
+  stroke: #0b0b0c;
+  stroke-linejoin: round;
+}
+.fm-label-sub {
+  fill: #9a9a95;
+  paint-order: stroke;
+  stroke: #0b0b0c;
+  stroke-linejoin: round;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fm-pulse {
+    animation: none;
+    opacity: 0.2;
+  }
+}
+.fm-pin circle,
+.fm-pin path {
+  vector-effect: non-scaling-stroke;
+}

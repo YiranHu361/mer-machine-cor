@@ -135,7 +135,7 @@ export function AddMachine({ dash, act, busy }: { dash: Dashboard; act: (key: st
             <label>
               <input type="radio" name="sl-mode" checked={mode === "simulation"} onChange={() => setMode("simulation")} />
               <span>
-                Demo machine <small>no hardware needed</small>
+                On this computer <small>no hardware needed; the workshop node runs it</small>
               </span>
             </label>
             <label>

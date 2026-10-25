@@ -12,7 +12,8 @@ import type { MachineKind } from "./model";
    sweep that reveals the item; progress comes from the caller (estimate.ts). */
 
 export type StageItem =
-  | { kind: "keychain"; text: string }
+  /** sizeMm: the prepared model's real size [width, height, thickness]; text keeps its case */
+  | { kind: "keychain"; text: string; sizeMm?: number[] }
   | { kind: "sticker"; imageUrl?: string; text?: string }
   | { kind: "photo"; imageUrl?: string; text?: string };
 
@@ -72,7 +73,7 @@ function canvasTexture(draw: (g: CanvasRenderingContext2D, w: number, h: number)
   return t;
 }
 
-function textTexture(text: string, bg: string, fg: string, w = 512, h = 512) {
+function textTexture(text: string, bg: string, fg: string, w = 512, h = 512, upper = true) {
   return canvasTexture(
     (g) => {
       g.fillStyle = bg;
@@ -81,7 +82,7 @@ function textTexture(text: string, bg: string, fg: string, w = 512, h = 512) {
       g.textAlign = "center";
       g.textBaseline = "middle";
       let size = Math.floor(h * 0.5);
-      const label = (text || "").toUpperCase().slice(0, 24);
+      const label = (upper ? (text || "").toUpperCase() : text || "").slice(0, 24);
       do {
         g.font = `600 ${size}px Archivo, Helvetica, Arial, sans-serif`;
         size -= 4;
@@ -132,7 +133,8 @@ function buildItem(item: StageItem, withToolpath: boolean, onTexture: () => void
   let depth = 0.05;
   let top = 0.001;
   if (item.kind === "keychain") {
-    const w = 0.074, h = 0.026, r = 0.006;
+    const [wm, hm, tm] = item.sizeMm?.length === 3 && item.sizeMm.every((n) => n > 0 && n < 300) ? item.sizeMm : [74, 26, 3];
+    const w = wm / 1000, h = hm / 1000, t = tm / 1000, r = Math.min(0.006, h / 4);
     const s = new THREE.Shape();
     s.moveTo(-w / 2 + r, -h / 2);
     s.lineTo(w / 2 - r, -h / 2);
@@ -144,22 +146,25 @@ function buildItem(item: StageItem, withToolpath: boolean, onTexture: () => void
     s.lineTo(-w / 2, -h / 2 + r);
     s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
     const hole = new THREE.Path();
-    hole.absarc(-0.029, 0, 0.0035, 0, Math.PI * 2, true);
+    hole.absarc(-w / 2 + Math.max(0.0055, h * 0.3), 0, Math.min(0.0035, h * 0.18), 0, Math.PI * 2, true);
     s.holes.push(hole);
-    const g = new THREE.ExtrudeGeometry(s, { depth: 0.003, bevelEnabled: false }).rotateX(-Math.PI / 2);
+    const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }).rotateX(-Math.PI / 2);
     geos.push(g);
     const body = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: "#FF5B1F", roughness: 0.4, metalness: 0, envMapIntensity: 0.6 }));
     mats.push(body.material as THREE.Material);
     group.add(body);
-    const txt = textTexture(item.text, "rgba(0,0,0,0)", "#0b0b0c", 1024, 360);
+    const txt = textTexture(item.text, "rgba(0,0,0,0)", "#0b0b0c", 1024, 360, false);
     txt.anisotropy = 4;
-    const label = plane(w * 0.86, h * 0.62, new THREE.MeshStandardMaterial({ map: txt, transparent: true, alphaTest: 0.04, roughness: 0.6 }));
-    label.position.y = 0.0032;
+    // the text sits right of the keyring hole
+    const holeRoom = Math.max(0.0055, h * 0.3) + Math.min(0.0035, h * 0.18);
+    const label = plane((w - holeRoom * 1.6) * 0.92, h * 0.62, new THREE.MeshStandardMaterial({ map: txt, transparent: true, alphaTest: 0.04, roughness: 0.6 }));
+    label.position.x = holeRoom * 0.8;
+    label.position.y = t + 0.0002;
     group.add(label);
     texs.push(txt);
     width = w;
     depth = h;
-    top = 0.0032;
+    top = t + 0.0002;
   } else if (item.kind === "sticker") {
     const size = 0.048;
     const frame = plane(size * 1.07, size * 1.07, new THREE.MeshStandardMaterial({ color: "#f4f4f0", roughness: 0.8 }));
@@ -223,7 +228,12 @@ export function Stage3D({
   const live = useRef({ progress, loop, focus, parked, dirty: true, visible: true });
   const [failed, setFailed] = useState(false);
   const itemKey = item
-    ? [item.kind, "text" in item ? item.text ?? "" : "", "imageUrl" in item ? item.imageUrl ?? "" : ""].join("|")
+    ? [
+        item.kind,
+        "text" in item ? item.text ?? "" : "",
+        "imageUrl" in item ? item.imageUrl ?? "" : "",
+        "sizeMm" in item ? (item.sizeMm ?? []).join("x") : "",
+      ].join("|")
     : "none";
 
   useEffect(() => {

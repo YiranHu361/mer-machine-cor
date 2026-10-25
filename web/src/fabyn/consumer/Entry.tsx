@@ -12,17 +12,13 @@ const MAX_PHOTOS = 4;
 const MAX_BYTES = 12 * 1024 * 1024;
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
 
-/** Keychain text the printer accepts: up to 10 capitals, digits or simple marks. */
+/** Keychain text the printer accepts (Lucas's name-tag rule): up to 16 letters,
+   digits, spaces or simple marks, with at least one letter or digit. Case is kept. */
+const NAME_CHARS = /[^A-Za-z0-9À-ÖØ-öø-ÿ .,'&!?+-]/g;
+export const NAME_RULE = /^[A-Za-z0-9À-ÖØ-öø-ÿ .,'&!?+-]{1,16}$/;
 export function keychainName(raw: string) {
-  return raw
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 10)
-    .trim();
+  const clean = raw.replace(NAME_CHARS, "").replace(/\s+/g, " ").trim().slice(0, 16).trim();
+  return NAME_RULE.test(clean) && /[A-Za-z0-9À-ÖØ-öø-ÿ]/.test(clean) ? clean : "";
 }
 
 export function Entry({
@@ -78,7 +74,7 @@ export function Entry({
       let photoAssetIds: string[] = [];
       if (mode === "describe") requestText = text.trim();
       if (mode === "name") {
-        requestText = `a keychain that says "${cleanName}"`;
+        requestText = `A keychain that says "${cleanName}"`;
       }
       if (mode === "photos") {
         requestText = text.trim();
@@ -107,7 +103,7 @@ export function Entry({
 
   const placeholder =
     mode === "describe"
-      ? "type anything you want made"
+      ? "a sticker of a cat, a name keychain…"
       : mode === "name"
         ? "your name"
         : "add a note (optional)";
@@ -123,9 +119,9 @@ export function Entry({
 
   return (
     <section className="cs-entry" aria-labelledby="cs-entry-title">
-      <p className="cs-kicker">start an order · {PLACE_SHORT.toLowerCase()}</p>
+      <p className="cs-kicker">start an order · san francisco</p>
       <h1 id="cs-entry-title" className="cs-title">
-        make something nearby
+        Tell us what you want to build today
       </h1>
       <form
         className="cs-box"
@@ -143,14 +139,14 @@ export function Entry({
           value={mode === "name" ? name : text}
           onChange={(e) => (mode === "name" ? setName(e.target.value) : setText(e.target.value))}
           placeholder={placeholder}
-          maxLength={mode === "name" ? 24 : 2000}
+          maxLength={mode === "name" ? 16 : 2000}
           autoComplete={mode === "name" ? "given-name" : "off"}
           disabled={!!busy}
           aria-describedby="cs-entry-hint"
         />
         {mode === "name" && (
           <p id="cs-entry-hint" className="cs-hint">
-            Up to 10 letters, printed on the keychain as <b>{cleanName || "YOUR NAME"}</b>.
+            Up to 16 letters, printed on the keychain exactly as <b>{cleanName || "Your name"}</b>.
           </p>
         )}
         {mode === "photos" && (
@@ -211,7 +207,7 @@ export function Entry({
         >
           <span className="cs-path-n">1</span>
           <span>
-            don&apos;t know? <b>use your name</b>
+            not sure? <b>use your name</b>
           </span>
           <em>suggested</em>
         </button>
@@ -226,7 +222,7 @@ export function Entry({
         >
           <span className="cs-path-n">2</span>
           <span>
-            <b>print your own</b> photo
+            <b>print your own photo</b>
           </span>
         </button>
         <button
@@ -240,7 +236,7 @@ export function Entry({
         >
           <span className="cs-path-n">3</span>
           <span>
-            <b>describe it</b> and pick a design
+            <b>describe it</b>, pick a design
           </span>
         </button>
       </div>
@@ -250,7 +246,7 @@ export function Entry({
         </p>
       )}
       <p className="cs-fine">
-        Made at {PLACE_SHORT} by spare machines nearby. Demo payment: no funds move.
+        Made on a spare machine near you, at the {PLACE_SHORT}. Nothing is ordered until you confirm.
       </p>
     </section>
   );

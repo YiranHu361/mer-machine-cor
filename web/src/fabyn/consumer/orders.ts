@@ -111,6 +111,7 @@ export const REFRESH_CODES = new Set([
   "STALE_SUGGESTION",
   "PREPARATION_CHANGED",
   "PREPARATION_MISMATCH",
+  "PAYMENT_MODE_CHANGED",
 ]);
 
 /** Text that came from the producer or the server internals, never for the judge to read. */

@@ -12,31 +12,13 @@ const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `k-${Date.now()}
 export function JobActions({ job, machine, busy, act, now }: { job: OwnerJob; machine?: OwnerMachine; busy: string; act: Act; now: number }) {
   const recovered = job.history?.some((e) => e.event === "owner_recovery");
   const running = ["dispatched", "running", "verifying"].includes(job.productionState);
-  const id = job.id;
-  const hubCheck = Boolean(machine?.producerHub && job.productionState === "needs_review" && job.attemptId);
+  // Printers on the producer side's hub finish from the machine's own report;
+  // the owner only confirms the finished piece is off the printer.
+  const onHub = Boolean(machine?.producerHub);
   return (
     <div className="sl-job-actions">
-      {needsHandling(job) && <HandlingForm job={job} busy={busy} act={act} />}
-      {hubCheck && (
-        <div className="sl-approve">
-          <p className="sl-fine">This printer has no camera yet, so you are the check. Look at the print, take it off the printer, then approve it.</p>
-          <button
-            className="sl-btn solid"
-            type="button"
-            disabled={Boolean(busy)}
-            onClick={() => void act(`${id}-approve-print`, () => api(`/owner/jobs/${id}/approve-print`, { checked: true }), "Approved. The printer is free for the next order.")}
-          >
-            {busy === `${id}-approve-print` ? "Approving…" : "Printed fine · approve and free the printer"}
-          </button>
-        </div>
-      )}
-      {job.productionState === "needs_review" && !hubCheck && <ReviewForm job={job} busy={busy} act={act} />}
-      {hubCheck && (
-        <details className="sl-more">
-          <summary>Not right? Record a different decision</summary>
-          <ReviewForm job={job} busy={busy} act={act} />
-        </details>
-      )}
+      {needsHandling(job) && (onHub ? <ClearPlateForm job={job} busy={busy} act={act} /> : <HandlingForm job={job} busy={busy} act={act} />)}
+      {job.productionState === "needs_review" && <ReviewForm job={job} busy={busy} act={act} />}
       {job.productionState === "failed" && !recovered && <ClearForm job={job} busy={busy} act={act} />}
       {waitingPickup(job) && !job.pickup?.redeemedAt && <PickupForm job={job} busy={busy} act={act} now={now} />}
       {running && job.attemptId && <StopButton job={job} busy={busy} act={act} />}
@@ -44,11 +26,47 @@ export function JobActions({ job, machine, busy, act, now }: { job: OwnerJob; ma
   );
 }
 
+function ClearPlateForm({ job, busy, act }: { job: OwnerJob; busy: string; act: Act }) {
+  const [done, setDone] = useState(false);
+  const plate = job.spec.outputType === "3d";
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!done) return;
+    const ok = await act(
+      `${job.id}-clear-print`,
+      () => api(`/owner/jobs/${job.id}/clear-print`, { cleared: true }),
+      plate ? "Printed fine. The plate is clear and the printer takes the next order." : "Taken off. The printer takes the next order.",
+    );
+    if (ok) setDone(false);
+  };
+  return (
+    <form className="sl-review" onSubmit={submit}>
+      <h5>{plate ? "Take the print off the plate" : "Take the print off the printer"}</h5>
+      <p className="sl-fine">
+        {plate
+          ? "The printer reported it finished. A 3D print stays on the build plate until you take it off, so the next order waits for you."
+          : "The printer reported it finished. Take the piece off so the next order can start."}
+      </p>
+      <label className="sl-check">
+        <input type="checkbox" checked={done} disabled={Boolean(busy)} onChange={(e) => setDone(e.target.checked)} />
+        <span>{plate ? "I took the print off and the build plate is clear." : "I took the print off the printer."}</span>
+      </label>
+      <div className="sl-actions">
+        <button className="sl-btn solid" type="submit" disabled={!done || Boolean(busy)}>
+          {busy === `${job.id}-clear-print` ? "Saving…" : "Printed fine · approve and free the printer"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function HandlingForm({ job, busy, act }: { job: OwnerJob; busy: string; act: Act }) {
   const [done, setDone] = useState(false);
   const [resume, setResume] = useState(true);
-  // Demo jobs have nothing to collect, so the server issues no pickup code for them.
+  // Orders taken without a charge have nothing to collect, so the server issues no pickup code for them.
   const demo = job.chargeable === false;
+  // A 3D print stays on the build plate; resuming tells the printer the plate is clear.
+  const plate = job.spec.outputType === "3d";
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!done) return;
@@ -69,10 +87,11 @@ function HandlingForm({ job, busy, act }: { job: OwnerJob; busy: string; act: Ac
   };
   return (
     <form className="sl-review" onSubmit={submit}>
-      <h5>{demo ? "Take it off and hand it over" : "Prepare this item for collection"}</h5>
+      <h5>{plate ? "Take the print off the plate" : demo ? "Take it off and hand it over" : "Prepare this item for collection"}</h5>
+      {plate && <p className="sl-fine">The printer finished and waits with the print on the build plate. The next order starts once you clear it.</p>}
       <label className="sl-check">
         <input type="checkbox" checked={done} disabled={Boolean(busy)} onChange={(e) => setDone(e.target.checked)} />
-        <span>I removed and labeled the item, stored it safely, and cleared the machine.</span>
+        <span>{plate ? "I took the print off, labeled and stored it, and the build plate is clear." : "I removed and labeled the item, stored it safely, and cleared the machine."}</span>
       </label>
       <label className="sl-check">
         <input type="checkbox" checked={resume} disabled={Boolean(busy)} onChange={(e) => setResume(e.target.checked)} />
@@ -80,7 +99,7 @@ function HandlingForm({ job, busy, act }: { job: OwnerJob; busy: string; act: Ac
       </label>
       <div className="sl-actions">
         <button className="sl-btn solid" type="submit" disabled={!done || Boolean(busy)}>
-          {busy === `${job.id}-prepare` ? "Saving…" : demo ? "Done · hand it over" : "Mark ready for pickup"}
+          {busy === `${job.id}-prepare` ? "Saving…" : plate && resume ? "Printed fine · approve and free the printer" : demo ? "Done · hand it over" : "Mark ready for pickup"}
         </button>
       </div>
     </form>

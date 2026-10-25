@@ -1713,7 +1713,7 @@ export class Orchestrator {
       machineSource: source,
       machineName: machine.name ?? machine.displayName ?? machine.id,
       executionMode: mode,
-      chargeable: mode === "hardware",
+      chargeable: this.chargeable(mode, source),
       quantity,
       preparationId: receipt.id,
       artifactSha256: receipt.artifact?.sha256 ?? null,
@@ -1726,6 +1726,21 @@ export class Orchestrator {
       },
       price,
     };
+  }
+  /**
+   * Hardware work is always paid. In testnet payment mode a simulated registry
+   * machine is paid like hardware too when FABYN_CHARGE_SIMULATED=1; mock mode
+   * keeps it estimate-only. Simulated relief
+   * network work is never charged.
+   */
+  private chargeable(mode: ExecutionMode, source: "registry" | "network") {
+    if (mode === "hardware") return true;
+    return (
+      source === "registry" &&
+      this.service.config.paymentMode === "testnet" &&
+      this.service.payment.mode === "testnet" &&
+      this.service.config.chargeSimulated === true
+    );
   }
   /** Save a new immutable plan version with its offer; the old offer stops being confirmable. */
   private revisePlan(
@@ -3143,6 +3158,12 @@ function childJob(
       job,
       "authorized_without_payment",
       "Simulated work is estimate-only: no payment is collected and no pickup code is issued.",
+    );
+  else if (a.executionMode === "simulation")
+    record(
+      job,
+      "simulated_paid",
+      "Made on a simulated machine and paid in Base Sepolia test USDC like real work: the pickup code is issued once the owner stores the item.",
     );
   return job;
 }

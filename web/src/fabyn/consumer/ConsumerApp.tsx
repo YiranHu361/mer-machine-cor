@@ -1,30 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./consumer.css";
-import { go, ROUTES } from "../shared/nav";
+import { go as goRoute, ROUTES } from "../shared/nav";
 import { Entry } from "./Entry";
 import { MyOrders } from "./MyOrders";
 import { useOrder } from "./useOrder";
+import { useMachines } from "./machines";
 import { describeError, ensureSession } from "./orders";
 import { readProfile, type Profile } from "./profile";
-import { phaseOf, toolCalls, type Phase } from "./phase";
+import { phaseOf } from "./phase";
 import type { OrderView } from "./model";
-import {
-  DraftsScreen,
-  MakingScreen,
-  NoticeScreen,
-  ProposalScreen,
-  ReadyScreen,
-  UnderstandScreen,
-  type Pace,
-  type ScreenProps,
-} from "./Screens";
+import { NoticeScreen, type ScreenProps } from "./Screens";
+import { MachineStep, MapStep, UnderstandStep } from "./Find";
+import { CheckoutStep, PreviewStep, QueueStep } from "./Order";
+import { HandoffStep, PrintingStep } from "./After";
+import { NOTICE_PHASES, STEPS, effectiveStep, stepForPhase, stepIndex, type Step } from "./steps";
 import { Stage3D } from "./Stage3D";
 
 /* The consumer side of fabyn at /fabyn/order. Every visit starts on the input
    box. The current order lives in memory only; a reload starts over, and
    "my orders" is the way back to earlier orders. */
 
-type View = { kind: "entry" } | { kind: "order"; id: string } | { kind: "orders" };
+type View = { kind: "entry" } | { kind: "order"; id: string; fresh: boolean } | { kind: "orders" };
 
 function Mark() {
   return (
@@ -46,36 +42,82 @@ function Mark() {
   );
 }
 
+/** The eight steps, with the open one marked. Steps already passed can be opened again. */
+function StepRail({ current, reached, confirmed, onPick }: { current: Step; reached: number; confirmed: boolean; onPick: (s: Step) => void }) {
+  const at = stepIndex(current);
+  return (
+    <nav className="cs-rail" aria-label="Order steps">
+      <ol>
+        {STEPS.map((s, i) => {
+          const before = i < stepIndex("checkout");
+          const open = i !== at && i <= reached && s.id !== "understand" && (confirmed ? !before && s.id !== "checkout" : before || s.id === "queue");
+          const state = i === at ? "now" : i < at ? "done" : "todo";
+          return (
+            <li key={s.id} className={`is-${state}`}>
+              {open ? (
+                <button className="cs-rail-step" onClick={() => onPick(s.id)}>
+                  <span>{i + 1}</span>
+                  {s.label}
+                </button>
+              ) : (
+                <span className="cs-rail-step" aria-current={state === "now" ? "step" : undefined}>
+                  <span>{i + 1}</span>
+                  {s.label}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
 function OrderScreen({
   id,
+  fresh,
   initial,
   onNew,
+  onOrders,
 }: {
   id: string;
+  fresh: boolean;
   initial: OrderView | null;
   onNew: () => void;
+  onOrders: () => void;
 }) {
   const { order, setOrder, error, reload } = useOrder(id, { initial });
+  const { machines } = useMachines(4000);
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [step, setStep] = useState<Step | null>(fresh ? "understand" : null);
+  const [reached, setReached] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  // a new order shows its tool calls one by one; so does the rest of the plan after a design is picked
-  const [pace, setPace] = useState<Pace | null>(initial ? { start: Date.now(), from: 0 } : null);
-  const endPace = useCallback(() => setPace(null), []);
-  const prevPhase = useRef<Phase | null>(null);
-  const draftsDone = useRef(0);
   const phase = order ? phaseOf(order) : null;
+  // an order opened from "my orders" picks up where it is
   useEffect(() => {
-    if (!order || !phase) return;
-    if (phase === "drafts") draftsDone.current = toolCalls(order).filter((c) => c.done).length;
-    if (prevPhase.current === "drafts" && (phase === "understand" || phase === "proposal"))
-      setPace({ start: Date.now(), from: draftsDone.current });
+    if (step === null && phase) setStep(stepForPhase(phase));
+  }, [step, phase]);
+  const shown = step && phase ? effectiveStep(step, phase) : null;
+  useEffect(() => {
+    if (shown) setReached((r) => Math.max(r, stepIndex(shown)));
+    if (shown && step && shown !== step) setStep(shown);
+  }, [shown, step]);
+  // once Lucas hands it over, printing moves on to the delivery or pickup
+  const prevPhase = useRef(phase);
+  useEffect(() => {
+    if (prevPhase.current !== "ready" && phase === "ready" && step === "printing") setStep("handoff");
     prevPhase.current = phase;
-  }, [order, phase]);
+  }, [phase, step]);
+  const goStep = useCallback((s: Step) => {
+    setActionError("");
+    setStep(s);
+    window.scrollTo?.({ top: 0 });
+  }, []);
   const run = useCallback(
     async (name: string, fn: () => Promise<OrderView>) => {
       setBusy(name);
@@ -85,9 +127,7 @@ function OrderScreen({
       } catch (e) {
         const d = describeError(e);
         if (d.unknown) {
-          setActionError(
-            "The result is unknown; the order may still have changed. We refreshed it. Nothing was made twice.",
-          );
+          setActionError("The result is unknown; the order may still have changed. We refreshed it. Nothing was made twice.");
           await reload();
         } else if (["STALE_DRAFT", "STALE_CHOICE", "STALE_SUGGESTION", "STALE_OFFER", "OFFER_EXPIRED", "PLAN_CHANGED"].includes(d.code)) {
           setActionError("This changed while you were looking. Here is the latest.");
@@ -104,7 +144,7 @@ function OrderScreen({
     },
     [reload, setOrder],
   );
-  if (!order)
+  if (!order || !shown || !phase)
     return (
       <section className="cs-loading" aria-live="polite">
         <Stage3D machine={null} item={null} progress={null} loop label="getting your order" className="cs-notice-stage" />
@@ -125,23 +165,37 @@ function OrderScreen({
     error: actionError || error,
     now,
     onNew,
+    onOrders,
+    go: goStep,
+    machines,
+    fresh,
   };
-  if (pace && (phase === "understand" || phase === "drafts" || phase === "proposal"))
-    return <UnderstandScreen {...props} pace={pace} onPaced={endPace} />;
-  switch (phase) {
-    case "understand":
-      return <UnderstandScreen {...props} />;
-    case "drafts":
-      return <DraftsScreen {...props} />;
-    case "proposal":
-      return <ProposalScreen {...props} />;
-    case "making":
-      return <MakingScreen {...props} />;
-    case "ready":
-      return <ReadyScreen {...props} />;
-    default:
-      return <NoticeScreen {...props} phase={phase ?? "failed"} />;
-  }
+  const notice = NOTICE_PHASES.includes(phase) || phase === "partial" || phase === "needs_review" || phase === "payment";
+  const confirmed = !!order.makeIntent;
+  return (
+    <>
+      <StepRail current={shown} reached={reached} confirmed={confirmed} onPick={goStep} />
+      {notice ? (
+        <NoticeScreen {...props} phase={phase} />
+      ) : shown === "understand" ? (
+        <UnderstandStep {...props} />
+      ) : shown === "map" ? (
+        <MapStep {...props} />
+      ) : shown === "machine" ? (
+        <MachineStep {...props} />
+      ) : shown === "preview" ? (
+        <PreviewStep key={`${order.draft.revision}`} {...props} />
+      ) : shown === "queue" ? (
+        <QueueStep {...props} />
+      ) : shown === "checkout" ? (
+        <CheckoutStep key={order.offer?.id} {...props} />
+      ) : shown === "printing" ? (
+        <PrintingStep {...props} />
+      ) : (
+        <HandoffStep {...props} />
+      )}
+    </>
+  );
 }
 
 export default function ConsumerApp() {
@@ -152,10 +206,11 @@ export default function ConsumerApp() {
   useEffect(() => {
     ensureSession().catch((e) => setSessionError(describeError(e).message));
   }, []);
-  const newOrder = () => {
+  const newOrder = useCallback(() => {
     setInitial(null);
     setView({ kind: "entry" });
-  };
+  }, []);
+  const myOrders = useCallback(() => setView({ kind: "orders" }), []);
   return (
     <div className="cs-app">
       <header className="cs-top">
@@ -164,11 +219,7 @@ export default function ConsumerApp() {
           <span>fabyn</span>
         </button>
         <nav className="cs-nav" aria-label="Consumer">
-          <button
-            className="cs-link"
-            aria-current={view.kind === "orders" ? "page" : undefined}
-            onClick={() => setView({ kind: "orders" })}
-          >
+          <button className="cs-link" aria-current={view.kind === "orders" ? "page" : undefined} onClick={myOrders}>
             my orders
           </button>
           {view.kind !== "entry" && (
@@ -179,7 +230,7 @@ export default function ConsumerApp() {
           <span className="cs-profile" title="Your name on this browser">
             {profile.name}
           </span>
-          <button className="cs-link cs-seller" onClick={() => go(ROUTES.seller)}>
+          <button className="cs-link cs-seller" onClick={() => goRoute(ROUTES.seller)}>
             seller side →
           </button>
         </nav>
@@ -195,26 +246,26 @@ export default function ConsumerApp() {
             profile={profile}
             onCreated={(order) => {
               setInitial(order);
-              setView({ kind: "order", id: order.id });
+              setView({ kind: "order", id: order.id, fresh: true });
             }}
           />
         )}
         {view.kind === "order" && (
-          <OrderScreen key={view.id} id={view.id} initial={initial} onNew={newOrder} />
+          <OrderScreen key={view.id} id={view.id} fresh={view.fresh} initial={initial} onNew={newOrder} onOrders={myOrders} />
         )}
         {view.kind === "orders" && (
           <MyOrders
             onNew={newOrder}
             onOpen={(id) => {
               setInitial(null);
-              setView({ kind: "order", id });
+              setView({ kind: "order", id, fresh: false });
             }}
           />
         )}
       </main>
       <footer className="cs-foot">
         <span>fabyn · spare machines, made nearby</span>
-        <button className="cs-link" onClick={() => go(ROUTES.seller)}>
+        <button className="cs-link" onClick={() => goRoute(ROUTES.seller)}>
           see the seller side →
         </button>
       </footer>

@@ -124,8 +124,10 @@ export interface OrderView {
   };
   makeIntent?: {
     status: string;
-    payment: { status: string; reason?: string };
+    payment: { status: string; reason?: string; transactionHash?: string; payer?: string };
   };
+  /** where the order came from: this site or the ASI:One agent */
+  source?: "web" | "asi1";
   events: OrderEvent[];
 }
 
@@ -147,6 +149,12 @@ export const LABEL_OF_PROCESS: Record<Process, string> = {
   fdm_print: "keychain",
   sticker_print: "sticker",
   photo_print: "photo print",
+};
+/** The machine type a process needs, as the agent states the match. */
+export const MATCH_OF_PROCESS: Record<Process, string> = {
+  fdm_print: "3D printer (FDM) · PLA",
+  sticker_print: "sticker printer (thermal)",
+  photo_print: "photo printer (instax mini)",
 };
 export function machineLabel(machineId: string, fallback: string) {
   return MACHINE_NAME[machineId] ?? fallback;

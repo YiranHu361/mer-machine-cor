@@ -528,8 +528,24 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .cs-tool.is-run .cs-tool-mark,
-  .cs-pulse {
+  .cs-match,
+  .cs-queue li.is-you,
+  .cs-stage-screen,
+  .cs-proposal,
+  .cs-making,
+  .cs-ready,
+  .cs-notice,
+  .cs-drafts,
+  .cs-orders,
+  .cs-loading,
+  .cs-map-screen,
+  .cs-preview,
+  .cs-queue-screen,
+  .cs-checkout {
     animation: none;
+  }
+  .cs-bar i {
+    transition: none;
   }
 }
 
@@ -753,7 +769,7 @@
 .cs-tile.is-finished .cs-tile-name {
   color: var(--txt);
 }
-.cs-tile.is-checking .cs-tile-state {
+.cs-tile.is-handover .cs-tile-state {
   color: var(--acc);
 }
 .cs-tile.is-failed .cs-tile-state {
@@ -815,52 +831,454 @@
 .cs-panel p {
   margin: 0;
 }
-.cs-delivery {
-  margin-top: 8px;
-  max-width: 820px;
+/* step rail */
+.cs-rail {
+  margin: -14px 0 28px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.cs-map-wrap {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 14px;
+.cs-rail::-webkit-scrollbar {
+  display: none;
 }
-.cs-map {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.cs-pulse {
-  animation: cs-ping 1.6s ease-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-@keyframes cs-ping {
-  0% {
-    transform: scale(0.6);
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-.cs-steps {
+.cs-rail ol {
   list-style: none;
   padding: 0;
-  margin: 14px 0 0;
+  margin: 0;
+  display: flex;
+  gap: 4px;
+  min-width: max-content;
+}
+.cs-rail li {
+  flex: none;
+}
+.cs-rail .cs-rail-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 7px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  font-family: var(--f-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #5d5d5a;
+}
+.cs-rail-step span {
+  font-size: 10px;
+  opacity: 0.7;
+}
+.cs-rail li.is-done .cs-rail-step {
+  color: var(--muted);
+  border-bottom-color: #3a3a3c;
+}
+.cs-rail li.is-now .cs-rail-step {
+  color: var(--acc);
+  border-bottom: 1px solid var(--acc);
+}
+.cs-rail button.cs-rail-step {
+  cursor: pointer;
+}
+.cs-rail button.cs-rail-step:hover {
+  color: var(--txt);
+}
+.cs-rail button.cs-rail-step:focus-visible {
+  outline: 1px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* machine type match */
+.cs-match {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 15px;
+  animation: cs-in 0.45s ease both;
+}
+.cs-match span {
+  color: var(--muted);
+}
+.cs-match i {
+  font-style: normal;
+  color: var(--acc);
+}
+.cs-match b {
+  font-weight: 400;
+}
+.cs-map-screen > .cs-match {
+  margin: 0 0 18px;
+  display: inline-flex;
+}
+
+/* map */
+.cs-map-screen,
+.cs-preview,
+.cs-queue-screen,
+.cs-checkout {
+  animation: cs-in 0.45s ease both;
+}
+.cs-map-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.cs-map-box {
+  min-width: 0;
+}
+.cs-legend {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 6px 16px;
   font-family: var(--f-mono), monospace;
   font-size: 11px;
   color: var(--muted);
 }
-.cs-steps li.is-done {
+.cs-legend li::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: -1px;
+  background: #6e6e6a;
+}
+.cs-legend .is-match::before {
+  background: var(--acc);
+}
+.cs-legend .is-busy::before {
+  background: #8e8e8a;
+}
+.cs-legend .is-far::before {
+  background: #4e4e4b;
+}
+.cs-legend .is-type::before {
+  background: #0b0b0c;
+  border: 1px solid #5a5a56;
+  box-sizing: border-box;
+}
+.cs-legend .is-offline::before {
+  background: #1a1a1c;
+  border: 1px solid #4a4a47;
+  box-sizing: border-box;
+}
+.cs-map-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cs-side-kicker {
+  margin: 14px 0 0;
+}
+.cs-makers {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.cs-maker {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  text-align: left;
+}
+.cs-maker-name {
+  grid-column: 1;
+}
+.cs-maker-sub {
+  grid-column: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cs-maker-km {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-family: var(--f-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cs-makers .cs-maker-name::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: 1px;
+  background: #8e8e8a;
+}
+.cs-makers .is-far .cs-maker-name::before {
+  background: #4e4e4b;
+}
+.cs-makers .is-offline .cs-maker-name::before,
+.cs-makers .is-type .cs-maker-name::before {
+  background: none;
+  border: 1px solid #5a5a56;
+  box-sizing: border-box;
+}
+button.cs-maker {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  cursor: pointer;
   color: var(--txt);
 }
-.cs-steps li[aria-current="step"] {
+button.cs-maker.is-match {
+  border-color: var(--acc);
+}
+button.cs-maker.is-match .cs-maker-name::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background: var(--acc);
+}
+button.cs-maker.is-on {
+  background: rgba(255, 91, 31, 0.1);
+}
+button.cs-maker:focus-visible {
+  outline: 1px solid var(--acc);
+  outline-offset: 3px;
+}
+.cs-other summary {
+  cursor: pointer;
+  font-family: var(--f-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+}
+.cs-other summary:focus-visible {
+  outline: 1px solid var(--acc);
+}
+
+/* queue */
+.cs-queue-mini {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.cs-queue {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.cs-queue li {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+.cs-queue li small {
+  font-family: var(--f-mono), monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.cs-queue-n {
+  font-family: var(--f-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cs-queue-big {
+  max-width: 640px;
+  margin-bottom: 26px;
+  border-top: 1px solid var(--line);
+}
+.cs-queue li.is-now .cs-queue-n {
+  color: var(--txt);
+}
+.cs-queue li.is-you {
+  border: 1px solid var(--acc);
+  border-radius: 8px;
+  padding: 14px 12px;
+  margin-top: 8px;
+  animation: cs-join 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: 0.25s;
+}
+.cs-queue li.is-you .cs-queue-n,
+.cs-queue li.is-you > small {
   color: var(--acc);
+}
+@keyframes cs-join {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cs-queue-screen .cs-facts {
+  max-width: 640px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* preview */
+.cs-previews {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.cs-prev {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "file stage" "body body";
+  gap: 14px 18px;
+}
+.cs-prev-file {
+  grid-area: file;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f4f4f0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cs-prev-file img {
+  display: block;
+  width: 100%;
+  height: 300px;
+  object-fit: contain;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.cs-prev-file figcaption {
+  font-family: var(--f-mono), monospace;
+  font-size: 11px;
+  color: #3a3a3c;
+  padding: 8px 12px 10px;
+  border-top: 1px solid #deded8;
+}
+.cs-prev-stage {
+  grid-area: stage;
+  height: 340px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cs-prev-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* checkout */
+.cs-checkout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 36px;
+  margin-bottom: 22px;
+}
+.cs-terms {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.cs-terms li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--muted);
+}
+.cs-terms li span:last-child {
+  font-family: var(--f-mono), monospace;
+  font-size: 13px;
+}
+.cs-terms li.is-total {
+  color: var(--txt);
+  font-size: 16px;
+}
+.cs-terms li.is-charged {
+  color: var(--acc);
+}
+.cs-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  font-family: var(--f-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+  margin: -8px 0 20px;
+}
+.cs-receipt a {
+  color: var(--acc);
+}
+.cs-receipt code {
+  font-size: 11px;
+  color: #5d5d5a;
+}
+
+/* printing and handoff */
+.cs-print-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.cs-print-grid .cs-tiles {
+  grid-template-columns: 1fr;
+}
+.cs-print-grid .cs-tile-stage {
+  height: 320px;
+}
+.cs-print-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cs-print-side .cs-note {
+  margin: 0;
+}
+.cs-handoff-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.cs-handoff-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.cs-handoff-body .cs-facts-tight {
+  grid-template-columns: 1fr;
+  width: 100%;
+}
+.cs-handoff-body .cs-code {
+  margin: 10px 0;
 }
 
 /* my orders */
@@ -937,9 +1355,30 @@
     grid-template-columns: 1fr;
   }
   .cs-stage-grid,
-  .cs-proposal {
+  .cs-proposal,
+  .cs-map-grid,
+  .cs-checkout-grid,
+  .cs-print-grid,
+  .cs-handoff-grid {
     grid-template-columns: 1fr;
     gap: 22px;
+  }
+  .cs-prev {
+    grid-template-columns: 1fr;
+    grid-template-areas: "file" "stage" "body";
+  }
+  .cs-prev-file img {
+    height: 220px;
+  }
+  .cs-prev-stage {
+    height: 260px;
+  }
+  .cs-queue-screen .cs-facts {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cs-rail {
+    margin: -8px -16px 22px;
+    padding: 0 16px;
   }
   .cs-stage-box {
     height: 300px;

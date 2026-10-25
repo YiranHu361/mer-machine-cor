@@ -92,6 +92,9 @@ if (
   throw new Error("FABYN_ALLOWED_MODES lists simulation and/or hardware.");
 config.allowedModes = allowedModes as Config["mode"][];
 config.autoPrepareHubPrints = process.env.FABYN_AUTO_PREPARE_PRINTS === "1";
+// Work in progress: with FABYN_CHARGE_SIMULATED=1 in testnet mode, simulated
+// machines are paid like hardware (pickup codes for them are not done yet).
+config.chargeSimulated = process.env.FABYN_CHARGE_SIMULATED === "1";
 const catalog = await loadCatalog(process.env.FABYN_CATALOG_FILE, dataDir);
 config.catalog = catalog.models;
 if (catalog.assets.length)

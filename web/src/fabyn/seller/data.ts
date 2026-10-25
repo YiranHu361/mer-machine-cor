@@ -60,6 +60,8 @@ export interface OwnerJob {
   /** The code itself is never shown on the maker side; only whether it is set and when it ends. */
   pickup?: { expiresAt?: string; redeemedAt?: string };
   history: { at: string; event: string; reason: string }[];
+  /** Where the order was placed: the fabyn site, or a chat with the Fabyn agent on ASI:One. */
+  source?: "web" | "asi1";
   quote?: { totalCents: number; ownerCents: number };
   economics?: { ownerNetCents: number };
 }
@@ -89,6 +91,12 @@ export interface LedgerEntry {
   status: "submitting" | "pending" | "confirmed" | "failed";
   amountCents: number;
   mode: "mock" | "testnet";
+  reference?: string;
+  /** Base Sepolia transaction for an x402 testnet payment. */
+  transactionHash?: string;
+  reason?: string;
+  /** x402 settlement receipt; the hash may land here before the entry's own field is set. */
+  receipt?: { transactionHash?: string; payer?: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -103,3 +111,23 @@ export interface Dashboard {
 }
 
 export const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/** A real printer's latest check, from POST /api/owner/machines/:id/check or GET /api/printers. */
+export interface PrinterCheck {
+  ok: boolean;
+  detail: string;
+  checkedAt: string | null;
+}
+
+/** GET /api/printers: whether each real printer on the hub answered its latest check. */
+export interface PrinterStatusRow {
+  id: string;
+  name: string;
+  model: string;
+  makes: string;
+  status: "connected" | "checking" | "not_answering" | "busy" | "paused";
+  detail: string;
+  checkedAt: string | null;
+}
+
+export const BASESCAN_TX = (hash: string) => `https://sepolia.basescan.org/tx/${hash}`;

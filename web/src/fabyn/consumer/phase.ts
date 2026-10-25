@@ -1,10 +1,12 @@
 /* What the consumer screen shows, derived only from the saved order. */
 
 import type { Assignment, OrderItem, OrderView, MachineKind, Process } from "./model";
-import { KIND_OF_PROCESS, LABEL_OF_PROCESS, machineLabel } from "./model";
+import { KIND_OF_PROCESS, LABEL_OF_PROCESS, MATCH_OF_PROCESS, machineLabel } from "./model";
+import { WORLD_MACHINES, distanceKm, formatKm, HOME, PROCESS_LABEL } from "../shared/map";
+import type { LiveMachine } from "./machines";
 
 export type Phase =
-  | "understand" // tool calls: reading the request, choosing a machine, preparing the file
+  | "understand" // the agent reads the request, finds a machine, prepares the file
   | "drafts" // pick one of the design candidates
   | "proposal" // items, machines, price, offer, confirm
   | "payment" // payment still pending on the backend
@@ -33,6 +35,10 @@ export function phaseOf(o: OrderView): Phase {
     if (ps === "partial") return "partial";
     if (ps === "needs_review") return "needs_review";
     if (ps === "cancelled") return "cancelled";
+    // every job handed over counts as ready even before the plan rolls up
+    const children = o.plan?.assignments.map((a) => a.child).filter(Boolean) ?? [];
+    if (children.length && children.every((c) => ["ready_for_pickup", "collected", "simulation_complete"].includes(c!.fulfillmentState)))
+      return "ready";
     return "making";
   }
   switch (o.draft.stage) {
@@ -51,6 +57,21 @@ export function phaseOf(o: OrderView): Phase {
   }
 }
 
+/** The kinds of thing the agent decided to make, as soon as it knows. */
+export function processesOf(o: OrderView): Process[] {
+  const fromPlan = o.plan?.items.map((i) => i.process);
+  if (fromPlan?.length) return [...new Set(fromPlan)];
+  const understood = o.events.find((e) => e.type === "draft.understood");
+  const items = understood?.data?.items as Process[] | undefined;
+  if (items?.length) return [...new Set(items)];
+  return [];
+}
+
+/** The first thing being made: it decides the machine type, the map and the preview. */
+export function mainProcess(o: OrderView): Process | null {
+  return processesOf(o)[0] ?? null;
+}
+
 export interface ToolCall {
   /** the orchestration step, written as the tool the agent calls */
   fn: string;
@@ -60,11 +81,9 @@ export interface ToolCall {
   done: boolean;
 }
 
-const PLACE_NEAR = "Palace of Fine Arts";
 const mm = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
-function prepared(o: OrderView): string {
-  const a = o.plan?.assignments[0];
+export function preparedSize(a: Assignment | undefined): string {
   const p = a?.parameters;
   if (!p) return "";
   const size = p.model_size_mm?.length
@@ -72,29 +91,78 @@ function prepared(o: OrderView): string {
     : p.width_mm && p.height_mm
       ? `${mm(p.width_mm)} × ${mm(p.height_mm)}`
       : "";
-  return [size && `${size} mm`, p.material, p.color_mode === "mono" && !p.model_size_mm ? "black and white" : ""]
+  return [
+    size && `${size} mm`,
+    p.material?.toUpperCase(),
+    p.color_mode === "mono" && !p.model_size_mm ? "black and white" : p.model_size_mm ? "one colour" : "",
+  ]
     .filter(Boolean)
     .join(" · ");
 }
 
-/** The real orchestration steps, each filled from the saved order once it is done. */
-export function toolCalls(o: OrderView): ToolCall[] {
+const short = (s: string, n = 34) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
+
+/** What the request was, in a few words. */
+export function requestShort(o: OrderView): string {
+  return o.draft.requestText || (o.draft.photoAssetIds.length ? `${o.draft.photoAssetIds.length} photo${o.draft.photoAssetIds.length > 1 ? "s" : ""}` : "");
+}
+
+/** The real machines of one process, the free ones first. */
+export function realMachinesFor(machines: LiveMachine[] | null, process: Process | null) {
+  return (machines ?? [])
+    .filter((m) => !process || m.process === process)
+    .sort((a, b) => Number(b.status === "available") - Number(a.status === "available"));
+}
+
+/** The real machine this order uses: the assigned one once there is a plan, else the best fit by type. */
+export function matchedMachine(o: OrderView, machines: LiveMachine[] | null): LiveMachine | null {
+  const assigned = o.plan?.assignments[0]?.machineId;
+  const found = assigned ? machines?.find((m) => m.id === assigned) : undefined;
+  return found ?? realMachinesFor(machines, mainProcess(o))[0] ?? null;
+}
+
+/** Steps 1–3: read the request, match the machine type, search the map. */
+export function findCalls(o: OrderView, machines: LiveMachine[] | null): ToolCall[] {
+  const understood = o.events.some((e) => e.type === "draft.understood") || !!o.intent || !!o.plan;
+  const processes = processesOf(o);
+  const what = processes.map((p) => LABEL_OF_PROCESS[p]).join(" + ");
+  const text = o.plan?.items.find((i) => i.design.text)?.design.text ?? /"([^"]{1,24})"/.exec(o.draft.requestText)?.[1];
+  const process = processes[0] ?? null;
+  const real = realMachinesFor(machines, process);
+  const free = real.filter((m) => m.status === "available");
+  const world = process ? WORLD_MACHINES.filter((m) => m.process === process) : [];
+  const nearest = free[0] ?? real[0];
+  return [
+    {
+      fn: "understand_request",
+      arg: `"${short(requestShort(o))}"`,
+      result: understood ? [what || o.intent?.outcome || "understood", text ? `the name ${text}` : ""].filter(Boolean).join(" · ") : "",
+      done: understood,
+    },
+    {
+      fn: "match_machine_type",
+      arg: what || "…",
+      result: process ? processes.map((p) => MATCH_OF_PROCESS[p]).join(" + ") : "",
+      done: understood && !!process,
+    },
+    {
+      fn: "search_nearby_machines",
+      arg: process ? `${PROCESS_LABEL[process]}, near ${HOME.short.toLowerCase()}` : "…",
+      result:
+        process && machines
+          ? `${world.length + real.length} in San Francisco · ${free.length ? `${free.length} free now` : "none free now"}${nearest ? ` · ${nearest.place.split(",")[0]}, ${formatKm(distanceKm(HOME, nearest.at))}` : ""}`
+          : "",
+      done: !!process && !!machines,
+    },
+  ];
+}
+
+/** Steps after a design is picked: draw, prepare the file, check and quote. */
+export function prepareCalls(o: OrderView): ToolCall[] {
   const stage = o.draft.stage;
   const plan = o.plan;
   const assigned = (plan?.assignments.length ?? 0) > 0;
-  const understood = o.events.find((e) => e.type === "draft.understood");
-  const kinds = ((understood?.data?.items as Process[] | undefined) ?? plan?.items.map((i) => i.process) ?? []).map(
-    (k) => LABEL_OF_PROCESS[k] ?? k,
-  );
-  const request = o.draft.requestText || (o.draft.photoAssetIds.length ? `${o.draft.photoAssetIds.length} photo` : "");
-  const calls: ToolCall[] = [
-    {
-      fn: "understand_request",
-      arg: `"${request.length > 34 ? request.slice(0, 33) + "…" : request}"`,
-      result: kinds.length ? kinds.join(" + ") : o.intent?.outcome ?? "",
-      done: !!understood || !!o.intent,
-    },
-  ];
+  const calls: ToolCall[] = [];
   const c = o.candidates;
   if (c || stage === "generating_candidates")
     calls.push({
@@ -103,26 +171,19 @@ export function toolCalls(o: OrderView): ToolCall[] {
       result: c ? `${c.candidates.length} drafts${c.selectedId ? " · 1 picked" : ""}` : "",
       done: !!c && c.status === "ready",
     });
+  const text = plan?.items.find((i) => i.design.text)?.design.text;
+  const fdm = plan?.items.some((i) => i.process === "fdm_print");
+  calls.push({
+    fn: fdm ? "model_and_slice" : "prepare_print_file",
+    arg: text ? `"${text}"` : (plan?.items.map((i) => LABEL_OF_PROCESS[i.process]).join(", ") ?? ""),
+    result: preparedSize(plan?.assignments[0]) || (assigned ? "file ready" : ""),
+    done: assigned,
+  });
   const machines = [...new Set((plan?.assignments ?? []).map((a) => machineLabel(a.machineId, a.machineName)))];
   calls.push({
-    fn: "find_nearest_machine",
-    arg: [...new Set((plan?.items ?? []).map((i) => i.process))].join(", ") || kinds.join(", "),
-    result: machines.length ? `${machines.join(" + ")} · ${PLACE_NEAR}` : "",
-    done: assigned,
-  });
-  const text = plan?.items.find((i) => i.design.text)?.design.text;
-  calls.push({
-    fn: "prepare_print_file",
-    arg: text ? `"${text}"` : plan?.items.map((i) => LABEL_OF_PROCESS[i.process]).join(", ") ?? "",
-    result: prepared(o) || (assigned ? "file ready" : ""),
-    done: assigned,
-  });
-  calls.push({
-    fn: "preflight_and_quote",
-    arg: "",
-    result: plan
-      ? `ready in about ${Math.max(1, plan.readyEstimateMinutes)} min · $${(plan.payableCents / 100).toFixed(2)} demo payment`
-      : "",
+    fn: "reserve_machine_and_quote",
+    arg: machines.join(" + "),
+    result: plan ? `ready in about ${Math.max(1, plan.readyEstimateMinutes)} min` : "",
     done: stage === "proposed" || !!o.makeIntent,
   });
   return calls;
@@ -130,12 +191,11 @@ export function toolCalls(o: OrderView): ToolCall[] {
 
 /** Which machine the wait scene should show before a plan exists. */
 export function kindForWait(o: OrderView): MachineKind | null {
-  const first = o.plan?.items[0];
-  if (first) return KIND_OF_PROCESS[first.process];
+  const p = mainProcess(o);
+  if (p) return KIND_OF_PROCESS[p];
   const text = o.draft.requestText.toLowerCase();
   if (/\b(keychain|key chain|charm|tag|3d)\b/.test(text)) return "a1mini";
-  if (o.draft.photoAssetIds.length || /\b(photo|instax|polaroid)\b/.test(text))
-    return "instax";
+  if (o.draft.photoAssetIds.length || /\b(photo|instax|polaroid)\b/.test(text)) return "instax";
   return "m02pro";
 }
 
@@ -146,7 +206,7 @@ export function assignmentsFor(o: OrderView, itemId: string): Assignment[] {
 /** What the person calls the item: a name keychain reads as the name. */
 export function itemTitle(item: OrderItem): string {
   const text = item.process === "fdm_print" ? item.design.text : undefined;
-  return text ? `${text.charAt(0)}${text.slice(1).toLowerCase()} keychain` : item.name;
+  return text ? `${text} keychain` : item.name;
 }
 
 export function orderTitle(o: OrderView): string {

@@ -9,15 +9,15 @@ import { machineLabel, PLACE_SHORT, type OrderView } from "./model";
    restored automatically; the list is only reached from the header. */
 
 const PHASE_TEXT: Record<Phase, string> = {
-  understand: "getting your order ready",
+  understand: "preparing the print file",
   drafts: "waiting for you to pick a design",
-  proposal: "ready to confirm",
+  proposal: "preview ready, not ordered yet",
   payment: "checking payment",
   payment_failed: "payment failed, nothing made",
-  making: "making",
-  ready: "ready to collect",
+  making: "printing",
+  ready: "handed over",
   partial: "partly finished",
-  needs_review: "the maker is checking",
+  needs_review: "Lucas is looking at it",
   cancelled: "stopped",
   superseded: "replaced",
   unavailable: "no machine right now",
@@ -84,7 +84,11 @@ export function MyOrders({ onOpen, onNew }: { onOpen: (id: string) => void; onNe
               <div className="cs-order-top">
                 <div>
                   <p className="cs-order-title">{orderTitle(o)}</p>
-                  <p className="cs-fine">{PHASE_TEXT[phase]}</p>
+                  <p className="cs-fine">
+                    {PHASE_TEXT[phase]}
+                    {o.source === "asi1" ? " · ordered via ASI:One" : ""}
+                    {o.plan?.paymentMode === "testnet" && o.makeIntent?.payment?.transactionHash ? " · paid on Base Sepolia" : ""}
+                  </p>
                 </div>
                 <button className="cs-btn" onClick={() => onOpen(o.id)}>
                   open
@@ -99,7 +103,7 @@ export function MyOrders({ onOpen, onNew }: { onOpen: (id: string) => void; onNe
                         <span>{machineLabel(a.machineId, a.machineName)}</span>
                         <span className="cs-fine">{PLACE_SHORT}</span>
                         <span>
-                          {p.state === "finished" ? "made" : p.state === "checking" ? "checking" : p.state === "failed" ? "not made" : `${p.percent}%`}
+                          {p.state === "finished" ? "ready" : p.state === "handover" ? "printed · Lucas is taking it off" : p.state === "failed" ? "not made" : `${p.percent}%`}
                           {p.etaSeconds !== null && p.state === "making" ? ` · ${mmss(p.etaSeconds)}` : ""}
                         </span>
                       </li>

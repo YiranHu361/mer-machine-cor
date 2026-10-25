@@ -1,32 +1,53 @@
-// The maker side of fabyn: sign in with the workshop access code, see the
-// machines, their queues and the owner actions. Data comes from the owner API
-// and refreshes from the server's change events plus a short poll.
+// The maker side of fabyn: sign in with the workshop access code, then run the
+// workshop: machines, the map, orders, delivery, income and supplies. Data
+// comes from the owner API and refreshes from the server's change events plus
+// a short poll.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api";
 import { go, ROUTES } from "../shared/nav";
 import { SignIn } from "./SignIn";
 import { Overview } from "./Overview";
 import { Machines } from "./Machines";
+import { MapTab } from "./MapTab";
+import { Orders } from "./Orders";
+import { Delivery } from "./Delivery";
+import { Income } from "./Income";
+import { Supplies } from "./Supplies";
 import { AddMachine } from "./AddMachine";
-import { MAKER, type Dashboard } from "./data";
-import { needsMaker } from "./status";
+import { MAKER, type Dashboard, type PrinterStatusRow } from "./data";
+import { needsMaker, supplyOf } from "./status";
+import { groupOrders } from "./orderGroups";
+import { sentOut, useHandoffs } from "./deliveries";
+import { useLiveMachines } from "./live";
 import type { Act } from "./JobActions";
 import "./seller.css";
 
-type Tab = "overview" | "machines" | "add";
+export type Tab = "overview" | "machines" | "map" | "orders" | "delivery" | "income" | "supplies" | "add";
 type Session = "checking" | "signed-out" | "owner";
 type Notice = { tone: "ok" | "error"; text: string } | null;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "machines", label: "Machines" },
+  { id: "map", label: "Map" },
+  { id: "orders", label: "Orders" },
+  { id: "delivery", label: "Delivery" },
+  { id: "income", label: "Income" },
+  { id: "supplies", label: "Supplies" },
   { id: "add", label: "Add a machine" },
 ];
+
+// The open tab lives in the hash (#orders) so a reload or a shared link keeps it.
+const tabFromHash = (): Tab => {
+  const h = window.location.hash.replace(/^#/, "");
+  return TABS.some((t) => t.id === h) ? (h as Tab) : "overview";
+};
 
 export default function SellerApp() {
   const [session, setSession] = useState<Session>("checking");
   const [dash, setDash] = useState<Dashboard | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTabState] = useState<Tab>(tabFromHash);
+  const [printers, setPrinters] = useState<PrinterStatusRow[]>([]);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [live, setLive] = useState(true);
@@ -34,6 +55,20 @@ export default function SellerApp() {
   const [signInNote, setSignInNote] = useState("");
   const revision = useRef(-1);
   const mounted = useRef(true);
+  const liveMachines = useLiveMachines(session === "owner", dash?.revision ?? 0);
+  const { book } = useHandoffs();
+
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    if (window.location.hash !== `#${next}`) window.history.replaceState(null, "", `#${next}`);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  useEffect(() => {
+    const onHash = () => setTabState(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const signOut = useCallback(
     async (message = "") => {
@@ -103,6 +138,24 @@ export default function SellerApp() {
     };
   }, [session, refresh]);
 
+  // Hub printers report their own state; refreshed less often than the dashboard.
+  useEffect(() => {
+    if (session !== "owner") return;
+    let alive = true;
+    const load = () =>
+      api<{ printers: PrinterStatusRow[] }>("/printers", undefined, "GET")
+        .then((r) => {
+          if (alive && Array.isArray(r?.printers)) setPrinters(r.printers);
+        })
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 10000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [session]);
+
   // One clock for every countdown and progress estimate.
   useEffect(() => {
     if (session !== "owner") return;
@@ -161,16 +214,32 @@ export default function SellerApp() {
     );
 
   const attention = dash ? dash.jobs.filter(needsMaker).length + dash.machines.filter((m) => !m.calibrated).length : 0;
+  const orders = dash ? groupOrders(dash.jobs, sentOut(book, now), now) : [];
+  const toSend = orders.filter((o) => o.ready && !book[o.key]).length;
+  const lowSupplies = dash ? dash.machines.filter((m) => m.mediaRemaining < supplyOf(m).capacity * 0.2).length : 0;
+  const badges: Partial<Record<Tab, { n: number; label: string }>> = {
+    machines: { n: attention, label: "need you" },
+    orders: { n: orders.filter((o) => o.needsYou).length, label: "need you" },
+    delivery: { n: toSend, label: "ready to send out" },
+    supplies: { n: lowSupplies, label: "running low" },
+  };
   return (
     <div className="sl-page">
       <Header onHome={() => go(ROUTES.home)} onSignOut={endSession} />
       <nav className="sl-tabs" aria-label="Maker sections">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" className="sl-tab" aria-current={tab === t.id ? "page" : undefined} onClick={() => setTab(t.id)}>
-            {t.label}
-            {t.id === "machines" && attention > 0 && <span className="sl-badge" aria-label={`${attention} need you`}>{attention}</span>}
-          </button>
-        ))}
+        {TABS.map((t) => {
+          const badge = badges[t.id];
+          return (
+            <button key={t.id} type="button" className="sl-tab" aria-current={tab === t.id ? "page" : undefined} onClick={() => setTab(t.id)}>
+              {t.label}
+              {badge && badge.n > 0 && (
+                <span className="sl-badge" aria-label={`${badge.n} ${badge.label}`}>
+                  {badge.n}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
       <div className="sl-status" aria-live="polite">
         <span className={`sl-live ${live ? "on" : ""}`}>{live ? "live" : "reconnecting"}</span>
@@ -187,7 +256,7 @@ export default function SellerApp() {
             Loading the workshop…
           </p>
         ) : tab === "overview" ? (
-          <Overview dash={dash} onGo={(t) => setTab(t)} />
+          <Overview dash={dash} handoffs={book} now={now} onGo={setTab} />
         ) : tab === "machines" ? (
           <>
             <header className="sl-section-head">
@@ -195,8 +264,18 @@ export default function SellerApp() {
               <h2 className="sl-h2">Each machine, its queue, and what it needs from you.</h2>
               <p className="sl-lede">Orders that fit a machine land in its queue. Progress and times are estimates until the machines report their own.</p>
             </header>
-            <Machines machines={dash.machines} jobs={dash.jobs} connectors={dash.connectors} busy={busy} act={act} now={now} />
+            <Machines machines={dash.machines} jobs={dash.jobs} connectors={dash.connectors} printers={printers} busy={busy} act={act} now={now} />
           </>
+        ) : tab === "map" ? (
+          <MapTab dash={dash} live={liveMachines} handoffs={book} now={now} />
+        ) : tab === "orders" ? (
+          <Orders dash={dash} busy={busy} act={act} now={now} onDeliver={() => setTab("delivery")} />
+        ) : tab === "delivery" ? (
+          <Delivery dash={dash} busy={busy} act={act} now={now} />
+        ) : tab === "income" ? (
+          <Income dash={dash} now={now} />
+        ) : tab === "supplies" ? (
+          <Supplies dash={dash} busy={busy} act={act} />
         ) : (
           <AddMachine dash={dash} act={act} busy={busy} />
         )}

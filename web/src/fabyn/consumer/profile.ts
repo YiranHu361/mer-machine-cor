@@ -50,3 +50,28 @@ export function rememberOrder(ref: OrderRef) {
     /* my orders still works for this visit */
   }
 }
+
+/* How this browser chose to get an order: delivery or pickup, and when the
+   courier ride started (display only). Lost storage only means asking again. */
+
+export type Handoff = { mode: "delivery" | "pickup"; rideStartedAt?: number };
+const handoffKey = (id: string) => `fabyn.consumer.handoff.${id}`;
+
+export function readHandoff(id: string): Handoff | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(handoffKey(id)) ?? "null");
+    return v?.mode === "delivery" || v?.mode === "pickup"
+      ? { mode: v.mode, rideStartedAt: typeof v.rideStartedAt === "number" ? v.rideStartedAt : undefined }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveHandoff(id: string, h: Handoff) {
+  try {
+    localStorage.setItem(handoffKey(id), JSON.stringify(h));
+  } catch {
+    /* kept in memory for this visit */
+  }
+}

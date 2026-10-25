@@ -14,13 +14,14 @@ export interface JobProgress {
   percent: number;
   /** seconds left, null when not started or finished */
   etaSeconds: number | null;
-  state: "queued" | "making" | "checking" | "finished" | "failed";
+  /** handover: the print is done and the owner is taking it off the machine */
+  state: "queued" | "making" | "handover" | "finished" | "failed";
 }
 
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 
 /** Display only: a demo machine can finish in a few seconds; its print still
-   plays for this long after the making started before "checking" shows. */
+   plays for this long after the making started before "handover" shows. */
 const MIN_MAKING_SECONDS = 24;
 
 /** When the making started, from the saved event log (real timestamp). */
@@ -44,18 +45,16 @@ export function estimateJob(
   )
     return { percent: 100, etaSeconds: null, state: "finished" };
   const sinceStart = opts.startedAt === null ? Infinity : (opts.now - opts.startedAt) / 1000;
-  const aheadOfDisplay =
-    c?.fulfillmentState === "awaiting_owner" || (c && ["verifying", "needs_review"].includes(c.productionState));
-  if (aheadOfDisplay && sinceStart < MIN_MAKING_SECONDS)
+  // printed and waiting for the owner to take it off the machine (no camera check any more)
+  const printed =
+    c?.fulfillmentState === "awaiting_owner" || (c && ["produced", "verifying", "needs_review"].includes(c.productionState));
+  if (printed && sinceStart < MIN_MAKING_SECONDS)
     return {
       percent: Math.round(clamp((sinceStart / MIN_MAKING_SECONDS) * 100, 1, 97)),
       etaSeconds: Math.ceil(MIN_MAKING_SECONDS - sinceStart),
       state: "making",
     };
-  if (c?.fulfillmentState === "awaiting_owner")
-    return { percent: 100, etaSeconds: null, state: "checking" };
-  if (c && ["verifying", "needs_review"].includes(c.productionState))
-    return { percent: 99, etaSeconds: null, state: "checking" };
+  if (printed) return { percent: 100, etaSeconds: null, state: "handover" };
   if (opts.startedAt === null)
     return { percent: 0, etaSeconds: null, state: "queued" };
 
@@ -82,4 +81,27 @@ export function mmss(seconds: number | null) {
   if (seconds === null) return "--:--";
   const s = Math.max(0, Math.round(seconds));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/* ---------- delivery (display only) ----------
+
+   There is no courier service behind fabyn yet. The courier, the ride time and
+   the moving marker are display-only; the route is the real street path in
+   shared/map/world.ts. The ride starts when the owner hands the item over. */
+
+export const COURIER = {
+  name: "Rosa M.",
+  vehicle: "e-bike",
+  /** text only, never a link */
+  contact: "Rosa · (415) 555-0142",
+};
+
+/** How long the ride from the Palace to Henry plays, in seconds. */
+export const RIDE_SECONDS = 240;
+
+export function rideProgress(startedAt: number | null, now: number): { t: number; etaSeconds: number | null; arrived: boolean } {
+  if (startedAt === null) return { t: 0, etaSeconds: null, arrived: false };
+  const elapsed = Math.max(0, (now - startedAt) / 1000);
+  const t = clamp(elapsed / RIDE_SECONDS, 0, 1);
+  return { t, etaSeconds: t >= 1 ? 0 : Math.ceil(RIDE_SECONDS - elapsed), arrived: t >= 1 };
 }
