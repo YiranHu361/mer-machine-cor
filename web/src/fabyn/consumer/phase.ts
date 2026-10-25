@@ -57,6 +57,14 @@ export function phaseOf(o: OrderView): Phase {
   }
 }
 
+/** The order waits for new artwork that could not be drawn: an artwork problem, never a machine one. */
+export function designUnavailable(o: OrderView): boolean {
+  if (o.draft.stage !== "unavailable") return false;
+  if (o.candidates?.status === "failed") return true;
+  const last = [...o.events].reverse().find((e) => e.type === "plan.needs_action");
+  return last?.data?.reason === "design_unavailable";
+}
+
 /** The kinds of thing the agent decided to make, as soon as it knows. */
 export function processesOf(o: OrderView): Process[] {
   const fromPlan = o.plan?.items.map((i) => i.process);

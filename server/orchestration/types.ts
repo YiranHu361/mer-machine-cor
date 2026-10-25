@@ -25,6 +25,8 @@ export interface IntentItem {
   subjectBoxes?: Record<string, [number, number, number, number]>;
   /** Keychain text for the text-tag template. */
   text?: string;
+  /** Lettering printed under a sticker's artwork; the producer sets it in type, never the drawing. */
+  caption?: string;
   colorImportant: boolean;
   catalogItemId?: string;
 }
@@ -120,6 +122,7 @@ export interface PlanItem {
     candidateId?: string;
     photoAssetIds?: string[];
     text?: string;
+    caption?: string;
     catalogItemId?: string;
   };
 }
@@ -277,6 +280,8 @@ export interface Order {
   source?: OrderSource;
   /** The name the person gave, for the maker's screens. */
   requesterName?: string;
+  /** The conversation the order was chosen in; later messages go there. */
+  conversationId?: string;
   createdAt: string;
   updatedAt: string;
   version: number;

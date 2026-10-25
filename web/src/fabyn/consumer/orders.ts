@@ -62,6 +62,12 @@ export async function changeRequest(o: OrderView, requestText: string, photoAsse
   return order;
 }
 
+/** Asks the machines again with the same request, understood as before. */
+export async function retryOrder(o: OrderView) {
+  const { order } = await api<{ order: OrderView }>(`/orders/${o.id}/draft`, { expectedRevision: o.draft.revision, retry: true }, "PATCH");
+  return order;
+}
+
 export type DeliveryChoice =
   | { mode: "pickup" }
   | { mode: "delivery"; to: { lat: number; lng: number; label: string; source: "gps" | "map" }; km: number | null };

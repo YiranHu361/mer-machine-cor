@@ -14,6 +14,14 @@ Local-only app: Express/TypeScript backend (`server/`), React web (`web/`), Pyth
 - **Tests:** stay off the live API. Inject `fetch` into `ContextDevClient` (see `tests/orchestration.test.ts`); every real call costs credits, so ask before running one.
 - Docs index: https://docs.context.dev/llms.txt (append `.md` to any docs URL for Markdown).
 
+## Conversation agent
+
+- **What:** the consumer entry is a conversation ([`server/orchestration/conversation.ts`](server/orchestration/conversation.ts), routes `POST /api/conversations`, `GET|POST /api/conversations/:id[/messages]`). fabyn answers questions, offers options from [`products.ts`](server/orchestration/products.ts), and a choice becomes an order with a preset intent (`createOrder`/`editDraft` `preset`); later messages go back to the conversation, never straight to `editDraft`.
+- **State:** `state.conversations`, durable like orders. Messages carry a `messageId` (replayed once) and `expectedVersion` (`STALE_CONVERSATION`); one message is answered at a time (`pending` lease).
+- **Model:** `ClaudeProvider.converse` with a forced `reply` tool (`ANTHROPIC_API_KEY`, `FABYN_CLAUDE_MODEL`); without a key or on failure, deterministic local rules answer. The model only proposes: offered options, choices (only ids already offered), lettering and availability are checked server-side, and availability is checked again at the choice. Nothing here confirms, pays or dispatches.
+- **Lettering:** a sticker `caption` is set in type by the producer (`_with_caption` in `node/fabyn_node/producer.py`) and echoed in `parameters.caption`; an older producer that drops it makes the item unavailable rather than a sticker without its name.
+- **Tests:** [`tests/conversation.test.ts`](tests/conversation.test.ts) scripts the model via `converse`; ask before any live model call.
+
 ## Picture drafts: OpenAI and Nano Banana
 
 - **Choice:** `FABYN_DESIGN_PROVIDER` (`openai`, `nano-banana`, `claude`, `fixture`, `none`); unset, the first key found wins: `OPENAI_API_KEY`, then `GEMINI_API_KEY`, then `ANTHROPIC_API_KEY` (SVG line art). Keys live in the ignored `.env`, server-side only. Neither image API has a free tier.

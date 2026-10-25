@@ -56,6 +56,7 @@ import {
   type TimeScale,
 } from "../relief/index.ts";
 import { callCourier, parseChoice, sameChoice } from "./delivery.ts";
+import { ConversationAgent, type ConversationDeps } from "./conversation.ts";
 import { fixtureDrafts } from "./fixture-designs.ts";
 import {
   asksForColour,
@@ -155,6 +156,8 @@ export interface OrchestratorDeps {
   offerMs?: number;
   reliefSeed?: number;
   clock?: () => number;
+  /** The conversation model; tests inject scripted replies. */
+  converse?: ConversationDeps["converse"];
 }
 type Actor = { id: string; role: string };
 type DesignProvider = "openai" | "nano-banana" | "claude" | "fixture" | "none";
@@ -229,11 +232,17 @@ export class Orchestrator {
     }
   >();
   private producer: ProducerRunner;
+  /** Conversations that lead to orders. */
+  readonly conversations: ConversationAgent;
   constructor(
     public service: Service,
     private deps: OrchestratorDeps = {},
   ) {
     this.producer = deps.producer ?? cliRunner();
+    this.conversations = new ConversationAgent(this, {
+      converse: deps.converse,
+      clock: deps.clock,
+    });
   }
   private get clock() {
     return this.deps.clock ?? Date.now;
@@ -309,7 +318,16 @@ export class Orchestrator {
 
   // ---------- Creating and editing ----------
 
-  async createOrder(actor: Actor, body: any, key: unknown) {
+  /**
+   * `preset` comes only from server code (a choice made in a conversation):
+   * the order starts already understood, so its request is not read again.
+   */
+  async createOrder(
+    actor: Actor,
+    body: any,
+    key: unknown,
+    preset?: { intent: IntentBrief; conversationId: string },
+  ) {
     requireThat(
       typeof key === "string" && key.length >= 8 && key.length <= 200,
       "IDEMPOTENCY_REQUIRED",
@@ -413,6 +431,7 @@ export class Orchestrator {
         experience,
         source,
         ...(requesterName ? { requesterName } : {}),
+        ...(preset ? { conversationId: preset.conversationId } : {}),
         createdAt: at,
         updatedAt: at,
         version: 1,
@@ -433,6 +452,14 @@ export class Orchestrator {
         photos: photos.length,
         text: !!requestText,
       });
+      if (preset) {
+        order.intent = structuredClone(preset.intent);
+        event(order, "draft.understood", {
+          provider: preset.intent.provider,
+          items: preset.intent.items.map((i) => i.process),
+          conversation: preset.conversationId,
+        });
+      }
       s.orders[order.id] = order;
       return { order, created: true };
     });
@@ -442,7 +469,13 @@ export class Orchestrator {
   private start(orderId: string, revision: number) {
     this.track(orderId, this.run(orderId, revision));
   }
-  async editDraft(actor: Actor, orderId: string, body: any) {
+  /** `preset` is the server's own understanding of the new request (a conversation's choice). */
+  async editDraft(
+    actor: Actor,
+    orderId: string,
+    body: any,
+    preset?: { intent: IntentBrief },
+  ) {
     const { o } = await this.load(orderId);
     this.owned(o, actor);
     requireThat(
@@ -488,13 +521,16 @@ export class Orchestrator {
       });
       return this.view(actor, orderId);
     }
+    // A retry asks the machines again with the same request and understanding.
+    const retry = body?.retry === true;
     const requestText =
-      typeof body?.requestText === "string"
+      typeof body?.requestText === "string" && !retry
         ? body.requestText.trim()
         : o.draft.requestText;
-    const photos: string[] = Array.isArray(body?.photoAssetIds)
+    const photos: string[] = Array.isArray(body?.photoAssetIds) && !retry
       ? body.photoAssetIds
       : o.draft.photoAssetIds;
+    const kept = retry ? (preset?.intent ?? o.intent) : preset?.intent;
     requireThat(
       photos.length <= 4 &&
         photos.every((p) => typeof p === "string") &&
@@ -535,6 +571,13 @@ export class Orchestrator {
       order.suggestions = [];
       order.status = "preparing";
       event(order, "draft.updated", { superseded: order.draft.revision - 1 });
+      if (kept) {
+        order.intent = structuredClone(kept);
+        event(order, "draft.understood", {
+          provider: kept.provider,
+          items: kept.items.map((i) => i.process),
+        });
+      }
       order.version++;
       order.updatedAt = now();
       return order.draft.revision;
@@ -1623,6 +1666,9 @@ export class Orchestrator {
     process: Process,
   ) {
     const photos = item.photoAssetIds.map((a) => s.assets[a]).filter(Boolean);
+    // Sticker lettering is set in type by the producer, under the picture.
+    const caption =
+      process === "sticker_print" && item.caption ? { caption: item.caption } : {};
     if (process === "fdm_print")
       return {
         kind: "text_tag" as const,
@@ -1651,6 +1697,7 @@ export class Orchestrator {
             photos: [
               { path: image.path, sha256: image.sha256, subject_box: null },
             ],
+            ...caption,
           },
           candidateId: candidate.id,
         };
@@ -1658,7 +1705,7 @@ export class Orchestrator {
       const svg = s.assets[candidate.svgAssetId!];
       return {
         kind: "svg" as const,
-        design: { kind: "svg", svg: svgText(svg) },
+        design: { kind: "svg", svg: svgText(svg), ...caption },
         candidateId: candidate.id,
       };
     }
@@ -1677,6 +1724,7 @@ export class Orchestrator {
           sha256: a.sha256,
           subject_box: item.subjectBoxes?.[a.id] ?? null,
         })),
+        ...caption,
       },
     };
   }
@@ -1829,6 +1877,16 @@ export class Orchestrator {
         );
         continue;
       }
+      // A producer that predates lettering ignores it: never offer a sticker
+      // without the words that were asked for.
+      const lettering = (design.design as { caption?: string }).caption;
+      if (lettering && receipt.parameters.caption !== lettering) {
+        if (index < this.requestedCount(o)) missingRequested = true;
+        unavailable.push(
+          `"${item.name}" could not be prepared: the sticker printer's software cannot add lettering yet.`,
+        );
+        continue;
+      }
       // The owner's per-job time limit is checked against the prepared
       // estimate before any offer, so dispatch never meets it as a surprise.
       if (
@@ -1860,6 +1918,7 @@ export class Orchestrator {
           ...(design.kind === "text_tag"
             ? { text: (design.design as any).text }
             : {}),
+          ...(lettering ? { caption: lettering } : {}),
         },
       });
       assignments.push(
@@ -3501,6 +3560,7 @@ function orderView(o: Order, s: State, actor: Actor) {
     experience: o.experience,
     source: o.source ?? "web",
     requesterName: o.requesterName,
+    conversationId: o.conversationId,
     status: o.status,
     version: o.version,
     createdAt: o.createdAt,

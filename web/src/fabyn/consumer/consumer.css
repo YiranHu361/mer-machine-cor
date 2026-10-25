@@ -1702,6 +1702,86 @@ button.cs-maker:focus-visible {
   opacity: 0.45;
   cursor: default;
 }
+/* fabyn's suggestions in the conversation: pressing one chooses it */
+.cs-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 4px 32px;
+}
+.cs-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 240px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  color: var(--txt);
+  font: inherit;
+}
+.cs-option:hover:not(:disabled) {
+  border-color: var(--acc);
+}
+.cs-option:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.cs-option-n {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-family: var(--f-mono), monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.cs-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cs-option-title {
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.cs-option-why {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.cs-msg.is-said .cs-fold {
+  margin-bottom: 0;
+}
+.cs-thinking {
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cs-thinking {
+    animation: cs-thinking 1.4s ease-in-out infinite;
+  }
+}
+@keyframes cs-thinking {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (max-width: 560px) {
+  .cs-options {
+    margin-left: 0;
+  }
+}
 .cs-composer-thumbs img {
   width: 64px;
   height: 64px;

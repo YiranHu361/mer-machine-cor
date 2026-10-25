@@ -328,6 +328,10 @@ export interface State {
   setupCodes?: Record<string, SetupCode>;
   connectors?: Record<string, Connector>;
   orders?: Record<string, import("./orchestration/types.ts").Order>;
+  conversations?: Record<
+    string,
+    import("./orchestration/conversation.ts").Conversation
+  >;
   preparations?: Record<
     string,
     import("./orchestration/types.ts").PreparationReceipt

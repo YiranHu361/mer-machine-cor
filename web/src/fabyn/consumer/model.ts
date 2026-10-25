@@ -13,6 +13,8 @@ export interface OrderItem {
   design: {
     kind: string;
     text?: string;
+    /** lettering set under a sticker's picture */
+    caption?: string;
     candidateId?: string;
     photoAssetIds?: string[];
   };
@@ -174,6 +176,8 @@ export interface OrderView {
   delivery?: Delivery;
   /** the name the person ordered under, when the server keeps it */
   requesterName?: string;
+  /** the conversation the order was chosen in; later messages go there */
+  conversationId?: string;
   events: OrderEvent[];
 }
 

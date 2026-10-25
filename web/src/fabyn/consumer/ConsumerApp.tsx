@@ -7,24 +7,36 @@ import { describeError, ensureSession } from "./orders";
 import { readProfile, type Profile } from "./profile";
 import type { OrderView } from "./model";
 import { Mark, OrderThread } from "./Chat";
+import { activeConversation, rememberConversation } from "./conversation";
 
-/* The consumer side of fabyn at /fabyn/order. Every visit starts on the chat
-   box. The current order lives in memory and its thread in this tab; a reload
-   starts over, and "my orders" is the way back to earlier orders. */
+/* The consumer side of fabyn at /fabyn/order. Every visit starts on the
+   conversation with fabyn. The conversation is kept on the server and this tab
+   remembers which one is open, so a reload picks it up again (and its order,
+   once one was chosen); "new order" starts a fresh conversation, and "my
+   orders" is the way back to earlier orders. */
 
 type View = { kind: "entry" } | { kind: "order"; id: string; fresh: boolean } | { kind: "orders" };
 
 export default function ConsumerApp() {
   const [view, setView] = useState<View>({ kind: "entry" });
   const [initial, setInitial] = useState<OrderView | null>(null);
+  // the conversation this tab had open before a reload, read once
+  const [resume] = useState(activeConversation);
+  const [entryKey, setEntryKey] = useState(0);
   const [profile] = useState<Profile>(readProfile);
   const [sessionError, setSessionError] = useState("");
   useEffect(() => {
     ensureSession().catch((e) => setSessionError(describeError(e).message));
   }, []);
   const newOrder = useCallback(() => {
+    rememberConversation(null);
     setInitial(null);
+    setEntryKey((k) => k + 1);
     setView({ kind: "entry" });
+  }, []);
+  const openOrder = useCallback((order: OrderView, fresh: boolean) => {
+    setInitial(order);
+    setView({ kind: "order", id: order.id, fresh });
   }, []);
   const myOrders = useCallback(() => setView({ kind: "orders" }), []);
   return (
@@ -58,16 +70,19 @@ export default function ConsumerApp() {
           </p>
         )}
         {view.kind === "entry" && (
-          <Entry
-            profile={profile}
-            onCreated={(order) => {
-              setInitial(order);
-              setView({ kind: "order", id: order.id, fresh: true });
-            }}
-          />
+          <Entry key={entryKey} profile={profile} resume={entryKey === 0 ? resume : null} onCreated={openOrder} />
         )}
         {view.kind === "order" && (
-          <OrderThread key={view.id} id={view.id} fresh={view.fresh} initial={initial} profile={profile} onNew={newOrder} onOrders={myOrders} />
+          <OrderThread
+            key={view.id}
+            id={view.id}
+            fresh={view.fresh}
+            initial={initial}
+            profile={profile}
+            onNew={newOrder}
+            onOrders={myOrders}
+            onSwitch={(order) => openOrder(order, true)}
+          />
         )}
         {view.kind === "orders" && (
           <MyOrders

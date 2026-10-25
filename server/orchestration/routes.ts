@@ -81,6 +81,30 @@ export function registerOrchestrationRoutes(
       res.json({ ...await producer.check(pair.theirs), checkedAt: new Date().toISOString() });
     } else res.json(await orchestrator.checkNow(param(req, "id")));
   });
+  // The conversation before an order: questions, suggestions and a choice.
+  // Starting replays by Idempotency-Key; a message replays by its messageId.
+  app.post("/api/conversations", async (req, res) => {
+    const { created, ...view } = await orchestrator.conversations.start(
+      await actor(req),
+      req.body,
+      req.get("Idempotency-Key"),
+    );
+    res.status(created ? 201 : 200).json(view);
+  });
+  app.get("/api/conversations/:id", async (req, res) => {
+    res.json(
+      await orchestrator.conversations.view(await actor(req), param(req, "id")),
+    );
+  });
+  app.post("/api/conversations/:id/messages", async (req, res) => {
+    res.json(
+      await orchestrator.conversations.send(
+        await actor(req),
+        param(req, "id"),
+        req.body,
+      ),
+    );
+  });
   app.post("/api/orders", async (req, res) => {
     const a =
       req.body?.experience === "relief"

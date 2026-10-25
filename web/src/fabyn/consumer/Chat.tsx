@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useOrder } from "./useOrder";
 import { STATUS_TEXT, useMachines } from "./machines";
-import { addSuggestion, changeRequest, chooseDelivery, describeError, plainReason, uploadPhotos, assetUrl } from "./orders";
+import { addSuggestion, changeRequest, chooseDelivery, describeError, plainReason, retryOrder, uploadPhotos, assetUrl } from "./orders";
 import { clockTime } from "./estimate";
-import { orderTitle, phaseOf, processesOf, realMachinesFor, itemTitle } from "./phase";
+import { designUnavailable, orderTitle, phaseOf, processesOf, realMachinesFor, itemTitle } from "./phase";
 import { KIND_OF_PROCESS, LABEL_OF_PROCESS, MACHINE_NAME, MATCH_OF_PROCESS, PLACE_SHORT, machineLabel, type OrderView } from "./model";
 import type { Profile } from "./profile";
 import { Actions, ErrorLine, NoticeScreen, PriceBlock, TitleBlock, assignmentItem, usd, type ScreenProps } from "./Screens";
@@ -12,17 +12,21 @@ import { CheckoutStep, PreviewStep, QueueStep } from "./Order";
 import { HandoffStep, PrintingStep } from "./After";
 import { NOTICE_PHASES, STEPS, effectiveStep, stepForPhase, stepIndex, type Step } from "./steps";
 import { Stage3D } from "./Stage3D";
-import { cardKey, fabynEntry, readThread, saveThread, summaryOf, agentLine, youEntry, type Card, type ChatEntry, type LineContext } from "./thread";
+import { cardKey, conversationEntries, fabynEntry, readThread, saveThread, summaryOf, agentLine, withTurns, youEntry, type Card, type ChatEntry, type LineContext } from "./thread";
 import { deliveryChoice, deliveryFor, spotOf, useStreetRoute, useWhere } from "./location";
 import { PALACE, distanceKm, formatKm } from "../shared/map";
+import { getConversation, liveOptions, rememberConversation, sendMessage, settled, type ConversationOption, type ConversationView } from "./conversation";
 
-/* The consumer's order as one chat thread. The first message creates the
-   order; every later message before checkout is a new version of the request
-   (the whole conversation, newest line last), which the server understands
-   again. Each step of the order is a card in the thread, drawn by the same
-   step components as before: the newest card is live, older ones fold to the
-   line they left behind. Nothing here changes how an order is made, priced,
-   paid, printed or handed over. */
+/* The consumer's order as one chat thread. An order chosen in a conversation
+   with fabyn starts with that conversation, and every later message goes back
+   to it: fabyn answers questions without touching the order, and a correction
+   or another choice before checkout updates the order on the server. An order
+   made without a conversation keeps the old rule: every later message before
+   checkout is a new version of the request (the whole conversation, newest
+   line last), which the server understands again. Each step of the order is a
+   card in the thread, drawn by the same step components as before: the newest
+   card is live, older ones fold to the line they left behind. Nothing here
+   changes how an order is made, priced, paid, printed or handed over. */
 
 export function Mark({ className = "cs-mark" }: { className?: string }) {
   const clip = useId();
@@ -170,29 +174,63 @@ export function Composer({
 
 /* ---------- messages ---------- */
 
-function YouMessage({ e }: { e: Extract<ChatEntry, { who: "you" }> }) {
+export function YouMessage({ text, photos }: { text: string; photos?: string[] }) {
   return (
     <div className="cs-bubble">
-        {e.photos && e.photos.length > 0 && (
-          <ul className="cs-bubble-photos" aria-label="Photos you sent">
-            {e.photos.map((id) => (
-              <li key={id}>
-                <img src={assetUrl(id)} alt="a photo you sent" />
-              </li>
-            ))}
-          </ul>
-        )}
-      {e.text && <p>{e.text}</p>}
+      {photos && photos.length > 0 && (
+        <ul className="cs-bubble-photos" aria-label="Photos you sent">
+          {photos.map((id) => (
+            <li key={id}>
+              <img src={assetUrl(id)} alt="a photo you sent" />
+            </li>
+          ))}
+        </ul>
+      )}
+      {text && <p>{text}</p>}
     </div>
   );
 }
 
-function Say({ children }: { children: ReactNode }) {
+export function Say({ children }: { children: ReactNode }) {
   return (
     <p className="cs-say">
       <Mark className="cs-say-mark" />
       <span>{children}</span>
     </p>
+  );
+}
+
+/** fabyn is answering. */
+export function Thinking({ label = "thinking" }: { label?: string }) {
+  return (
+    <p className="cs-say" aria-live="polite">
+      <Mark className="cs-say-mark" />
+      <span className="cs-thinking">
+        {label}
+        <span aria-hidden="true">…</span>
+      </span>
+    </p>
+  );
+}
+
+/** The options fabyn offered: pressing one chooses it. One that cannot be made now says why. */
+export function OptionChips({ options, onPick, busy }: { options: ConversationOption[]; onPick: (o: ConversationOption) => void; busy?: boolean }) {
+  return (
+    <div className="cs-options" role="group" aria-label="fabyn's suggestions">
+      {options.map((o, i) => (
+        <button key={o.id} type="button" className="cs-option" disabled={busy || !o.available} onClick={() => onPick(o)}>
+          <span className="cs-option-n" aria-hidden="true">
+            {i + 1}
+          </span>
+          <span className="cs-option-body">
+            <span className="cs-option-title">{o.title}</span>
+            <span className="cs-option-why">
+              {!o.available ? `not available now · ${o.reason ?? ""}` : o.practice ? `${o.why} · practice run, nothing physical is made` : o.why}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -301,23 +339,39 @@ export function BusyCard({ order, run, busy, error, onNew, now, go }: ScreenProp
   const minutes = Number.isFinite(freeAt) ? Math.max(0, Math.ceil((freeAt - now) / 60000)) : null;
   const freeNow = minutes === 0;
   const alternatives = order.suggestions.filter((s) => s.operation === "replace");
-  const reason = plainReason(order.draft.reason, "The machines nearby are busy or not ready.");
-  const retry = () => void run("retry", () => changeRequest(order, order.draft.requestText));
+  // the artwork could not be drawn: the printers may be fine, so never say no machine can take it
+  const drawing = designUnavailable(order);
+  const reason = plainReason(order.draft.reason, drawing ? "New artwork can't be drawn right now." : "The machines nearby are busy or not ready.");
+  const retry = () => void run("retry", () => retryOrder(order));
   return (
     <section className="cs-notice cs-busy" aria-labelledby="cs-busy-title">
       <TitleBlock
         id="cs-busy-title"
-        kicker={minutes === null ? "busy right now" : freeNow ? "should be free now" : `busy · free about ${clockTime(order.draft.freeAt!)}`}
-        title={freeNow ? "The machine should be free now" : minutes !== null ? `Free in about ${minutes} min` : "No machine can take this now"}
+        kicker={drawing ? "drawing unavailable" : minutes === null ? "busy right now" : freeNow ? "should be free now" : `busy · free about ${clockTime(order.draft.freeAt!)}`}
+        title={
+          drawing
+            ? "The design couldn't be drawn"
+            : freeNow
+              ? "The machine should be free now"
+              : minutes !== null
+                ? `Free in about ${minutes} min`
+                : "No machine can take this now"
+        }
         sub={reason}
       />
       <div className="cs-busy-choices">
         <div className="cs-busy-choice">
-          <p className="cs-kicker">wait for it</p>
+          <p className="cs-kicker">{drawing ? "try again" : "wait for it"}</p>
           <button className={`cs-btn ${freeNow || !alternatives.length ? "cs-btn-main" : ""}`} disabled={!!busy} aria-busy={busy === "retry" || undefined} onClick={retry}>
-            {freeNow ? "check again now" : "check again"}
+            {drawing ? "draw it again" : freeNow ? "check again now" : "check again"}
           </button>
-          <p className="cs-fine">{minutes !== null && !freeNow ? `Nothing changes; check again after about ${clockTime(order.draft.freeAt!)}.` : "Asks the machines again. Nothing is charged."}</p>
+          <p className="cs-fine">
+            {drawing
+              ? "Asks for new drafts again. Nothing is charged."
+              : minutes !== null && !freeNow
+                ? `Nothing changes; check again after about ${clockTime(order.draft.freeAt!)}.`
+                : "Asks the machines again. Nothing is charged."}
+          </p>
         </div>
         {alternatives.map((s) => (
           <div key={s.id} className="cs-busy-choice">
@@ -395,6 +449,7 @@ export function OrderThread({
   profile,
   onNew,
   onOrders,
+  onSwitch,
 }: {
   id: string;
   fresh: boolean;
@@ -402,6 +457,8 @@ export function OrderThread({
   profile: Profile;
   onNew: () => void;
   onOrders: () => void;
+  /** the conversation opened a new order (the earlier one was closed) */
+  onSwitch?: (order: OrderView) => void;
 }) {
   const { order, setOrder, error, reload } = useOrder(id, { initial });
   const { machines } = useMachines(4000);
@@ -417,6 +474,31 @@ export function OrderThread({
   const [files, setFiles] = useState<File[]>([]);
   const [sendError, setSendError] = useState("");
   const [sending, setSending] = useState(false);
+  // the conversation the order was chosen in, and the message being answered
+  const [conversation, setConversation] = useState<ConversationView | null>(null);
+  const [saying, setSaying] = useState("");
+  const messageKey = useRef<{ sig: string; key: string } | null>(null);
+  const conversationId = order?.conversationId;
+  const loaded = !!order;
+  useEffect(() => {
+    // a reload of this tab comes back to the conversation of the order on screen, or to a fresh start
+    if (loaded) rememberConversation(conversationId ?? null);
+  }, [loaded, conversationId]);
+  useEffect(() => {
+    if (!conversationId) return;
+    let live = true;
+    getConversation(conversationId)
+      .then(({ conversation: c }) => {
+        if (!live) return;
+        setConversation(c);
+        // a thread that lost its start (another tab, cleared storage) begins with the conversation again
+        setEntries((prev) => (c.turns.some((t) => prev.some((e) => e.id === t.id)) ? withTurns(prev, c) : [...conversationEntries(c), ...prev]));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [conversationId]);
   // after a change in the chat the map is not shown again: understanding goes on to the pairing or the preview
   const afterUnderstand = useRef<{ processes: number } | null>(null);
   const orderRef = useRef(order);
@@ -488,7 +570,11 @@ export function OrderThread({
 
   const notice = !!phase && (NOTICE_PHASES.includes(phase) || phase === "partial" || phase === "needs_review" || phase === "payment");
   const card: Card | null = !shown || !phase ? null : notice ? "notice" : shown;
-  const revised = entries.filter((e) => e.who === "you").length > 1;
+  // a conversation's own messages come before the order: only later ones revise it
+  const firstCard = entries.findIndex((e) => e.who === "fabyn");
+  const revised = order?.conversationId
+    ? firstCard >= 0 && entries.slice(firstCard).some((e) => e.who === "you")
+    : entries.filter((e) => e.who === "you").length > 1;
   const ctx: LineContext = useMemo(() => ({ machines, spot, name: profile.name, now, revised }), [machines, spot, profile.name, now, revised]);
 
   // the thread: the first message, then a card per step and revision; the live card's line keeps up with the order
@@ -496,7 +582,7 @@ export function OrderThread({
     if (!order || !card || !phase) return;
     setEntries((prev) => {
       let list = prev;
-      if (!list.some((e) => e.who === "you")) list = [youEntry(order.draft.requestText, order.draft.photoAssetIds), ...list];
+      if (!list.some((e) => e.who === "you") && !order.conversationId) list = [youEntry(order.draft.requestText, order.draft.photoAssetIds), ...list];
       const i = list.map((e) => e.who).lastIndexOf("fabyn");
       const live = i >= 0 ? (list[i] as Extract<ChatEntry, { who: "fabyn" }>) : null;
       if (live && cardKey(live.card, live.phase) === cardKey(card, phase) && live.rev === order.draft.revision) {
@@ -556,6 +642,9 @@ export function OrderThread({
     fresh,
   };
   const liveIndex = entries.map((e) => e.who).lastIndexOf("fabyn");
+  // the latest reply's options can be pressed while the order can still change
+  const lastReply = conversation ? [...conversation.turns].reverse().find((t) => t.role === "assistant")?.id : undefined;
+  const pressable = conversation && !order.makeIntent ? liveOptions(conversation) : [];
   const multi = processesOf(order).length > 1;
 
   const liveCard = (() => {
@@ -599,8 +688,69 @@ export function OrderThread({
   const working = phase === "understand" || !!busy;
   const closed = ["cancelled", "superseded", "payment_failed"].includes(phase);
   const canChange = !confirmed && !closed && REVISABLE(phase);
+  // an order from a conversation can always be talked about: fabyn decides what a message may change
+  const talkable = !!order.conversationId && !!conversation;
+  /** One message (or a pressed option) to the conversation; its reply may update the order. */
+  const talk = async (input: { text?: string; choice?: ConversationOption }) => {
+    if (!conversation) return;
+    setSendError("");
+    setSending(true);
+    setSaying(input.choice?.title ?? (input.text || "(a photo)"));
+    try {
+      const photos = files.length ? await uploadPhotos(files) : [];
+      const sig = JSON.stringify({ v: conversation.version, text: input.text ?? "", choice: input.choice?.id ?? null, photos });
+      if (messageKey.current?.sig !== sig) messageKey.current = { sig, key: `${Date.now().toString(36)}-${crypto.randomUUID()}` };
+      const reply = await settled(
+        await sendMessage(conversation, {
+          messageId: messageKey.current.key,
+          ...(input.text ? { text: input.text } : {}),
+          ...(input.choice ? { choiceIds: [input.choice.id] } : {}),
+          ...(photos.length ? { photoAssetIds: photos } : {}),
+        }),
+      );
+      messageKey.current = null;
+      setConversation(reply.conversation);
+      setEntries((prev) => withTurns(prev, reply.conversation));
+      if (!input.choice) setText("");
+      setFiles([]);
+      const next = reply.order;
+      if (next && next.id !== order.id) {
+        // the earlier order was closed, so the choice made a new one: it opens with this conversation
+        saveThread(next.id, conversationEntries(reply.conversation));
+        onSwitch?.(next);
+      } else if (next && next.draft.revision !== order.draft.revision) {
+        afterUnderstand.current = stepIndex("map") <= reached ? { processes: processesOf(order).length } : null;
+        setOrder(next);
+        goStep("understand");
+      } else if (next) setOrder(next);
+    } catch (e) {
+      const d = describeError(e);
+      if (["STALE_CONVERSATION", "CONVERSATION_BUSY", "STALE_CHOICE"].includes(d.code)) {
+        messageKey.current = null;
+        setSendError("The conversation moved on while you were typing. Here is the latest; send it again if it still applies.");
+        try {
+          const latest = await settled(await getConversation(conversation.id));
+          setConversation(latest.conversation);
+          setEntries((prev) => withTurns(prev, latest.conversation));
+          if (latest.order) setOrder(latest.order);
+        } catch {
+          /* the line above already says to send it again */
+        }
+      } else {
+        if (!d.unknown) messageKey.current = null;
+        setSendError(d.unknown ? "We could not tell whether that went through. Send it again; it will not be sent twice." : d.message);
+      }
+    } finally {
+      setSending(false);
+      setSaying("");
+    }
+  };
   const send = async () => {
     const message = text.trim();
+    if (talkable) {
+      if (message || files.length) await talk({ text: message });
+      return;
+    }
     if ((!message && !files.length) || !canChange) return;
     setSendError("");
     setSending(true);
@@ -624,7 +774,11 @@ export function OrderThread({
       setSending(false);
     }
   };
-  const placeholder = confirmed
+  const placeholder = talkable
+    ? confirmed
+      ? "Ask fabyn about your order"
+      : "Ask fabyn anything, or tell it what to change"
+    : confirmed
     ? "This order is paid. Start a new one to change it."
     : closed
       ? "This order is closed. Start a new one."
@@ -665,11 +819,22 @@ export function OrderThread({
       </header>
       <ol className="cs-thread" aria-label="Your conversation with fabyn">
         {entries.map((e, i) => {
-          const ref = i === entries.length - 1 ? lastRef : undefined;
+          const ref = i === entries.length - 1 && !saying ? lastRef : undefined;
           if (e.who === "you")
             return (
               <li key={e.id} ref={ref} className="cs-msg is-you">
-                <YouMessage e={e} />
+                <YouMessage text={e.text} photos={e.photos} />
+              </li>
+            );
+          if (e.who === "agent")
+            return (
+              <li key={e.id} ref={ref} className="cs-msg is-fabyn is-said">
+                <Say>{e.text}</Say>
+                {e.id === lastReply && pressable.length > 0 ? (
+                  <OptionChips options={pressable} busy={sending || !!busy} onPick={(o) => void talk({ choice: o })} />
+                ) : (
+                  e.options && e.options.length > 0 && <div className="cs-fold">{e.options.map((o) => o.title).join(" · ")}</div>
+                )}
               </li>
             );
           if (i === liveIndex)
@@ -687,6 +852,16 @@ export function OrderThread({
             </li>
           );
         })}
+        {saying && (
+          <>
+            <li className="cs-msg is-you">
+              <YouMessage text={saying} />
+            </li>
+            <li ref={lastRef} className="cs-msg is-fabyn">
+              <Thinking />
+            </li>
+          </>
+        )}
       </ol>
       <Composer
         value={text}
@@ -700,8 +875,8 @@ export function OrderThread({
         onSend={() => void send()}
         placeholder={placeholder}
         label="Message fabyn"
-        canSend={canChange && !working && (!!text.trim() || files.length > 0)}
-        disabled={!canChange}
+        canSend={(talkable || (canChange && !working)) && (!!text.trim() || files.length > 0)}
+        disabled={!talkable && !canChange}
         busy={sending}
         chips={chips}
         error={sendError}

@@ -17,11 +17,14 @@ import { courierProgress, clockTime } from "./estimate";
 import { assetUrl, plainReason } from "./orders";
 import { formatKm, distanceKm, type LatLng } from "../shared/map";
 import { placeText } from "./location";
+import type { ConversationOption, ConversationView } from "./conversation";
 
 export type Card = Step | "notice";
 
 export type ChatEntry =
   | { id: string; who: "you"; at: number; text: string; photos?: string[] }
+  /** something fabyn said in the conversation, with the options it offered */
+  | { id: string; who: "agent"; at: number; text: string; options?: ConversationOption[] }
   | {
       id: string;
       who: "fabyn";
@@ -42,7 +45,9 @@ const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).sli
 export function readThread(orderId: string): ChatEntry[] {
   try {
     const v = JSON.parse(sessionStorage.getItem(key(orderId)) ?? "[]");
-    return Array.isArray(v) ? v.filter((e) => e && (e.who === "you" || e.who === "fabyn") && typeof e.id === "string").slice(-80) : [];
+    return Array.isArray(v)
+      ? v.filter((e) => e && (e.who === "you" || e.who === "fabyn" || e.who === "agent") && typeof e.id === "string").slice(-80)
+      : [];
   } catch {
     return [];
   }
@@ -63,6 +68,22 @@ export const youEntry = (text: string, photos: string[] = []): ChatEntry => ({
   text,
   ...(photos.length ? { photos } : {}),
 });
+
+/** The conversation's turns as thread entries; a turn keeps its id, so it is added once. */
+export function conversationEntries(c: ConversationView): ChatEntry[] {
+  return c.turns.map((t) =>
+    t.role === "user"
+      ? { id: t.id, who: "you", at: Date.parse(t.at), text: t.text, ...(t.photoAssetIds?.length ? { photos: t.photoAssetIds } : {}) }
+      : { id: t.id, who: "agent", at: Date.parse(t.at), text: t.text, ...(t.options?.length ? { options: t.options } : {}) },
+  );
+}
+
+/** Adds the turns the thread has not shown yet, at the end, in order. */
+export function withTurns(entries: ChatEntry[], c: ConversationView): ChatEntry[] {
+  const seen = new Set(entries.map((e) => e.id));
+  const fresh = conversationEntries(c).filter((e) => !seen.has(e.id));
+  return fresh.length ? [...entries, ...fresh] : entries;
+}
 
 /** A card's identity: the same card for the same revision is the same entry. */
 export const cardKey = (card: Card, phase: Phase | undefined) => (card === "notice" ? `notice:${phase}` : card);
