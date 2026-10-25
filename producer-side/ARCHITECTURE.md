@@ -208,7 +208,7 @@ Notes for the two remaining machines:
   - The consumer sends an STL.
   - `prepare` slices it with the OrcaSlicer CLI and one fixed profile → `.gcode.3mf` plus print statistics.
   - `run` uploads over FTPS and starts it over MQTT (LAN-only + Developer Mode), with progress from MQTT percent.
-  - After each print, set status so policy rejects new jobs until someone presses "Plate cleared". This needs a hub → node message for "plate cleared", which isn't in the contract yet.
+  - The MVP assumes the plate is clear after a successful print and returns the printer to idle. Failed and uncertain attempts still need review.
   - Prior art: `../node/fabyn_node/adapters.py` (`Bambu`, using `bambulabs-api`).
   - Fallback: open the `.gcode.3mf` in Bambu Studio and press print.
 
@@ -273,4 +273,4 @@ No test touches hardware. Use `node.tools.run_job` for that.
 - Heartbeats carry the extra keys `queue`, `current_job`, `detail` and `battery_pct`.
 - `node/protocol.py` duplicates the `Job` model until `contracts/models.py` lands. Then import from there.
 - Instax image size vs the "4×6 postcard" in the design doc.
-- A hub → node "plate cleared" message is needed for the Bambu.
+- The Bambu accepts the legacy "plate cleared" message, but the MVP does not require it after successful completion.

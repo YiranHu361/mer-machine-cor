@@ -57,8 +57,8 @@ From the repository root:
 
 ```sh
 npm run producer
-# Only after physically checking the A1 mini plate is empty:
-npm run producer -- --plate-cleared
+
+# No plate-clear flag is needed for the MVP.
 ```
 
 All three nodes run in this local process. Startup probes do not print.
@@ -78,8 +78,14 @@ in the root `.env` and run:
 npm run producer:link -- --confirm-test-prints
 ```
 
-After a Bambu job, remove the item and use the existing clear-print control.
-Paper/film auto handling follows `FABYN_AUTO_PREPARE_PRINTS` as before.
+The MVP assumes the A1 plate is clear after a successful print, including after
+a producer restart. Completed 3D jobs automatically free the machine for the next
+order. Busy, failed, and uncertain jobs still report their actual state. Paper/film
+auto handling follows `FABYN_AUTO_PREPARE_PRINTS` as before.
+
+The seller header reports Vercel access and the local producer separately.
+Producer status expires 20 seconds after its last heartbeat. Each printer shows
+its last observed check and whether it has been enabled for orders.
 
 ## Migrate existing local state
 

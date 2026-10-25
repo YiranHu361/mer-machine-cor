@@ -8,6 +8,7 @@ import express, {
   type NextFunction,
 } from "express";
 import { UI_ROUTES, UI_REDIRECTS } from "../shared/ui-routes.ts";
+import { producerConnection } from "./producer-status.ts";
 import multer from "multer";
 import {
   createHash,
@@ -973,6 +974,7 @@ export function createApp(
     const { version: revision, data: s } = await service.store.read();
     res.json({
       revision,
+      producer: options.producer ? producerConnection(s) : undefined,
       machines: Object.values(s.machines).map(ownerMachineView),
       // source: how the order came in ("web" or the ASI:One agent, "asi1").
       jobs: Object.values(s.jobs).map((j) => ({
@@ -1111,6 +1113,7 @@ export function createApp(
     actor,
     owner,
     testWallet: options.testWallet,
+    producer: options.producer,
   });
   registerIdentificationRoutes(app, {
     owner,

@@ -7,6 +7,7 @@ import { ProducerHubNode, hubStatus, type HubMachine } from "./producer-hub.ts";
 import { Problem, requireThat, type Machine } from "./model.ts";
 import { mutate, type Store } from "./store.ts";
 import { digest, type FileStorage } from "./cloud-files.ts";
+import { PRODUCER_STALE_MS } from "../shared/connection-status.ts";
 
 export interface TransferFile {
   path: string;
@@ -85,7 +86,7 @@ export class CloudProducer extends ProducerHubNode {
     return Object.values(state((await this.store.read()).data).machines).map(
       (m) => ({
         ...m,
-        status: this.now() - m.lastSeen > 20_000 ? "offline" : m.status,
+        status: this.now() - m.lastSeen > PRODUCER_STALE_MS ? "offline" : m.status,
       }),
     );
   }

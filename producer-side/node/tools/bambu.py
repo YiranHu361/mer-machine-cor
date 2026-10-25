@@ -167,7 +167,7 @@ def main() -> None:
     p = sub.add_parser("print", help="upload a sliced file and print it, following progress to the end")
     p.add_argument("file", type=Path)
     p.add_argument("--plate-cleared", action="store_true",
-                   help="the build plate is empty (needed when the printer still shows the last print as FINISH)")
+                   help="compatibility flag; the MVP already assumes a clear plate")
     p.add_argument("--allow-material-mismatch", action="store_true",
                    help="print even though the file was sliced for a different filament type")
     p.add_argument("--filament-g", type=float, help="grams left on the spool (overrides the manifest)")

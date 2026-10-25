@@ -183,11 +183,11 @@ export default function Home() {
             </div>
           </div>
           <div className="hm-micro">
-            <b>153</b> machines online
+            <b>Cloud</b> ordering
             <br />
-            <b>10</b> kinds of making
+            <b>Local</b> production
             <br />
-            <b data-shipped>1,284</b> things shipped
+            <b>3</b> kinds of making
             <br />
             x402 test payments
           </div>

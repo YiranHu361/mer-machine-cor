@@ -28,6 +28,8 @@ export interface HubMachine {
   media_loaded?: { remaining_est?: number };
   /** The node's own words for its state, e.g. "plate_not_cleared: …". */
   detail?: string | null;
+  checked_at?: string | null;
+  lastSeen?: number;
 }
 interface HubJob {
   job_id: string;

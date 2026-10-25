@@ -99,9 +99,10 @@ def test_preflight_ok_and_each_refusal():
         return [p.split(":")[0] for p in preflight(kw.pop("info", info), report, m, cfg, **{"plate_clear": None, **kw})]
 
     assert reasons(idle(gcode_state="RUNNING")) == ["printer_busy"]
-    assert reasons(idle(gcode_state="FINISH")) == ["plate_not_cleared"]
+    assert reasons(idle(gcode_state="FINISH")) == []
     assert reasons(idle(gcode_state="FINISH"), plate_clear=True) == []
-    assert reasons(idle(), plate_clear=False) == ["plate_not_cleared"]
+    assert reasons(idle(), plate_clear=False) == []
+    assert reasons(idle(gcode_state="FAILED", print_error=123)) == ["printer_failed"]
     assert reasons(idle(sdcard=False)) == ["no_sd_card"]
     assert reasons(idle(vt_tray={"tray_type": "PETG"})) == ["wrong_material"]
     assert reasons(idle(nozzle_diameter="0.2")) == ["wrong_nozzle"]
@@ -127,7 +128,7 @@ def _job(job_id="job_1", quantity=1):
     return Job(job_id=job_id, order_id="o", item_id="i", machine_id="m_fdm_01", process="fdm_print", quantity=quantity)
 
 
-def test_adapter_dry_run_prints_then_blocks_until_plate_cleared(tmp_path):
+def test_adapter_mvp_prints_consecutive_jobs_without_plate_confirmation(tmp_path):
     async def go():
         m = manifest(out_dir=str(tmp_path / "sd"))
         adapter = make_adapter(m)
@@ -141,12 +142,10 @@ def test_adapter_dry_run_prints_then_blocks_until_plate_cleared(tmp_path):
         assert (tmp_path / "sd/fabyn_job_1.gcode.3mf").exists()
         assert m["media_loaded"]["remaining_est"] == pytest.approx(15 - 1.84)
         st = await adapter.status()
-        assert st["state"] == "error" and st["detail"].startswith("plate_not_cleared")
+        assert st["state"] == "idle" and st["detail"] is None
 
-        with pytest.raises(AdapterError, match="plate_not_cleared"):
-            async for _ in adapter.run(_job("job_2"), native):
-                pass
-        adapter.plate_cleared()
+        assert [p async for p in adapter.run(_job("job_2"), native)][-1].progress == 1.0
+        await adapter.probe()
         assert (await adapter.status())["state"] == "idle"
         assert [p async for p in adapter.run(_job("job_3"), native)][-1].progress == 1.0
 
@@ -256,13 +255,13 @@ def test_bambu_studio_slices_with_the_full_a1_mini_profile(tmp_path, monkeypatch
     assert slicer.check_gcode(text, info, slicer.DEFAULT_PROFILE) == []
 
 
-def test_probe_reports_a_part_left_on_the_plate():
+def test_restart_probe_accepts_finished_plate_without_a_flag():
     async def go(**adapter):
         a = make_adapter(manifest(dry_run_state="FINISH", **adapter))
         await a.probe()
         return await a.status()
     st = asyncio.run(go())
-    assert st["state"] == "error" and st["detail"].startswith("plate_not_cleared")
+    assert st["state"] == "idle" and st["detail"] is None
     assert asyncio.run(go(plate_clear_at_start=True))["state"] == "idle"
 
 

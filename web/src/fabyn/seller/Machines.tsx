@@ -9,8 +9,9 @@ import { JobActions, type Act } from "./JobActions";
 import { estimateJob, formatEta, type JobEstimate } from "./estimate";
 import { finished, intakeOf, jobStateLabel, jobTitle, machineStatus, MACHINE_LABEL, needsHandling, needsMaker, onLine, stopReason, supplyOf, viaAgent, waitingPickup, type MachineKey } from "./status";
 import type { Connector, OwnerJob, OwnerMachine, PrinterCheck, PrinterStatusRow } from "./data";
+import { currentPrinterConnection } from "../../../../shared/connection-status";
 
-const MODE_LABEL = { simulation: "runs on the workshop node", hardware: "connected printer" } as const;
+const MODE_LABEL = { simulation: "runs on the workshop node", hardware: "physical printer" } as const;
 const ORDER_PRIORITY = (j: OwnerJob) => (["dispatched", "running", "verifying"].includes(j.productionState) ? 0 : needsMaker(j) ? 1 : 2);
 
 export function Machines({ machines, jobs, connectors, printers = [], busy, act, now }: { machines: OwnerMachine[]; jobs: OwnerJob[]; connectors: Connector[]; printers?: PrinterStatusRow[]; busy: string; act: Act; now: number }) {
@@ -38,7 +39,8 @@ export function Machines({ machines, jobs, connectors, printers = [], busy, act,
 }
 
 function MachineCard({ machine: m, jobs, connector, printer, busy, act, now }: { machine: OwnerMachine; jobs: OwnerJob[]; connector?: Connector; printer?: PrinterStatusRow; busy: string; act: Act; now: number }) {
-  const status = machineStatus(m, connector, jobs);
+  printer = printer ? currentPrinterConnection(printer, now) : undefined;
+  const status = machineStatus(m, connector, jobs, printer);
   const mine = jobs.filter((j) => j.machineId === m.id);
   const line = mine.filter(onLine).sort((a, b) => ORDER_PRIORITY(a) - ORDER_PRIORITY(b) || a.createdAt.localeCompare(b.createdAt));
   const pickups = mine.filter(waitingPickup);
@@ -201,7 +203,9 @@ function MachineControls({ machine: m, busy, act }: { machine: OwnerMachine; bus
 function PrinterCheckRow({ machine: m, printer, now }: { machine: OwnerMachine; printer?: PrinterStatusRow; now: number }) {
   const [state, setState] = useState<{ checking: boolean; result: PrinterCheck | null; error: string }>({ checking: false, result: null, error: "" });
   const latest: PrinterCheck | null =
-    state.result ?? (printer ? { ok: printer.status === "connected" || printer.status === "busy", detail: printer.detail, checkedAt: printer.checkedAt } : null);
+    (printer?.lastSeen !== undefined || !state.result) && printer
+      ? { ok: printer.status === "connected" || printer.status === "busy", detail: printer.detail, checkedAt: printer.checkedAt }
+      : state.result;
   const run = async () => {
     setState((s) => ({ ...s, checking: true, error: "" }));
     try {
@@ -219,7 +223,7 @@ function PrinterCheckRow({ machine: m, printer, now }: { machine: OwnerMachine; 
       {latest && !state.checking && (
         <span className={`sl-check-result ${latest.ok ? "ok" : "bad"}`}>
           <i aria-hidden="true" />
-          {latest.ok ? "Answered" : "No answer"} · {checkedAgo(latest.checkedAt, now)}
+          {printer?.status === "offline" ? "Producer offline" : printer?.status === "attention" ? "Needs attention" : printer?.status === "checking" ? "Checking connection" : latest.ok ? "Answered" : "No answer"} · {checkedAgo(latest.checkedAt, now)}
           {latest.detail ? <em> · {latest.detail}</em> : null}
         </span>
       )}

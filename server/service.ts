@@ -1730,13 +1730,12 @@ export class Service {
       await this.transfer(jobId, "release");
     if (j.productionState === "failed" && j.paymentState === "held")
       await this.transfer(jobId, "refund");
-    // A 3D print stays on the build plate until someone takes it off, so the
-    // owner clears the plate separately before the next job.
+    // The MVP assumes a completed 3D print leaves a clear plate. Paper handling
+    // retains its existing opt-in; failed or uncertain attempts still need review.
     if (
       execution === "completed" &&
       j.productionState === "produced" &&
-      this.config.autoPrepareHubPrints &&
-      j.spec.outputType !== "3d" &&
+      (this.config.autoPrepareHubPrints || j.spec.outputType === "3d") &&
       (await this.read()).machines[j.machineId!]?.producerHub
     )
       try {
@@ -1782,7 +1781,9 @@ export class Service {
       labeled: true,
       stored: true,
       cleared: true,
-    });
+    }, job.spec.outputType === "3d"
+      ? "MVP assumes the completed 3D print is handled and the plate is clear; no plate inspection was performed."
+      : undefined);
     return mutate(this.store, (s) => {
       const m = s.machines[machineId];
       requireThat(
@@ -1981,7 +1982,7 @@ export class Service {
       return this.job(jobId);
     }
   }
-  async prepare(jobId: string, body: any) {
+  async prepare(jobId: string, body: any, automaticReason?: string) {
     return mutate(this.store, (s) => {
       const j = s.jobs[jobId];
       requireThat(
@@ -2030,7 +2031,7 @@ export class Service {
         simulatedChild ? "simulation_complete" : "ready_for_pickup",
         simulatedChild
           ? "Owner cleared the simulated machine. A simulated job has no physical item or pickup code."
-          : "Owner prepared and stored the item. Pickup is independent of machine availability.",
+          : automaticReason ?? "Owner prepared and stored the item. Pickup is independent of machine availability.",
       );
       return j;
     });

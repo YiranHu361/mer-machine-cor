@@ -13,7 +13,7 @@ export function JobActions({ job, machine, busy, act, now }: { job: OwnerJob; ma
   const recovered = job.history?.some((e) => e.event === "owner_recovery");
   const running = ["dispatched", "running", "verifying"].includes(job.productionState);
   // Printers on the producer side's hub finish from the machine's own report;
-  // the owner only confirms the finished piece is off the printer.
+  // completed 3D prints are handled automatically under the MVP plate assumption.
   const onHub = Boolean(machine?.producerHub);
   return (
     <div className="sl-job-actions">
@@ -27,33 +27,33 @@ export function JobActions({ job, machine, busy, act, now }: { job: OwnerJob; ma
 }
 
 function ClearPlateForm({ job, busy, act }: { job: OwnerJob; busy: string; act: Act }) {
-  const [done, setDone] = useState(false);
   const plate = job.spec.outputType === "3d";
+  const [done, setDone] = useState(plate);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!done) return;
     const ok = await act(
       `${job.id}-clear-print`,
       () => api(`/owner/jobs/${job.id}/clear-print`, { cleared: true }),
-      plate ? "Printed fine. The plate is clear and the printer takes the next order." : "Taken off. The printer takes the next order.",
+      plate ? "The completed print is handled using the MVP plate assumption. The printer takes the next order." : "Taken off. The printer takes the next order.",
     );
     if (ok) setDone(false);
   };
   return (
     <form className="sl-review" onSubmit={submit}>
-      <h5>{plate ? "Take the print off the plate" : "Take the print off the printer"}</h5>
+      <h5>{plate ? "Finish this completed print" : "Take the print off the printer"}</h5>
       <p className="sl-fine">
         {plate
-          ? "The printer reported it finished. A 3D print stays on the build plate until you take it off, so the next order waits for you."
+          ? "The MVP assumes the plate is clear once printing finishes. Retry handling this completed print to free the printer."
           : "The printer reported it finished. Take the piece off so the next order can start."}
       </p>
-      <label className="sl-check">
+      {!plate && <label className="sl-check">
         <input type="checkbox" checked={done} disabled={Boolean(busy)} onChange={(e) => setDone(e.target.checked)} />
-        <span>{plate ? "I took the print off and the build plate is clear." : "I took the print off the printer."}</span>
-      </label>
+        <span>I took the print off the printer.</span>
+      </label>}
       <div className="sl-actions">
         <button className="sl-btn solid" type="submit" disabled={!done || Boolean(busy)}>
-          {busy === `${job.id}-clear-print` ? "Saving…" : "Printed fine · approve and free the printer"}
+          {busy === `${job.id}-clear-print` ? "Saving…" : plate ? "Free printer" : "Printed fine · approve and free the printer"}
         </button>
       </div>
     </form>

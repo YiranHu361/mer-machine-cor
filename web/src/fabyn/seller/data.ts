@@ -1,5 +1,6 @@
 // Types for the owner API the seller side reads (GET /api/owner/dashboard and friends).
 // Only the fields the seller screens use. The server is the source of truth for every rule.
+import type { PrinterConnection, ProducerConnection } from "../../../../shared/connection-status";
 
 /** Display names only. Everything else about the maker comes from the API. */
 export const MAKER = { name: "Lucas", place: "Palace of Fine Arts, San Francisco" } as const;
@@ -129,6 +130,7 @@ export interface OrderDelivery {
 
 export interface Dashboard {
   revision: number;
+  producer?: ProducerConnection;
   machines: OwnerMachine[];
   jobs: OwnerJob[];
   ledger: LedgerEntry[];
@@ -148,14 +150,6 @@ export interface PrinterCheck {
 }
 
 /** GET /api/printers: whether each real printer on the hub answered its latest check. */
-export interface PrinterStatusRow {
-  id: string;
-  name: string;
-  model: string;
-  makes: string;
-  status: "connected" | "checking" | "not_answering" | "busy" | "paused";
-  detail: string;
-  checkedAt: string | null;
-}
+export interface PrinterStatusRow extends PrinterConnection {}
 
 export const BASESCAN_TX = (hash: string) => `https://sepolia.basescan.org/tx/${hash}`;

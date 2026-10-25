@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "ui-routing.spec.ts",
+  testMatch: ["ui-routing.spec.ts", "connection-status.spec.ts"],
   workers: 1,
   timeout: 30000,
   use: { baseURL: "http://127.0.0.1:4325", screenshot: "only-on-failure" },

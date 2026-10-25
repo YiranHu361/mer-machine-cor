@@ -76,7 +76,7 @@ def test_offer_to_result(tmp_path):
     asyncio.run(go())
 
 
-def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
+def test_a1_mini_takes_consecutive_jobs_without_a_plate_check(tmp_path):
     """Stub hub + real NodeClient + A1 mini adapter on the dry-run transport, with a sliced file."""
     from tests.test_bambu import GCODE
 
@@ -113,19 +113,20 @@ def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
             await wait_for(machine)
             first = await offer()
             await state_of(first, "done")
-            await wait_for(lambda: _status(machine, "error"))
-            assert (await machine())["detail"].startswith("plate_not_cleared")
+            await wait_for(lambda: _status(machine, "idle"))
+            assert not (await machine()).get("detail")
 
             second = await offer()
-            await state_of(second, "rejected")  # nothing goes onto an occupied plate
+            await state_of(second, "done")  # no owner or plate-clear message between jobs
 
+            # Older clients can still send the compatibility message.
             assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_fdm_01"})).status_code == 200
             await wait_for(lambda: _status(machine, "idle"), timeout=2)  # reported at once, not at the next heartbeat
             third = await offer()
             await state_of(third, "done")
             assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_nope"})).status_code == 409
 
-        assert len(list((tmp_path / "sd").glob("fabyn_*.gcode.3mf"))) == 2
+        assert len(list((tmp_path / "sd").glob("fabyn_*.gcode.3mf"))) == 3
         node_task.cancel()
         server.should_exit = True
         await asyncio.gather(node_task, server_task, return_exceptions=True)
@@ -198,5 +199,5 @@ def test_a1_mini_takes_jobs_again_once_it_answers_after_being_out_of_reach(tmp_p
         node.adapter._state, node.adapter._detail = "error", unreachable
         asyncio.run(node._on_check({"check_id": "c"}))
         assert asyncio.run(node.adapter.status())["state"] == "idle"
-    # Nothing reached the printer, so the plate is still unknown, not cleared.
-    assert node.adapter._plate_clear is None
+    # The MVP needs no separate plate-clear confirmation after recovery.
+    assert asyncio.run(node.adapter.status())["detail"] is None

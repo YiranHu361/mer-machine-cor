@@ -9,7 +9,7 @@ run:     connect (MQTT), check the printer can safely take this file, upload it 
 
 Pre-flight refuses, with a reason, when: the file is for another printer or nozzle; the printer
 is busy, paused or has no SD card; the loaded filament type differs from the file's; there is
-not enough filament; or the plate may still hold the last print.
+not enough filament. The MVP assumes the plate is clear after a completed print.
 """
 from __future__ import annotations
 
@@ -32,7 +32,6 @@ from .transport import Transport, make_transport, project_file_cmd, stop_cmd
 log = logging.getLogger(__name__)
 
 BUSY_STATES = {"PREPARE", "RUNNING", "PAUSE", "SLICING", "INIT"}
-LEFT_SOMETHING_ON_PLATE = {"FINISH", "FAILED"}
 
 
 def _float(v: Any) -> float | None:
@@ -68,11 +67,8 @@ def preflight(info: GcodeInfo, report: dict[str, Any], manifest: dict[str, Any],
     state = str(report.get("gcode_state") or "UNKNOWN").upper()
     if state in BUSY_STATES:
         problems.append(f"printer_busy: printer is {state}")
-    elif state in LEFT_SOMETHING_ON_PLATE and plate_clear is not True:
-        problems.append(f"plate_not_cleared: last print ended {state}; remove it, then pass "
-                        "--plate-cleared (or send plate cleared from the hub)")
-    elif plate_clear is False:
-        problems.append("plate_not_cleared: remove the last print, then mark the plate cleared")
+    elif state == "FAILED":
+        problems.append(f"printer_failed: inspect the printer error {report.get('print_error', 0)}")
     if report.get("sdcard") is False:
         problems.append("no_sd_card: the A1 mini stores uploaded jobs on its microSD card")
 
@@ -127,8 +123,6 @@ class BambuA1Mini(Adapter):
         self.plate = int(config.get("plate", 1))
         self.start_timeout_s = float(config.get("start_timeout_s", 120))
         self.quiet_refresh_s = float(config.get("quiet_refresh_s", 20))
-        # None = unknown: fine if the printer is IDLE, refused if it says FINISH/FAILED.
-        self._plate_clear: bool | None = True if config.get("plate_clear_at_start") else None
         self._state = "idle"
         self._detail: str | None = None
         self._cancel: set[str] = set()
@@ -196,7 +190,7 @@ class BambuA1Mini(Adapter):
                 report = await transport.refresh()
                 self._last_report = report
                 problems = preflight(info, report, self.manifest, self.config,
-                                     plate_clear=self._plate_clear, quantity=job.quantity)
+                                     plate_clear=True, quantity=job.quantity)
                 if problems:
                     raise AdapterError("; ".join(problems))
                 if job.job_id in self._cancel:
@@ -217,7 +211,6 @@ class BambuA1Mini(Adapter):
                     vibration_cali=bool(self.config.get("vibration_cali", False)),
                     timelapse=bool(self.config.get("timelapse", False)),
                 ))
-                self._plate_clear = False  # from here on, assume something may be on the plate
                 yield Progress("running", 0.05, eta_s=est, message="print command sent")
                 async for p in self._follow(transport, job, task, est):
                     yield p
@@ -227,9 +220,8 @@ class BambuA1Mini(Adapter):
             media = self.manifest.get("media_loaded") or {}
             if info.weight_g and isinstance(media.get("remaining_est"), (int, float)):
                 media["remaining_est"] = round(max(0.0, media["remaining_est"] - info.weight_g), 2)
-            yield Progress("running", 1.0, eta_s=0, message="printed; remove it from the plate")
-            self._state = "error"
-            self._detail = "plate_not_cleared: remove the print, then mark the plate cleared"
+            self._state, self._detail = "idle", None
+            yield Progress("running", 1.0, eta_s=0, message="printed; ready for the next job (MVP assumes plate clear)")
         except AdapterError as e:
             self._state = "idle" if str(e) == "cancelled" or str(e).startswith(_REFUSALS) else "error"
             self._detail = str(e)
@@ -310,16 +302,17 @@ class BambuA1Mini(Adapter):
             self._last_report = await transport.refresh()
         finally:
             await transport.close()
-        # A part from an earlier print may still be on the plate: say so before any job arrives.
+        # Completion is sufficient for the MVP; no plate-clear confirmation is required.
         state = str(self._last_report.get("gcode_state") or "").upper()
-        if state in LEFT_SOMETHING_ON_PLATE and self._plate_clear is not True:
-            self._state = "error"
-            self._detail = (f"plate_not_cleared: the printer's last print ended {state}; remove it, "
-                            "then mark the plate cleared")
+        if state == "FAILED":
+            self._state, self._detail = "error", f"printer_failed: {self._last_report.get('print_error', 0)}"
+        elif state in BUSY_STATES:
+            self._state, self._detail = "busy", f"Printer reports {state.lower()}."
+        else:
+            self._state, self._detail = "idle", None
 
     def plate_cleared(self) -> None:
-        """A person removed the last print."""
-        self._plate_clear = True
+        """Compatibility with older hubs; completed prints are already reusable."""
         if self._detail and self._detail.startswith("plate_not_cleared"):
             self._state, self._detail = "idle", None
 

@@ -1,5 +1,6 @@
 // Plain-language state for machines and jobs, derived from the real owner API fields.
 import type { Connector, OwnerJob, OwnerMachine } from "./data";
+import type { PrinterConnection } from "../../../../shared/connection-status";
 
 export type MachineKey = "available" | "printing" | "paused" | "attention" | "offline" | "unlisted";
 
@@ -59,15 +60,18 @@ export function onLine(job: OwnerJob): boolean {
   return !finished(job) && !waitingPickup(job);
 }
 
-export function machineStatus(m: OwnerMachine, connector: Connector | undefined, jobs: OwnerJob[]): { key: MachineKey; note: string } {
+export function machineStatus(m: OwnerMachine, connector: Connector | undefined, jobs: OwnerJob[], printer?: PrinterConnection): { key: MachineKey; note: string } {
+  if (printer?.status === "offline") return { key: "offline", note: printer.detail };
+  if (printer?.status === "attention") return { key: "attention", note: printer.detail };
+  if (printer?.status === "checking") return { key: "offline", note: "The producer is online and is checking this printer." };
+  if (printer?.status === "busy") return { key: "printing", note: printer.detail };
+  if (printer?.linked === false) return { key: "attention", note: "Printer connected. Enable it for orders in Connections after confirming a successful test print." };
   if (connector && !connector.online) return { key: "offline", note: `The machine computer ${connector.hostLabel} is not connected.` };
   const mine = jobs.filter((j) => j.machineId === m.id);
   if (m.policyReconciliationRequired) return { key: "attention", note: "Save the current settings, then check the machine before resuming." };
   if (mine.some(needsMaker)) return { key: "attention", note: "A job on this machine is waiting for you." };
   if (!m.calibrated) return { key: "attention", note: "Calibration is needed before orders can run." };
   if (m.activeJobId) return { key: "printing", note: "Working on the order below." };
-  if (m.paused && /plate_not_cleared|build plate/i.test(m.reason))
-    return { key: "paused", note: "Paused with the last print on the build plate. Take it off, then resume to clear the plate and take the next order." };
   if (m.paused) return { key: "paused", note: /resume/i.test(m.reason) ? "Done with the last job. Resume it to take the next order." : plain(m.reason) };
   if (!m.listed) return { key: "unlisted", note: "Hidden from new orders until you list it." };
   return { key: "available", note: "Ready for the next order." };

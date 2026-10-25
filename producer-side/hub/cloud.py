@@ -13,6 +13,7 @@ import logging
 import os
 import sqlite3
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -69,6 +70,7 @@ class CloudNode(NodeClient):
         super().__init__(*args, **kwargs)
         self.journal = journal
         self.probe_error: str | None = None
+        self.checked_at: str | None = None
 
     async def probe(self):
         try:
@@ -81,9 +83,13 @@ class CloudNode(NodeClient):
         except Exception as error:
             self.probe_error = str(error)
             raise
+        finally:
+            from datetime import datetime, timezone
+            self.checked_at = datetime.now(timezone.utc).isoformat()
 
     async def public_manifest(self):
         result = await super().public_manifest()
+        result["checked_at"] = self.checked_at
         if self.probe_error:
             result.update(status="error", detail=self.probe_error)
         return result
@@ -238,6 +244,7 @@ class Producer:
 
     async def run(self, probe: bool):
         workers = []
+        reported_at = 0.0
         async def probe_loop(node):
             node.probe_error = "Checking the printer connection."
             while True:
@@ -261,6 +268,10 @@ class Producer:
                         raise RuntimeError("A required printer worker stopped")
                 try:
                     await self.poll()
+                    if time.monotonic() - reported_at >= 30:
+                        summary = [f"{m.machine_id}={(await m.public_manifest())['status']}" for m in self.nodes.values()]
+                        log.info("Cloud connected; reporting %s", ", ".join(summary))
+                        reported_at = time.monotonic()
                 except (httpx.HTTPError, ValueError, OSError) as error:
                     log.warning("Cloud unavailable; retaining reports for retry: %s", error)
                 await asyncio.sleep(3)
@@ -277,7 +288,7 @@ def main():
     parser.add_argument("--work-dir", type=Path, default=Path(".work/cloud"))
     parser.add_argument("--machine", action="append", type=Path)
     parser.add_argument("--dry-run", action="store_true", help="File transports only; never connect to machines")
-    parser.add_argument("--plate-cleared", action="store_true", help="Confirm the A1 mini build plate is empty at startup")
+    parser.add_argument("--plate-cleared", action="store_true", help="Compatibility flag; the MVP already assumes a clear A1 plate")
     args = parser.parse_args()
     key = os.environ.get("FABYN_PRODUCER_KEY", "")
     if not args.origin or len(key) < 32:

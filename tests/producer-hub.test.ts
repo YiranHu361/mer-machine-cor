@@ -373,7 +373,7 @@ test(
 );
 
 test(
-  "a name tag goes to the A1 mini as a model to slice and waits for the owner to clear the plate",
+  "a name tag goes to the A1 mini and automatically frees the machine after completion",
   { skip: openscad, timeout: 120_000 },
   async () => {
     const hub = fakeHub();
@@ -467,14 +467,14 @@ test(
         .expect(200);
       assert.equal(model.body.subarray(0, 4).toString("latin1"), "PK\x03\x04");
 
-      // A 3D job completes from the machine report, then waits for plate clearance.
+      // The MVP automatically prepares a completed 3D job for the next order.
       hub.report(offer, { state: "done", progress: 1 });
       await service.reconcile(a.child!.id);
       assert.equal(
         (await service.read()).jobs[a.child!.id].productionState,
         "produced",
       );
-      assert.deepEqual(hub.plateCleared, []);
+      assert.deepEqual(hub.plateCleared, ["m_fdm_live"]);
       await owner
         .post(`/api/owner/jobs/${a.child!.id}/clear-print`)
         .send({ cleared: true })

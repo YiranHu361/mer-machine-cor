@@ -3,6 +3,7 @@ import { requireThat } from "./model.ts";
 import type { Service } from "./service.ts";
 import type { CloudProducer } from "./cloud-producer.ts";
 import { printerPairs } from "./mvp-plan.ts";
+import { PRODUCER_STALE_MS } from "../shared/connection-status.ts";
 
 /** Keep main's Connections panel, with observations from the Mac rather than Vercel's filesystem. */
 export function registerCloudConnections(
@@ -16,12 +17,16 @@ export function registerCloudConnections(
     const state = await service.read(),
       machines = await producer.machines();
     const at = new Date().toISOString();
-    const row = (ok: boolean, detail: string) => ({
+    const row = (ok: boolean, detail: string, checkedAt: string | null = at, expiresAt?: string) => ({
       light: ok ? "ok" : "bad",
       detail,
-      checkedAt: at,
+      checkedAt,
+      expiresAt,
     });
     const online = machines.some((m) => m.status !== "offline");
+    const latest = Math.max(0, ...machines.map((m) => m.lastSeen ?? 0));
+    const lastSeen = latest ? new Date(latest).toISOString() : null;
+    const expiresAt = new Date(latest + PRODUCER_STALE_MS).toISOString();
     res.json({
       cloud: true,
       local: false,
@@ -37,6 +42,7 @@ export function registerCloudConnections(
           online
             ? "The local producer is connected."
             : "Run npm run producer on the machine computer.",
+          lastSeen, expiresAt,
         ),
         ready: online,
       },
@@ -46,6 +52,7 @@ export function registerCloudConnections(
           online
             ? "The local producer receives work through its outbound cloud connection."
             : "Waiting for the local producer to connect.",
+          lastSeen, expiresAt,
         ),
         running: online,
         startedHere: false,
@@ -56,6 +63,8 @@ export function registerCloudConnections(
           connected = !!m && m.status !== "offline";
         const linked =
           state.machines[pair.ours]?.producerHub?.machineId === pair.theirs;
+        const seen = m?.lastSeen ? new Date(m.lastSeen).toISOString() : null;
+        const expires = new Date((m?.lastSeen ?? 0) + PRODUCER_STALE_MS).toISOString();
         return {
           ...pair,
           program: {
@@ -64,6 +73,7 @@ export function registerCloudConnections(
               connected
                 ? "Connected from the machine computer."
                 : "No recent heartbeat from this printer's program.",
+              seen, expires,
             ),
             running: connected,
             online: connected,
@@ -71,10 +81,11 @@ export function registerCloudConnections(
           },
           device: row(
             connected && m!.status !== "error",
-            m?.detail ||
+            !connected ? "Producer offline. Start npm run producer on the machine computer." : m?.detail ||
               (connected
                 ? `Producer reports ${m!.status}.`
                 : "Check the printer and producer on the machine computer."),
+            m?.checked_at ?? null, expires,
           ),
           orders: {
             ...row(

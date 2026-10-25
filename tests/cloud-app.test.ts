@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import request from "supertest";
 import { initialState } from "../server/model.ts";
-import { SqliteStore } from "../server/store.ts";
+import { SqliteStore, mutate } from "../server/store.ts";
 import { CloudProducer } from "../server/cloud-producer.ts";
 import { digest, type FileStorage } from "../server/cloud-files.ts";
 import { createApp } from "../server/app.ts";
@@ -138,6 +138,35 @@ test("cloud sessions, upload tickets, private files and the new main Connections
       .expect(200);
     assert.equal(connections.body.cloud, true);
     assert.equal(connections.body.machines.length, 3);
+    const seen = Date.now();
+    const checkedAt = new Date(seen - 8_000).toISOString();
+    await mutate(store, (state) => {
+      state.producer = { tasks: {}, machines: { m_fdm_01: {
+        machine_id: "m_fdm_01", process: "fdm_print", status: "idle",
+        lastSeen: seen, checked_at: checkedAt,
+      } } };
+    });
+    const dashboard = (await request(app).get("/api/owner/dashboard").set("Cookie", owner).expect(200)).body;
+    assert.equal(dashboard.producer.lastSeen, new Date(seen).toISOString());
+    const printers = (await request(app).get("/api/printers").set("Cookie", owner).expect(200)).body.printers;
+    const a1 = printers.find((p: any) => p.id === "bambu_01");
+    assert.equal(a1.status, "connected", "3D printer connection is shown even before it is linked for orders");
+    assert.equal(a1.linked, false);
+    assert.equal(a1.checkedAt, checkedAt);
+    const fresh = (await request(app).get("/api/owner/mvp/status").set("Cookie", owner).expect(200)).body;
+    assert.equal(fresh.machines.find((m: any) => m.ours === "bambu_01").device.checkedAt, checkedAt);
+    producer.rpc = async (kind, input) => {
+      assert.equal(kind, "check");
+      assert.equal(input.machine_id, "m_fdm_01");
+      return { ok: true, detail: "Printer answered." };
+    };
+    await request(app).post("/api/owner/machines/bambu_01/check").set("Cookie", owner).send({}).expect(200);
+    await mutate(store, (state) => { state.producer!.machines.m_fdm_01.lastSeen = seen - 21_000; });
+    const stale = (await request(app).get("/api/owner/dashboard").set("Cookie", owner).expect(200)).body;
+    assert.equal(stale.producer.printers.find((p: any) => p.id === "bambu_01").status, "offline");
+    const stopped = (await request(app).get("/api/owner/mvp/status").set("Cookie", owner).expect(200)).body;
+    assert.equal(stopped.hub.running, false);
+    assert.equal(stopped.machines.find((m: any) => m.ours === "bambu_01").device.checkedAt, checkedAt, "Reading a stale status never invents a new printer check");
     await request(app)
       .post("/api/owner/mvp/steps/set-access-code")
       .set("Cookie", owner)

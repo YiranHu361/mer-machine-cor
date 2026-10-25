@@ -1,6 +1,6 @@
 // Real printers: the producer side's Python, its hub, one program per printer,
 // each printer's link and our machine counters on the hub. Every light comes
-// from a live probe on the server (server/mvp-setup.ts), with the time it was
+// from the local probe or a timestamped producer report, with the time it was
 // checked; each missing piece has one step to fix it. Steps that start programs
 // or save codes work only on the Mac that runs fabyn.
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
@@ -14,6 +14,7 @@ interface Row {
   light: Light;
   detail: string;
   checkedAt: string | null;
+  expiresAt?: string;
 }
 interface StepState {
   key: string;
@@ -51,11 +52,22 @@ const latest = (actions: Record<string, StepState>, keys: string[]) =>
   keys.filter((k) => actions[k]).sort((a, b) => actions[b].startedAt.localeCompare(actions[a].startedAt))[0] ?? keys[0];
 
 export function Connections({ act, busy, now }: { act: Act; busy: string; now: number }) {
-  const [status, setStatus] = useState<MvpStatus | null>(null);
+  const [savedStatus, setStatus] = useState<MvpStatus | null>(null);
   const [error, setError] = useState("");
   const [sending, setSending] = useState("");
   const [note, setNote] = useState<{ key: string; ok: boolean; text: string } | null>(null);
   const [open, setOpen] = useState<boolean | null>(null);
+  const fresh = <T extends Row,>(row: T): T => row.expiresAt && now > Date.parse(row.expiresAt)
+    ? { ...row, light: "bad", detail: "Producer offline: no heartbeat in the last 20 seconds." }
+    : row;
+  const status = savedStatus ? { ...savedStatus,
+    python: { ...fresh(savedStatus.python), ready: savedStatus.python.ready && fresh(savedStatus.python).light === "ok" },
+    hub: { ...fresh(savedStatus.hub), running: savedStatus.hub.running && fresh(savedStatus.hub).light === "ok" },
+    machines: savedStatus.machines.map((m) => ({ ...m,
+      program: { ...fresh(m.program), online: m.program.online && fresh(m.program).light === "ok", running: m.program.running && fresh(m.program).light === "ok" },
+      device: fresh(m.device),
+    })),
+  } : null;
   const load = useCallback(async () => {
     try {
       setStatus(await api<MvpStatus>("/owner/mvp/status"));
@@ -171,7 +183,6 @@ type Shared = {
 
 function MachineConnections({ machine: m, act, reload, ...shared }: { machine: MachineConn; act: Act; reload: () => Promise<void> } & Shared) {
   const { status, now, can, step } = shared;
-  const [plateCleared, setPlateCleared] = useState(false);
   const [tested, setTested] = useState(false);
   const [code, setCode] = useState("");
   const startKey = `start-node:${m.theirs}`;
@@ -201,17 +212,11 @@ function MachineConnections({ machine: m, act, reload, ...shared }: { machine: M
         <ConnRow title="Its program" row={m.program} stepKey={latest(status.actions, [startKey, `stop-node:${m.theirs}`])} {...shared}>
           {!m.program.online && !m.program.running && (
             <>
-              {m.threeD && (
-                <label className="sl-check">
-                  <input type="checkbox" checked={plateCleared} onChange={(e) => setPlateCleared(e.target.checked)} disabled={!status.local} />
-                  <span>The build plate is empty.</span>
-                </label>
-              )}
               <button
                 className="sl-btn solid sl-btn-sm"
                 type="button"
                 disabled={!can(startKey) || !status.hub.running || (m.link === "lan" && !m.accessCode?.present)}
-                onClick={() => void step("start-node", { machine: m.theirs, plateCleared }, startKey)}
+                onClick={() => void step("start-node", { machine: m.theirs }, startKey)}
               >
                 Start program
               </button>

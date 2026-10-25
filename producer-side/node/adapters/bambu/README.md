@@ -55,7 +55,7 @@ Input: a `.gcode` sliced in Bambu Studio / OrcaSlicer **for the A1 mini**, a `.g
       | --- | --- |
       | `wrong_printer` / `wrong_nozzle` | File sliced for another model or nozzle |
       | `printer_busy` | Printer is PREPARE, RUNNING or PAUSE |
-      | `plate_not_cleared` | This node printed and nobody cleared the plate, or the printer says FINISH/FAILED and `--plate-cleared` wasn't given |
+      | `printer_failed` | The printer reports FAILED; inspect its reported error before retrying |
       | `no_sd_card` | No microSD card in the printer |
       | `wrong_material` | File's filament type ≠ printer's spool setting (manifest if unset). Override: `--allow-material-mismatch` |
       | `out_of_media` | File's grams + `min_spare_g` (2 g) > `media_loaded.remaining_est` |
@@ -64,7 +64,7 @@ Input: a `.gcode` sliced in Bambu Studio / OrcaSlicer **for the A1 mini**, a `.g
    3. FTPS upload to the SD card root as `fabyn_<job_id>.gcode.3mf`.
    4. `project_file` over MQTT: bed leveling on, flow/vibration calibration off, external spool.
    5. Follow the reports. The job counts as started when the printer reports PREPARE/RUNNING for our `subtask_name` (120 s limit). Progress maps 0–100 % to 0.05–0.9, then 1.0 on FINISH. FAILED raises with `print_error` and HMS codes.
-   6. Subtract the file's grams from `remaining_est`, and set status `error` / `plate_not_cleared`. Policy then rejects jobs until `plate_cleared()` is called: the hub's `plate.cleared` message (`POST /dev/plate-cleared {"machine_id"}`), which the app sends when the owner approves the print or resumes the machine after clearing it. `node.client --probe` also reports a part left from an earlier print (printer FINISH/FAILED) at start; `--plate-cleared` says the plate is empty.
+   6. Subtract the file's grams from `remaining_est` and return to `idle`. The MVP assumes the build plate is clear after successful completion, including when a restarted producer finds FINISH. No `--plate-cleared` flag or owner confirmation is required. Failed and uncertain attempts still need review.
 3. **cancel** sends `stop` at the next report (≤ 20 s). The part stays on the plate.
 
 ## Confirmed on our printer

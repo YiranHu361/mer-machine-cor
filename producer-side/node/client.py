@@ -92,7 +92,7 @@ class NodeClient:
         st = (await self.adapter.status())["state"]
         if st == "error":
             return "error"
-        return "busy" if self.current or not self.queue.empty() else "idle"
+        return "busy" if st == "busy" or self.current or not self.queue.empty() else "idle"
 
     # ---- sending -----------------------------------------------------------
 
@@ -336,7 +336,7 @@ def main() -> None:
                     help="override adapter.transport (file = dry run, no printer)")
     ap.add_argument("--probe", action="store_true", help="connect to the machine once before going online")
     ap.add_argument("--plate-cleared", action="store_true",
-                    help="the build plate is empty now, even if the printer says its last print finished")
+                    help="compatibility flag; the MVP already assumes a clear plate")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     load_dotenv()  # e.g. BAMBU_ACCESS_CODE for the A1 mini

@@ -10,6 +10,8 @@ const STATUS_TEXT: Record<PrinterStatusRow["status"], string> = {
   not_answering: "Did not answer. Press its power button and check it is not connected to a phone.",
   busy: "Printing an order.",
   paused: "Paused and waiting for you.",
+  offline: "The local producer is offline.",
+  attention: "The printer answered but needs attention.",
 };
 
 export async function checkPrinter(m: OwnerMachine): Promise<PrinterCheck> {

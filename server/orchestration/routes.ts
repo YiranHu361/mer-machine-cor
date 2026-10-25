@@ -10,6 +10,9 @@ import type { TestWallet } from "../../integrations/src/test-wallet.ts";
 import { PROCESS_OUTPUT } from "./matching.ts";
 import { PUBLISHED_PROFILES } from "./knowledge.ts";
 import type { Orchestrator } from "./orchestrator.ts";
+import type { CloudProducer } from "../cloud-producer.ts";
+import { producerConnection } from "../producer-status.ts";
+import { printerPairs } from "../mvp-plan.ts";
 
 type Actor = { id: string; role: string };
 
@@ -21,11 +24,13 @@ export function registerOrchestrationRoutes(
     actor,
     owner,
     testWallet,
+    producer,
   }: {
     orchestrator: Orchestrator;
     actor: (req: Request) => Promise<Actor>;
     owner: (req: Request) => Promise<unknown>;
     testWallet?: TestWallet;
+    producer?: CloudProducer;
   },
 ) {
   const param = (req: Request, name: string) => String(req.params[name]);
@@ -59,7 +64,9 @@ export function registerOrchestrationRoutes(
   // Whether each real printer answered its latest check: the site's indicator.
   app.get("/api/printers", async (req, res) => {
     await actor(req);
-    res.json({ printers: await orchestrator.printerStatus() });
+    res.json({ printers: producer
+      ? producerConnection(await orchestrator.service.read()).printers
+      : await orchestrator.printerStatus() });
   });
   // The public map and machine detail: titles only, nothing private.
   app.get("/api/machines/live", async (_req, res) => {
@@ -68,7 +75,11 @@ export function registerOrchestrationRoutes(
   // The owner's "check printer" button: one fresh check of one machine.
   app.post("/api/owner/machines/:id/check", async (req, res) => {
     await owner(req);
-    res.json(await orchestrator.checkNow(param(req, "id")));
+    if (producer) {
+      const pair = printerPairs().find((p) => p.ours === param(req, "id"));
+      requireThat(pair, "MACHINE_NOT_FOUND", "Choose a configured printer.", 404);
+      res.json({ ...await producer.check(pair.theirs), checkedAt: new Date().toISOString() });
+    } else res.json(await orchestrator.checkNow(param(req, "id")));
   });
   app.post("/api/orders", async (req, res) => {
     const a =

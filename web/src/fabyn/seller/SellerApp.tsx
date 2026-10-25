@@ -19,6 +19,7 @@ import { needsMaker, supplyOf } from "./status";
 import { groupOrders } from "./orderGroups";
 import { deliveriesOf, handoffKind, sentOut } from "./deliveries";
 import { useLiveMachines } from "./live";
+import { producerOnline } from "../../../../shared/connection-status";
 import type { Act } from "./JobActions";
 import "./seller.css";
 
@@ -50,7 +51,7 @@ export default function SellerApp() {
   const [printers, setPrinters] = useState<PrinterStatusRow[]>([]);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
-  const [live, setLive] = useState(true);
+  const [live, setLive] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [signInNote, setSignInNote] = useState("");
   // false until the server refuses a sign-in without a code
@@ -260,7 +261,15 @@ export default function SellerApp() {
         })}
       </nav>
       <div className="sl-status" aria-live="polite">
-        <span className={`sl-live ${live ? "on" : ""}`}>{live ? "live" : "reconnecting"}</span>
+        <span className={`sl-live ${live ? "on" : ""}`}>
+          {dash?.producer ? "Vercel" : "Server"} {live ? "connected" : "reconnecting"}
+        </span>
+        {dash?.producer && (
+          <span className={`sl-live ${producerOnline(dash.producer.lastSeen, now) ? "on" : ""}`}>
+            Producer {producerOnline(dash.producer.lastSeen, now) ? "online" : "offline"}
+            {dash.producer.lastSeen ? ` · last seen ${Math.max(0, Math.floor((now - Date.parse(dash.producer.lastSeen)) / 1000))} s ago` : " · no heartbeat yet"}
+          </span>
+        )}
         {busy && <span className="sl-fine">Saving…</span>}
       </div>
       {notice && (
@@ -282,7 +291,7 @@ export default function SellerApp() {
               <h2 className="sl-h2">Each machine, its queue, and what it needs from you.</h2>
               <p className="sl-lede">Orders that fit a machine land in its queue. Progress and times are estimates until the machines report their own.</p>
             </header>
-            <Machines machines={dash.machines} jobs={dash.jobs} connectors={dash.connectors} printers={printers} busy={busy} act={act} now={now} />
+            <Machines machines={dash.machines} jobs={dash.jobs} connectors={dash.connectors} printers={dash.producer?.printers ?? printers} busy={busy} act={act} now={now} />
           </>
         ) : tab === "map" ? (
           <MapTab dash={dash} live={liveMachines} handoffs={book} now={now} />
