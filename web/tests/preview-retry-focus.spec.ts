@@ -39,7 +39,7 @@ async function previewFixture(page: Page) {
   });
   const image = await readFile(resolve("tests/fixtures/makers.png"));
   await page.addInitScript(
-    (id) => localStorage.setItem("fabrary-current-job", id),
+    (id) => localStorage.setItem("fabyn-current-job", id),
     job.id,
   );
   await page.routeWebSocket(/.*/, (socket) => socket.close());
@@ -115,7 +115,7 @@ test("keyboard preview retry keeps focus while loading, ignores duplicates and f
   );
   expect(f.imageRequests).toHaveLength(2);
   expect(
-    new URL(f.imageRequests[1]).searchParams.get("fabrary_image_retry"),
+    new URL(f.imageRequests[1]).searchParams.get("fabyn_image_retry"),
   ).toBeTruthy();
   f.release();
   const preview = page.getByRole("img", { name: /Actual production preview/ });

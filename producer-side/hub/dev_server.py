@@ -41,7 +41,7 @@ def make_test_sticker(path: Path) -> None:
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((6, 6, w - 7, h - 7), radius=40, outline=0, width=8)
     d.text((w // 2, h // 2 - 40), "Happy birthday!", fill=0, anchor="mm", font=ImageFont.load_default(size=64))
-    d.text((w // 2, h // 2 + 50), "Fabrary test sticker", fill=0, anchor="mm", font=ImageFont.load_default(size=36))
+    d.text((w // 2, h // 2 + 50), "Fabyn test sticker", fill=0, anchor="mm", font=ImageFont.load_default(size=36))
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, dpi=(300, 300))
 
@@ -85,14 +85,14 @@ def create_app() -> FastAPI:
             make_test_sticker(ASSETS / "test_sticker.png")
         gw.start()
         publishing = asyncio.create_task(publisher.run()) if publisher else None
-        log.info("live view: %s", publisher.url if publisher else "off (set CONVEX_URL and FABRARY_PUBLISH_SECRET)")
+        log.info("live view: %s", publisher.url if publisher else "off (set CONVEX_URL and FABYN_PUBLISH_SECRET)")
         yield
         await gw.stop()
         if publishing:
             publishing.cancel()
             await publisher.aclose()
 
-    app = FastAPI(title="Fabrary dev hub", lifespan=lifespan)
+    app = FastAPI(title="Fabyn dev hub", lifespan=lifespan)
     app.state.gateway = gw
     app.include_router(gw.router)
     ASSETS.mkdir(parents=True, exist_ok=True)

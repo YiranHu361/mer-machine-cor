@@ -34,7 +34,7 @@ function deferred<T>() {
   };
 }
 async function fixture(state = "produced", legacy = false) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-retirement-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-retirement-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const calls: { tool: string; body: any }[] = [];
   const controls: { node?: (tool: string, body: any) => Promise<any> } = {};

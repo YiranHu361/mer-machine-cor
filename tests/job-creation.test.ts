@@ -46,7 +46,7 @@ async function until(check: () => boolean | Promise<boolean>) {
   }
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-creation-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-creation-")),
     originalPath = process.env.PATH;
   mkdirSync(join(dir, "assets"));
   mkdirSync(join(dir, "bin"));
@@ -56,7 +56,7 @@ async function fixture() {
     preparations = join(dir, "preparations");
   writeFileSync(
     join(dir, "bin", "uv"),
-    `#!${process.execPath}\nconst fs=require('node:fs'); const a=process.argv.slice(2); if(a[3]!=='fabrary-prepare')process.exit(90); async function main(){let held=false;try{fs.renameSync(${JSON.stringify(gate)},${JSON.stringify(entered)});held=true;}catch{} fs.appendFileSync(${JSON.stringify(preparations)},a[5]+'\\n');if(held){while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(r=>setTimeout(r,5));}fs.copyFileSync(a[4],a[5]);}main().catch(()=>process.exit(91));\n`,
+    `#!${process.execPath}\nconst fs=require('node:fs'); const a=process.argv.slice(2); if(a[3]!=='fabyn-prepare')process.exit(90); async function main(){let held=false;try{fs.renameSync(${JSON.stringify(gate)},${JSON.stringify(entered)});held=true;}catch{} fs.appendFileSync(${JSON.stringify(preparations)},a[5]+'\\n');if(held){while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(r=>setTimeout(r,5));}fs.copyFileSync(a[4],a[5]);}main().catch(()=>process.exit(91));\n`,
     { mode: 0o755 },
   );
   process.env.PATH = `${join(dir, "bin")}:${originalPath ?? ""}`;

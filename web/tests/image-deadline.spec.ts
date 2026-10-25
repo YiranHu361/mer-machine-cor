@@ -50,7 +50,7 @@ async function fixture(page: Page, kind: "preview") {
   const bytes = await readFile(resolve("tests/fixtures/makers.png"));
   await page.clock.install();
   await page.addInitScript((id) => {
-    localStorage.setItem("fabrary-current-job", id);
+    localStorage.setItem("fabyn-current-job", id);
     const sources = new Set<{ handler?: () => void }>();
     (window as any).__imageDeadlineRefresh = () => {
       for (const source of sources) source.handler?.();

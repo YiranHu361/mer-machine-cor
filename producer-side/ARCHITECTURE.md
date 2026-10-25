@@ -2,7 +2,7 @@
 
 The producer side turns jobs from the hub into physical items. Every machine runs one **node** process. The node dials out to the hub over a WebSocket, accepts or rejects jobs against its owner's rules, and drives the machine through an **adapter**. The hub side of that connection is the **gateway** (`hub/gateway.py`), which the consumer's FastAPI hub mounts.
 
-Source of truth for the shared contracts: the *Fabrary — Cal Hacks Build Design Doc* (sections "Shared contracts" and "Producer side"). This file describes what the code does today.
+Source of truth for the shared contracts: the *Fabyn — Cal Hacks Build Design Doc* (sections "Shared contracts" and "Producer side"). This file describes what the code does today.
 
 ## Status (2026-10-24)
 
@@ -14,7 +14,7 @@ Source of truth for the shared contracts: the *Fabrary — Cal Hacks Build Desig
 | Instax mini adapter (`photo_print`) | Not started |
 | Bambu A1 mini adapter (`fdm_print`) | Rudimentary: prints a pre-sliced `.gcode` / `.gcode.3mf` over LAN. One test part printed on the real printer. No STL slicing yet |
 | Simulator (`sim/`, `SimAdapter`), outage, add-machine | Not started |
-| Convex publish (`hub/publish.py`) | Working: the stub hub forwards gateway events to Convex when `CONVEX_URL` (or a full `CONVEX_DEPLOY_KEY`) and `FABRARY_PUBLISH_SECRET` are set; progress at most every 2 s per job; signed links and adapter config stay in the hub |
+| Convex publish (`hub/publish.py`) | Working: the stub hub forwards gateway events to Convex when `CONVEX_URL` (or a full `CONVEX_DEPLOY_KEY`) and `FABYN_PUBLISH_SECRET` are set; progress at most every 2 s per job; signed links and adapter config stay in the hub |
 
 ## Picture
 
@@ -92,7 +92,7 @@ CLI flags:
 | Flag | Meaning |
 | --- | --- |
 | `--machine` | Manifest path (required) |
-| `--hub` | Hub URL; env `FABRARY_HUB_URL`; default `http://localhost:8000` |
+| `--hub` | Hub URL; env `FABYN_HUB_URL`; default `http://localhost:8000` |
 | `--transport` | Override the adapter transport; `file` = dry run |
 | `--probe` | Connect to the machine once before going online |
 | `--max-queue` | Default 3 |
@@ -202,14 +202,14 @@ Notes for the two remaining machines:
 
 - **Instax mini (`photo_print`):**
   - The design doc says the consumer sends a 4×6 postcard JPEG. Instax mini film needs a 600×800 portrait image (about 46 × 62 mm), so `prepare` must crop and fit it. Confirm with the consumer at standup.
-  - Prior art in this repo: `../node/fabrary_node/adapters.py` (`InstaxLink3`, which shrinks the JPEG to ~55 KB), and the vendored [javl/InstaxBLE](https://github.com/javl/InstaxBLE) in `../node/fabrary_node/instaxble/`. Neither was validated on our printer.
+  - Prior art in this repo: `../node/fabyn_node/adapters.py` (`InstaxLink3`, which shrinks the JPEG to ~55 KB), and the vendored [javl/InstaxBLE](https://github.com/javl/InstaxBLE) in `../node/fabyn_node/instaxble/`. Neither was validated on our printer.
   - Allow about 90 s for film development after ejection.
 - **Bambu A1 mini (`fdm_print`):**
   - The consumer sends an STL.
   - `prepare` slices it with the OrcaSlicer CLI and one fixed profile → `.gcode.3mf` plus print statistics.
   - `run` uploads over FTPS and starts it over MQTT (LAN-only + Developer Mode), with progress from MQTT percent.
   - After each print, set status so policy rejects new jobs until someone presses "Plate cleared". This needs a hub → node message for "plate cleared", which isn't in the contract yet.
-  - Prior art: `../node/fabrary_node/adapters.py` (`Bambu`, using `bambulabs-api`).
+  - Prior art: `../node/fabyn_node/adapters.py` (`Bambu`, using `bambulabs-api`).
   - Fallback: open the `.gcode.3mf` in Bambu Studio and press print.
 
 ## Gateway (`hub/gateway.py`): what the consumer's hub uses

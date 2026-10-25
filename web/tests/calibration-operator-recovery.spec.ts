@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 
 const machineId = "calibration_retry_fixture";
-const slot = `fabrary-calibration-${machineId}`;
+const slot = `fabyn-calibration-${machineId}`;
 const readyLabel =
   "The device is supervised, the output area is clear and I am ready to start this physical calibration.";
 const inspectionLabel =

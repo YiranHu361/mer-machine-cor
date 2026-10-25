@@ -181,7 +181,7 @@ def build_gcode_3mf(gcode: bytes, info: GcodeInfo | None = None, plate: int = 1)
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<model unit="millimeter" xml:lang="en-US" '
         'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n'
-        ' <metadata name="Application">Fabrary</metadata>\n'
+        ' <metadata name="Application">Fabyn</metadata>\n'
         " <resources/>\n <build/>\n</model>\n"
     )
     filament = ""

@@ -10,7 +10,7 @@ test(
   "real backend/node process restarts preserve attempts without silently printing again",
   { timeout: 60000 },
   async () => {
-    const dir = await mkdtemp(join(tmpdir(), "fabrary-recovery-")),
+    const dir = await mkdtemp(join(tmpdir(), "fabyn-recovery-")),
       origin = "http://127.0.0.1:4418",
       nodeOrigin = "http://127.0.0.1:8888";
     const machineConfig = join(dir, "machines.json");
@@ -28,27 +28,27 @@ test(
     const env = {
       ...process.env,
       PORT: "4418",
-      FABRARY_DATA_DIR: join(dir, "app"),
-      FABRARY_STORE: "sqlite-development",
-      FABRARY_MODE: "simulation",
-      FABRARY_PAYMENT_MODE: "mock",
-      FABRARY_OWNER_CODE: "isolated-recovery-owner-code",
-      FABRARY_NODE_KEY: "isolated-recovery-node-key",
-      FABRARY_TOKEN_SECRET: "isolated-recovery-hmac-secret",
-      FABRARY_NODE_URL: nodeOrigin,
-      FABRARY_NODE_PORT: "8888",
-      FABRARY_NODE_DATA: join(dir, "node"),
-      FABRARY_ASSET_ORIGIN: origin + "/assets",
-      FABRARY_MACHINES_FILE: machineConfig,
-      FABRARY_CATALOG_FILE: "",
+      FABYN_DATA_DIR: join(dir, "app"),
+      FABYN_STORE: "sqlite-development",
+      FABYN_MODE: "simulation",
+      FABYN_PAYMENT_MODE: "mock",
+      FABYN_OWNER_CODE: "isolated-recovery-owner-code",
+      FABYN_NODE_KEY: "isolated-recovery-node-key",
+      FABYN_TOKEN_SECRET: "isolated-recovery-hmac-secret",
+      FABYN_NODE_URL: nodeOrigin,
+      FABYN_NODE_PORT: "8888",
+      FABYN_NODE_DATA: join(dir, "node"),
+      FABYN_ASSET_ORIGIN: origin + "/assets",
+      FABYN_MACHINES_FILE: machineConfig,
+      FABYN_CATALOG_FILE: "",
       // Set here so a developer's .env (loaded by the backend) never leaks in:
       // dotenv keeps values that are already set, even empty ones.
-      FABRARY_ALLOWED_MODES: "simulation",
-      FABRARY_PRODUCER_HUB_URL: "",
-      FABRARY_AUTO_PREPARE_PRINTS: "",
+      FABYN_ALLOWED_MODES: "simulation",
+      FABYN_PRODUCER_HUB_URL: "",
+      FABYN_AUTO_PREPARE_PRINTS: "",
       CONVEX_URL: "",
       CONVEX_DEPLOY_KEY: "",
-      FABRARY_PUBLISH_SECRET: "",
+      FABYN_PUBLISH_SECRET: "",
       ANTHROPIC_API_KEY: "",
       GEMINI_API_KEY: "",
       OPENAI_API_KEY: "",
@@ -68,12 +68,12 @@ test(
       throw new Error("Isolated local test service did not start");
     }
     async function startNode() {
-      node = spawn(resolve("node/.venv/bin/fabrary-node"), [], {
+      node = spawn(resolve("node/.venv/bin/fabyn-node"), [], {
         env,
         stdio: "ignore",
       });
       await alive(nodeOrigin + "/health", {
-        Authorization: "Bearer " + env.FABRARY_NODE_KEY,
+        Authorization: "Bearer " + env.FABYN_NODE_KEY,
       });
     }
     async function startBackend() {
@@ -92,7 +92,7 @@ test(
       const response = await fetch(origin + "/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, accessCode: env.FABRARY_OWNER_CODE }),
+        body: JSON.stringify({ role, accessCode: env.FABYN_OWNER_CODE }),
       });
       assert(response.ok);
       return response.headers.get("set-cookie")!.split(";")[0];
@@ -151,7 +151,7 @@ test(
       const r = await fetch(nodeOrigin + "/tools/get_status", {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + env.FABRARY_NODE_KEY,
+          Authorization: "Bearer " + env.FABYN_NODE_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

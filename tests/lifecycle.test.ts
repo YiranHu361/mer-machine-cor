@@ -57,7 +57,7 @@ class Device implements NodeBoundary {
   }
 }
 function fixture(payment: PaymentBoundary = new MockPayment()) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-domain-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-domain-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device = new Device();
   const config: Config = {

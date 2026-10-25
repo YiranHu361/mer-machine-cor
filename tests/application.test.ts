@@ -15,7 +15,7 @@ const image = Buffer.from(
   "base64",
 );
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-http-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-http-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const node = new HttpNode(
     "http://127.0.0.1:1",
@@ -369,13 +369,13 @@ test("built application serves owner deep links without turning unknown API path
     );
     await writeFile(
       join(webRoot, "index.html"),
-      "<!doctype html><title>Fabrary owner routing fixture</title>",
+      "<!doctype html><title>Fabyn owner routing fixture</title>",
     );
     const app = createApp(f.service, webRoot);
     for (const path of ["/owner", "/make", "/relief"]) {
       const page = await request(app).get(path).expect(200);
       assert.match(page.headers["content-type"], /html/);
-      assert.match(page.text, /Fabrary owner routing fixture/);
+      assert.match(page.text, /Fabyn owner routing fixture/);
     }
     const bundle = await request(app).get("/assets/app-bundle.js").expect(200);
     assert.match(bundle.text, /public build fixture/);
@@ -721,7 +721,7 @@ test("inherited dictionary names never resolve to orders, artwork, sessions or s
         (
           await request(f.app)
             .get("/api/session")
-            .set("Cookie", `fabrary_session=${key}`)
+            .set("Cookie", `fabyn_session=${key}`)
             .expect(200)
         ).body,
         { role: null },

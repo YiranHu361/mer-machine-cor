@@ -33,7 +33,7 @@
       "ownerReady": false,
       "host": "",
       "serial": "",
-      "accessCodeEnv": "FABRARY_BAMBU_ACCESS_CODE",
+      "accessCodeEnv": "FABYN_BAMBU_ACCESS_CODE",
       "lanOnly": false,
       "developerMode": false,
       "maxJobSeconds": 900,

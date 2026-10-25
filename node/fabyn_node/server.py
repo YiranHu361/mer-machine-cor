@@ -1,4 +1,4 @@
-"""Run the Fabrary tools over authenticated HTTP and FastMCP."""
+"""Run the Fabyn tools over authenticated HTTP and FastMCP."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -40,7 +40,7 @@ async def json_object(request: Request) -> dict:
 
 
 def create_app(service: NodeService) -> FastAPI:
-    mcp = FastMCP("Fabrary machine node")
+    mcp = FastMCP("Fabyn machine node")
 
     @mcp.tool
     async def get_capabilities(machine_id: str) -> dict:
@@ -80,7 +80,7 @@ def create_app(service: NodeService) -> FastAPI:
             yield
         await service.close()
 
-    app = FastAPI(title="Fabrary node", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = FastAPI(title="Fabyn node", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.add_middleware(BearerMiddleware, key=service.key)
     app.state.service, app.state.mcp = service, mcp
 
@@ -90,7 +90,7 @@ def create_app(service: NodeService) -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"status": "ok", "service": "fabrary-node", "version": "0.1.0",
+        return {"status": "ok", "service": "fabyn-node", "version": "0.1.0",
                 "machines": [{"id": m, "mode": c["mode"], "blockers": service.adapters[m].blockers()} for m,c in service.machines.items()]}
 
     @app.post("/tools/get_capabilities")
@@ -160,10 +160,10 @@ def create_app(service: NodeService) -> FastAPI:
 def main():
     service = NodeService.from_environment()
     app = create_app(service)
-    host = os.environ.get("FABRARY_NODE_HOST", "127.0.0.1")
+    host = os.environ.get("FABYN_NODE_HOST", "127.0.0.1")
     if host not in {"127.0.0.1", "::1", "localhost"}:
         raise ValueError("This local demo binds loopback only")
-    uvicorn.run(app, host=host, port=int(os.environ.get("FABRARY_NODE_PORT", "8788")), access_log=False)
+    uvicorn.run(app, host=host, port=int(os.environ.get("FABYN_NODE_PORT", "8788")), access_log=False)
 
 
 if __name__ == "__main__":

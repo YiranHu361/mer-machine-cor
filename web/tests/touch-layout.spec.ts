@@ -334,7 +334,7 @@ test("long collection and machine status text remains readable under touch and 2
   });
   const page = await context.newPage();
   await page.addInitScript(() =>
-    localStorage.setItem("fabrary-current-job", "touch_fixture_order"),
+    localStorage.setItem("fabyn-current-job", "touch_fixture_order"),
   );
   await fixture(page, "requester", [longJob]);
   await page.goto("/");

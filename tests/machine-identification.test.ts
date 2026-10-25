@@ -34,7 +34,7 @@ const reading = (over: Partial<MachineReading> = {}): MachineReading => ({
   ...over,
 });
 async function fixture(dependencies: IdentificationDependencies) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-identify-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-identify-"));
   const secret = "isolated-identification-secret";
   const service = new Service(
     new SqliteStore(join(dir, "state.sqlite"), initialState()),

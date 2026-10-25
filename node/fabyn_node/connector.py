@@ -1,4 +1,4 @@
-"""Fabrary machine connector.
+"""Fabyn machine connector.
 
 Runs on the computer next to a machine. It enrolls with a one-time setup code,
 dials out to the workshop (no inbound port or tunnel), runs a fixed list of
@@ -24,7 +24,7 @@ import httpx
 
 from .security import NodeError
 
-VERSION = "fabrary-connector/1.0.0"
+VERSION = "fabyn-connector/1.0.0"
 DEVICE_LINE = re.compile(r"^Device ((?:[0-9A-F]{2}:){5}[0-9A-F]{2}) (.+)$", re.I)
 ALLOWED_PATH = re.compile(r"^/(tools/[a-z_]+|machines/[a-z0-9_]+/policy|calibrate|reconcile|simulation/[a-z0-9_]+|health)$")
 
@@ -436,10 +436,10 @@ async def run(args) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="fabrary-connect", description="Connect a machine to a Fabrary workshop.")
+    parser = argparse.ArgumentParser(prog="fabyn-connect", description="Connect a machine to a Fabyn workshop.")
     parser.add_argument("--platform", required=True, help="Workshop address, for example http://192.168.1.20:4318")
     parser.add_argument("--code", help="One-time setup code from Machines → Add a machine")
-    parser.add_argument("--data-dir", default=str(Path.home() / ".fabrary-connector"))
+    parser.add_argument("--data-dir", default=str(Path.home() / ".fabyn-connector"))
     try:
         asyncio.run(run(parser.parse_args(argv)))
     except KeyboardInterrupt:

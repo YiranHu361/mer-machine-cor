@@ -111,7 +111,7 @@ export class ProducerHubNode {
     }[];
     return events
       .map((e) => e.data)
-      .filter((d) => d?.params?.fabrary_attempt_id === attemptId)
+      .filter((d) => d?.params?.fabyn_attempt_id === attemptId)
       .at(-1);
   }
   async call(tool: string, input: any, machine: Machine): Promise<any> {
@@ -155,8 +155,8 @@ export class ProducerHubNode {
           width_mm: p.widthMm,
           height_mm: p.heightMm,
           sha256: input.artifact_sha256,
-          fabrary_job_id: input.job_id,
-          fabrary_attempt_id: input.attempt_id,
+          fabyn_job_id: input.job_id,
+          fabyn_attempt_id: input.attempt_id,
         },
       });
       return {
@@ -264,7 +264,7 @@ export function registerProducerHubRoutes(
     requireThat(
       hub,
       "PRODUCER_HUB_UNCONFIGURED",
-      "Set FABRARY_PRODUCER_HUB_URL to the producer side's hub first.",
+      "Set FABYN_PRODUCER_HUB_URL to the producer side's hub first.",
       409,
     );
     const machineId = String(req.params.id);
@@ -284,7 +284,7 @@ export function registerProducerHubRoutes(
     requireThat(
       service.modeAllowed("hardware"),
       "HARDWARE_NOT_ALLOWED",
-      "Allow hardware work first: FABRARY_ALLOWED_MODES=hardware,simulation.",
+      "Allow hardware work first: FABYN_ALLOWED_MODES=hardware,simulation.",
       409,
     );
     const listed = (await hub.machines()).find((m) => m.machine_id === theirs);

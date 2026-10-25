@@ -11,7 +11,7 @@ import { MockPayment } from "../server/payments.ts";
 import { createApp } from "../server/app.ts";
 
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-pickup-renewal-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-pickup-renewal-"));
   let store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   let calls = 0;
   const payment = new MockPayment();

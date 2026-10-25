@@ -9,9 +9,9 @@ import sys
 import httpx
 import pytest
 from PIL import Image
-from fabrary_node.service import NodeService
-from fabrary_node.security import NodeError,sign_token
-from fabrary_node import adapters
+from fabyn_node.service import NodeService
+from fabyn_node.security import NodeError,sign_token
+from fabyn_node import adapters
 from .test_mode_binding import KEY,MID,PARAMETERS,artifact,request_for
 from .test_cancellation import ConnectionProxy
 
@@ -211,7 +211,7 @@ async def test_instax_thread_fence_includes_disconnect_cleanup_after_cancelled_t
         def connect(self,timeout):pass
         def print_image(self,payload):self.print_acknowledged=True
         def disconnect(self):cleanup.set();assert finish_cleanup.wait(5)
-    monkeypatch.setitem(sys.modules,'fabrary_node.instaxble.InstaxBLE',types.SimpleNamespace(InstaxBLE=FakePrinter))
+    monkeypatch.setitem(sys.modules,'fabyn_node.instaxble.InstaxBLE',types.SimpleNamespace(InstaxBLE=FakePrinter))
     original_sleep=adapters.time.sleep
     def sleep(seconds):
         if seconds==90:developed.set();assert release.wait(5)

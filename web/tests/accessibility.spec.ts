@@ -143,7 +143,7 @@ test("owner login and every dashboard tab pass accessibility and narrow reflow",
   );
   await page
     .getByLabel("Owner access code", { exact: true })
-    .fill(process.env.FABRARY_OWNER_CODE || credentials.ownerCode);
+    .fill(process.env.FABYN_OWNER_CODE || credentials.ownerCode);
   await page
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();

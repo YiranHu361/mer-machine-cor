@@ -93,6 +93,6 @@ export function retryImageSource(source: string, retryKey: string) {
     return source;
   // A browser can retain a failed decode for an HTTP 200 image even when a
   // replacement <img> uses the same URL. Retry local media with a fresh key.
-  url.searchParams.set("fabrary_image_retry", retryKey);
+  url.searchParams.set("fabyn_image_retry", retryKey);
   return url.href;
 }

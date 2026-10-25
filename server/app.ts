@@ -266,8 +266,8 @@ export function createApp(
     const cookie = req.headers.cookie
       ?.split(";")
       .map((c) => c.trim())
-      .find((c) => c.startsWith("fabrary_session="))
-      ?.slice(16);
+      .find((c) => c.startsWith("fabyn_session="))
+      ?.slice("fabyn_session=".length);
     const s = await service.read();
     const session = cookie ? ownValue(s.sessions, cookie) : undefined;
     requireThat(
@@ -382,7 +382,7 @@ export function createApp(
       s.sessions[token] = session;
     });
     res
-      .cookie("fabrary_session", token, {
+      .cookie("fabyn_session", token, {
         httpOnly: true,
         sameSite: "strict",
         maxAge: 7 * 86400000,
@@ -394,13 +394,13 @@ export function createApp(
     const cookie = req.headers.cookie
       ?.split(";")
       .map((c) => c.trim())
-      .find((c) => c.startsWith("fabrary_session="))
-      ?.slice(16);
+      .find((c) => c.startsWith("fabyn_session="))
+      ?.slice("fabyn_session=".length);
     if (cookie)
       await mutate(service.store, (s) => {
         delete s.sessions[cookie];
       });
-    res.clearCookie("fabrary_session").json({ ok: true });
+    res.clearCookie("fabyn_session").json({ ok: true });
   });
   app.get("/api/machines", async (req, res) => {
     const { version: revision, data } = await service.store.read();
@@ -614,7 +614,7 @@ export function createApp(
           "run",
           "--project",
           resolve("node"),
-          "fabrary-prepare",
+          "fabyn-prepare",
           source.path,
           path,
           "--output-type",
@@ -977,7 +977,7 @@ export function createApp(
     );
     const nodeUrl =
       process.env[
-        `FABRARY_${machineId.split("_")[0].toUpperCase()}_NODE_URL`
+        `FABYN_${machineId.split("_")[0].toUpperCase()}_NODE_URL`
       ] ?? service.config.nodeUrl;
     const machine = await registerMachine(machineId, req.body.mode, {
       nodeUrl,

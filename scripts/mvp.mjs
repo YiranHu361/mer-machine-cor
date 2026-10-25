@@ -23,16 +23,16 @@ import { spawn, spawnSync } from "node:child_process";
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const with3d = !args.includes("--no-3d");
-const modelMachine = process.env.FABRARY_MVP_3D_MACHINE ?? "bambu_01";
-const modelProducer = process.env.FABRARY_MVP_3D_PRODUCER_MACHINE ?? "m_fdm_01";
+const modelMachine = process.env.FABYN_MVP_3D_MACHINE ?? "bambu_01";
+const modelProducer = process.env.FABYN_MVP_3D_PRODUCER_MACHINE ?? "m_fdm_01";
 const port = Number(process.env.PORT ?? 4318);
 const app = `http://127.0.0.1:${port}`;
 const hub = (
-  process.env.FABRARY_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000"
+  process.env.FABYN_PRODUCER_HUB_URL ?? "http://127.0.0.1:8000"
 ).replace(/\/$/, "");
 const producerMachine =
-  process.env.FABRARY_MVP_PRODUCER_MACHINE ?? "m_sticker_01";
-const ourMachine = process.env.FABRARY_MVP_MACHINE ?? "phomemo_01";
+  process.env.FABYN_MVP_PRODUCER_MACHINE ?? "m_sticker_01";
+const ourMachine = process.env.FABYN_MVP_MACHINE ?? "phomemo_01";
 // [our machine, the producer side's machine] for each printer this run drives.
 const printers = [[ourMachine, producerMachine]];
 if (args.includes("--photo")) printers.push(["instax_01", "m_photo_01"]);
@@ -46,10 +46,10 @@ const convexUrl =
 const env = {
   ...process.env,
   // Real machines only: an order never lands on a simulated machine.
-  FABRARY_ALLOWED_MODES: process.env.FABRARY_ALLOWED_MODES ?? "hardware",
-  FABRARY_PRODUCER_HUB_URL: hub,
+  FABYN_ALLOWED_MODES: process.env.FABYN_ALLOWED_MODES ?? "hardware",
+  FABYN_PRODUCER_HUB_URL: hub,
   // Handle self-ejected paper and film after completion; clear 3D plates separately.
-  FABRARY_AUTO_PREPARE_PRINTS: process.env.FABRARY_AUTO_PREPARE_PRINTS ?? "1",
+  FABYN_AUTO_PREPARE_PRINTS: process.env.FABYN_AUTO_PREPARE_PRINTS ?? "1",
   ...(convexUrl ? { CONVEX_URL: convexUrl } : {}),
 };
 const python = "producer-side/.venv/bin/python";
@@ -148,7 +148,7 @@ for (const [, theirs] of printers)
 const answering = printers.filter(([, theirs]) => !missing.has(theirs));
 const { ownerCode } = JSON.parse(
   await readFile(
-    `${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json`,
+    `${process.env.FABYN_DATA_DIR ?? ".data"}/local-credentials.json`,
     "utf8",
   ),
 );
@@ -157,7 +157,7 @@ const login = await fetch(`${app}/api/session`, {
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
     role: "owner",
-    accessCode: process.env.FABRARY_OWNER_CODE ?? ownerCode,
+    accessCode: process.env.FABYN_OWNER_CODE ?? ownerCode,
   }),
 });
 const cookie = login.headers.get("set-cookie")?.split(";")[0] ?? "";
@@ -197,7 +197,7 @@ for (const [mine, theirs] of answering) {
   if (waiting.length)
     console.log(
       `• ${waiting.length} print${waiting.length > 1 ? "s are" : " is"} waiting for reconciliation on ${mine}, so it takes no new order yet.\n` +
-        `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABRARY_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
+        `  Open ${app}/owner (owner code: ownerCode in ${process.env.FABYN_DATA_DIR ?? ".data"}/local-credentials.json), find the order\n` +
         `  and use "Reconcile saved outcome" in its recovery actions.`,
     );
 }
@@ -206,8 +206,8 @@ console.log(
     (args.includes("--photo")
       ? `For a colour photo print, add a photo with no words and press Start.\n`
       : "") +
-    `Tick the permission box, then "Pay & make" (${env.FABRARY_PAYMENT_MODE === "testnet" ? "x402 · Base Sepolia test USDC" : "mock payment"}).\n` +
-    (env.FABRARY_AUTO_PREPARE_PRINTS === "1"
+    `Tick the permission box, then "Pay & make" (${env.FABYN_PAYMENT_MODE === "testnet" ? "x402 · Base Sepolia test USDC" : "mock payment"}).\n` +
+    (env.FABYN_AUTO_PREPARE_PRINTS === "1"
       ? `A finished print completes the order and frees the printer.`
       : `After each print, record handling in ${app}/owner so the printer takes the next order.`) +
     (with3d

@@ -30,7 +30,7 @@ class NodeService:
                  asset_origin: str = "http://127.0.0.1:4318/assets", machines: list[dict] | None = None,
                  public_url: str = "http://127.0.0.1:8788", artifact_transport=None):
         if not key or len(key) < 16:
-            raise ValueError("FABRARY_NODE_KEY must be configured with at least 16 characters")
+            raise ValueError("FABYN_NODE_KEY must be configured with at least 16 characters")
         self.key, self.token_secret = key, token_secret or key
         self.data_dir = (data_dir or Path(".data/node")).resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -105,14 +105,14 @@ class NodeService:
 
     @classmethod
     def from_environment(cls):
-        path = os.environ.get("FABRARY_MACHINES_FILE")
+        path = os.environ.get("FABYN_MACHINES_FILE")
         machines = json.loads(Path(path).read_text()) if path else None
         if isinstance(machines, dict):
             machines = machines["machines"]
-        return cls(key=os.environ.get("FABRARY_NODE_KEY", ""), token_secret=os.environ.get("FABRARY_TOKEN_SECRET"),
-            data_dir=Path(os.environ.get("FABRARY_NODE_DATA", ".data/node")),
-            asset_origin=os.environ.get("FABRARY_ASSET_ORIGIN", "http://127.0.0.1:4318/assets"), machines=machines,
-            public_url=os.environ.get("FABRARY_NODE_URL", "http://127.0.0.1:8788"))
+        return cls(key=os.environ.get("FABYN_NODE_KEY", ""), token_secret=os.environ.get("FABYN_TOKEN_SECRET"),
+            data_dir=Path(os.environ.get("FABYN_NODE_DATA", ".data/node")),
+            asset_origin=os.environ.get("FABYN_ASSET_ORIGIN", "http://127.0.0.1:4318/assets"), machines=machines,
+            public_url=os.environ.get("FABYN_NODE_URL", "http://127.0.0.1:8788"))
 
     def machine(self, machine_id: str) -> dict:
         if not isinstance(machine_id, str) or machine_id not in self.machines:

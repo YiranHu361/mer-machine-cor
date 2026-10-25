@@ -79,7 +79,7 @@ async function fixture(
   };
   await page.routeWebSocket(/^ws:\/\/127\.0\.0\.1:4317\//, () => {});
   await page.addInitScript((selectedId) => {
-    if (selectedId) localStorage.setItem("fabrary-current-job", selectedId);
+    if (selectedId) localStorage.setItem("fabyn-current-job", selectedId);
     const callbacks: Array<() => void> = [];
     class FixtureEvents {
       onopen: (() => void) | null = null;
@@ -328,7 +328,7 @@ async function leaveWarning(page: Page) {
   };
   page.on("dialog", handle);
   try {
-    await page.getByRole("link", { name: "Fabrary home", exact: true }).click();
+    await page.getByRole("link", { name: "Fabyn home", exact: true }).click();
     expect(dialogs).toEqual(["beforeunload"]);
   } finally {
     page.off("dialog", handle);
@@ -398,7 +398,7 @@ for (const lookup of ["held", "failed"] as const)
     await expect(budget(page)).toHaveValue("6.75");
     await expect(page.getByAltText("Uploaded original artwork")).toHaveCount(2);
     expect(
-      await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     ).toBeNull();
     await row(page, "bravo_order").click();
     await drafts(page)
@@ -791,7 +791,7 @@ for (const reply of ["missing", "other"] as const)
       page.getByRole("button", { name: "Check saved orders", exact: true }),
     ).toBeVisible();
     expect(
-      await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     ).toBeNull();
     await row(page, "bravo_order").click();
     await expect(
@@ -820,7 +820,7 @@ test("a successful edit reply for another order leaves the original draft, selec
     "This private edit belongs only to alpha",
   );
   expect(
-    await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
   ).toBe("alpha_order");
   await row(page, "bravo_order").click();
   await expect(page.locator(".order-intent")).toHaveText(
@@ -962,6 +962,6 @@ test("requester expiry clears hidden and active private drafts before an explici
   await expect(drafts(page)).toHaveCount(0);
   expect(state.sessionPosts).toBe(1);
   expect(
-    await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+    await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
   ).toBeNull();
 });

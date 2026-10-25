@@ -44,7 +44,7 @@ function deferred<T>() {
   };
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-lifecycle-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-lifecycle-")),
     store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const calls: { tool: string; input: any }[] = [],
     controls = new Map<string, (input: any) => Promise<any>>();

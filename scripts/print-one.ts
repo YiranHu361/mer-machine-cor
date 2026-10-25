@@ -79,7 +79,7 @@ class ProducerHub implements NodeBoundary {
   }
 }
 
-const work = mkdtempSync(join(tmpdir(), "fabrary-print-one-"));
+const work = mkdtempSync(join(tmpdir(), "fabyn-print-one-"));
 const store = new SqliteStore(join(work, "state.sqlite"), initialState());
 const bridge = new ProducerHub(async (sha) => {
   const asset = Object.values((await store.read()).data.assets).find(

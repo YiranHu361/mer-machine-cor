@@ -10,12 +10,12 @@ type Data = Record<string, any>;
 type Source = "consumer" | "producer";
 
 export function checkSecret(secret: string) {
-  const expected = process.env.FABRARY_PUBLISH_SECRET;
+  const expected = process.env.FABYN_PUBLISH_SECRET;
   if (!expected)
     throw new Error(
-      "FABRARY_PUBLISH_SECRET is not set on this Convex deployment; run npm run convex:push.",
+      "FABYN_PUBLISH_SECRET is not set on this Convex deployment; run npm run convex:push.",
     );
-  if (secret !== expected) throw new Error("Not a Fabrary hub.");
+  if (secret !== expected) throw new Error("Not a Fabyn hub.");
 }
 
 export const batch = mutation({
@@ -184,9 +184,9 @@ async function job(
   ts: string,
   d: Data,
 ) {
-  // A producer report names our job in params.fabrary_job_id; its own job_id
+  // A producer report names our job in params.fabyn_job_id; its own job_id
   // is the hub's. Anything else is keyed by its own job_id.
-  const ours = str(d.params?.fabrary_job_id);
+  const ours = str(d.params?.fabyn_job_id);
   const fromHub = source === "producer";
   const jobId = fromHub ? (ours ?? str(d.job_id)) : str(d.job_id);
   if (!jobId) return;

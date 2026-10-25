@@ -11,7 +11,7 @@ import { Service } from "../server/service.ts";
 import { SqliteStore, mutate } from "../server/store.ts";
 
 async function fixture(extra: Record<string, unknown> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-minimal-approval-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-minimal-approval-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   let sideEffects = 0;
   const payment = new MockPayment();

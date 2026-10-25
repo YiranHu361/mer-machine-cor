@@ -12,7 +12,7 @@ export function cliRunner(projectDir = resolve("node")): ProducerRunner {
     new Promise((ok, fail) => {
       const child = spawn(
         "uv",
-        ["run", "--project", projectDir, "fabrary-producer"],
+        ["run", "--project", projectDir, "fabyn-producer"],
         { stdio: ["pipe", "pipe", "pipe"] },
       );
       let out = "",

@@ -59,7 +59,7 @@ async function requesterFixture(
 ) {
   if (jobs[0])
     await page.addInitScript(
-      (id) => localStorage.setItem("fabrary-current-job", id),
+      (id) => localStorage.setItem("fabyn-current-job", id),
       jobs[0].id,
     );
   await page.route("**/api/**", async (route) => {

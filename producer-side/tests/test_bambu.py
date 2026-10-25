@@ -138,7 +138,7 @@ def test_adapter_dry_run_prints_then_blocks_until_plate_cleared(tmp_path):
         steps = [p async for p in adapter.run(_job(), native)]
         assert steps[-1].progress == 1.0
         assert all(0 <= p.progress <= 0.9 for p in steps[:-1])
-        assert (tmp_path / "sd/fabrary_job_1.gcode.3mf").exists()
+        assert (tmp_path / "sd/fabyn_job_1.gcode.3mf").exists()
         assert m["media_loaded"]["remaining_est"] == pytest.approx(15 - 1.84)
         st = await adapter.status()
         assert st["state"] == "error" and st["detail"].startswith("plate_not_cleared")
@@ -164,7 +164,7 @@ def test_adapter_refuses_wrong_material_without_uploading(tmp_path):
         with pytest.raises(AdapterError, match="wrong_material"):
             async for _ in adapter.run(_job(), native):
                 pass
-        assert not (tmp_path / "sd/fabrary_job_1.gcode.3mf").exists()
+        assert not (tmp_path / "sd/fabyn_job_1.gcode.3mf").exists()
         assert (await adapter.status())["state"] == "idle"  # a refusal is not a machine fault
 
     asyncio.run(go())

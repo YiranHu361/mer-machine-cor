@@ -3,8 +3,8 @@ import asyncio
 import time
 import httpx
 import pytest
-from fabrary_node.journal import Journal
-from fabrary_node.security import NodeError,sign_token
+from fabyn_node.journal import Journal
+from fabyn_node.security import NodeError,sign_token
 from .test_mode_binding import node,request_for,artifact,KEY,MID,PARAMETERS,MISSING
 
 
@@ -134,7 +134,7 @@ async def test_tombstone_conflicts_bind_content_scope_and_mode_but_exact_proof_i
 
 @pytest.mark.asyncio
 async def test_http_cancellation_requires_bearer_exact_body_and_valid_signed_context(tmp_path):
-    from fabrary_node.server import create_app
+    from fabyn_node.server import create_app
     service,fake,fetched,data=await node(tmp_path)
     app=create_app(service)
     valid=cancellation(data)
@@ -165,7 +165,7 @@ async def test_actual_fastmcp_cancellation_is_same_durable_no_io_operation(tmp_p
     from fastmcp import Client
     from fastmcp.exceptions import ToolError
     from fastmcp.client.transports import StreamableHttpTransport
-    from fabrary_node.server import create_app
+    from fabyn_node.server import create_app
     service,fake,fetched,data=await node(tmp_path)
     sock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     sock.bind(('127.0.0.1',0));sock.listen(128);sock.setblocking(False)

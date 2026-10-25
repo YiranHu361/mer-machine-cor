@@ -1,8 +1,8 @@
 # Connect a Phomemo M02 Pro through a Raspberry Pi
 
-This guide moves the **Sticker counter** (`phomemo_01`) from the simulator to a real Phomemo M02 Pro. The app and database stay on your Mac. A Raspberry Pi next to the printer runs the Fabrary connector, which talks to the printer over classic Bluetooth.
+This guide moves the **Sticker counter** (`phomemo_01`) from the simulator to a real Phomemo M02 Pro. The app and database stay on your Mac. A Raspberry Pi next to the printer runs the Fabyn connector, which talks to the printer over classic Bluetooth.
 
-> **Status:** the M02 Pro adapter and the connector's hardware checks have been tested in software only (the full connector flow was verified end to end in simulation). No physical print has been made through Fabrary yet. Treat your first prints as supervised calibration. The printer reports no completion signal and has no remote stop, so every print needs your inspection, and nothing is ever reprinted automatically.
+> **Status:** the M02 Pro adapter and the connector's hardware checks have been tested in software only (the full connector flow was verified end to end in simulation). No physical print has been made through Fabyn yet. Treat your first prints as supervised calibration. The printer reports no completion signal and has no remote stop, so every print needs your inspection, and nothing is ever reprinted automatically.
 
 ## Recommended: one-command setup
 
@@ -10,15 +10,15 @@ The connector dials out to your workshop, so there is no tunnel, no copied secre
 
 ### On the Mac (once)
 
-The Pi has to reach the workshop over your network. In the Fabrary folder's `.env`, add your Mac's network address (find it in System Settings → Network), then restart the app:
+The Pi has to reach the workshop over your network. In the Fabyn folder's `.env`, add your Mac's network address (find it in System Settings → Network), then restart the app:
 
 ```
-FABRARY_HOST=0.0.0.0
-FABRARY_PUBLIC_ORIGIN=http://192.168.1.20:4318
-FABRARY_MODE=hardware
+FABYN_HOST=0.0.0.0
+FABYN_PUBLIC_ORIGIN=http://192.168.1.20:4318
+FABYN_MODE=hardware
 ```
 
-`FABRARY_HOST=0.0.0.0` makes the app listen on your network as well as on `127.0.0.1`, so the Pi can reach it while you keep using http://127.0.0.1:4318 on the Mac. Only do this on a network you trust. Browser actions still only work from the Mac itself; the connector authenticates with its own key. `FABRARY_PUBLIC_ORIGIN` is your Mac's address as the Pi sees it, and it goes into the setup command. `FABRARY_MODE=hardware` lets the workshop use a real device (the simulated photo and 3D machines stop taking orders, and the browser test suite refuses to run until you switch back).
+`FABYN_HOST=0.0.0.0` makes the app listen on your network as well as on `127.0.0.1`, so the Pi can reach it while you keep using http://127.0.0.1:4318 on the Mac. Only do this on a network you trust. Browser actions still only work from the Mac itself; the connector authenticates with its own key. `FABYN_PUBLIC_ORIGIN` is your Mac's address as the Pi sees it, and it goes into the setup command. `FABYN_MODE=hardware` lets the workshop use a real device (the simulated photo and 3D machines stop taking orders, and the browser test suite refuses to run until you switch back).
 
 ### On the Pi (once)
 
@@ -33,7 +33,7 @@ For a USB webcam, also `sudo apt install -y fswebcam`. Open a new shell afterwar
 ### Connect
 
 1. In the provider workspace, open **Machines → Add a machine**. Type **Phomemo M02 Pro** (or add a photo of the label under the printer) and click **Identify**; it should select **Phomemo M02Pro**. Choose **Hardware · a real machine** and click **Get setup command**.
-2. Copy the command and run it on the Pi. It downloads the connector into `~/.fabrary-connector`, installs it with the Pi's own Python (which has Bluetooth support), and connects using the one-time code. The code works once and expires after 15 minutes.
+2. Copy the command and run it on the Pi. It downloads the connector into `~/.fabyn-connector`, installs it with the Pi's own Python (which has Bluetooth support), and connects using the one-time code. The code works once and expires after 15 minutes.
 3. Back in the workshop, a checklist appears for the Sticker counter. Each step waits for your button:
    - **Check this computer** runs on its own: Linux, Bluetooth serial support, `bluetoothctl` and `sdptool`.
    - **Allow a short Bluetooth search**: turn the printer on first. It looks for a device named M02; if it finds more than one, it asks you to turn the others off.
@@ -55,8 +55,8 @@ Use this only if you can't run the connector. It wires the same pieces by hand.
 ```
 Mac                                              Raspberry Pi
 ───────────────────────────────                  ─────────────────────────────
-Fabrary app  127.0.0.1:4318  ◄── SSH tunnel ──►  127.0.0.1:4318 (asset downloads)
-             127.0.0.1:8789  ◄── SSH tunnel ──►  Fabrary node 127.0.0.1:8788
+Fabyn app  127.0.0.1:4318  ◄── SSH tunnel ──►  127.0.0.1:4318 (asset downloads)
+             127.0.0.1:8789  ◄── SSH tunnel ──►  Fabyn node 127.0.0.1:8788
 SpacetimeDB  127.0.0.1:3002                       │ Bluetooth (RFCOMM)
 Local node   127.0.0.1:8788 (simulated others)    ▼
                                                  Phomemo M02 Pro
@@ -67,7 +67,7 @@ The app and node only listen on `127.0.0.1`. One SSH connection makes each side 
 ### What you need
 
 - A Raspberry Pi with Bluetooth (Pi 3 B+, 4, 5 or Zero 2 W) running **Raspberry Pi OS 64-bit** (Bookworm or later), with SSH enabled and on the same network as your Mac.
-- The M02 Pro, charged, with a sticker roll loaded. Note the roll width: Fabrary supports 15, 25 and 53 mm.
+- The M02 Pro, charged, with a sticker roll loaded. Note the roll width: Fabyn supports 15, 25 and 53 mm.
 - Your Pi's login, written below as `pi@raspberrypi.local`. Replace it with your own user and host name (or IP address) everywhere.
 
 ### 1. Prepare the Pi
@@ -78,7 +78,7 @@ On the Pi:
 sudo apt update && sudo apt install -y bluez rsync
 ```
 
-Install uv (the Python tool Fabrary uses), then open a new shell:
+Install uv (the Python tool Fabyn uses), then open a new shell:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -113,14 +113,14 @@ Find the printer's serial-port channel:
 sdptool browse XX:XX:XX:XX:XX:XX
 ```
 
-Look for the **Serial Port** service and note its `Channel:` number. Fabrary never scans for this; you put it in the config file below.
+Look for the **Serial Port** service and note its `Channel:` number. Fabyn never scans for this; you put it in the config file below.
 
 ### 3. Copy the node to the Pi
 
-On the Mac, from the Fabrary folder:
+On the Mac, from the Fabyn folder:
 
 ```bash
-cd /path/to/fabrary && rsync -a --exclude .venv --exclude .pytest_cache --exclude __pycache__ node/ pi@raspberrypi.local:~/fabrary/node/
+cd /path/to/fabyn && rsync -a --exclude .venv --exclude .pytest_cache --exclude __pycache__ node/ pi@raspberrypi.local:~/fabyn/node/
 ```
 
 ### 4. Install the node with the Pi's own Python
@@ -130,13 +130,13 @@ The repository pins a Python version that uv would download on its own, and that
 On the Pi:
 
 ```bash
-cd ~/fabrary && export UV_PYTHON=/usr/bin/python3 && uv sync --project node --locked
+cd ~/fabyn && export UV_PYTHON=/usr/bin/python3 && uv sync --project node --locked
 ```
 
 Then confirm Python can open Bluetooth serial connections:
 
 ```bash
-cd ~/fabrary && UV_PYTHON=/usr/bin/python3 uv run --project node python -c "import socket; print(hasattr(socket, 'AF_BLUETOOTH'), hasattr(socket, 'BTPROTO_RFCOMM'))"
+cd ~/fabyn && UV_PYTHON=/usr/bin/python3 uv run --project node python -c "import socket; print(hasattr(socket, 'AF_BLUETOOTH'), hasattr(socket, 'BTPROTO_RFCOMM'))"
 ```
 
 It must print `True True`. If not, see [Troubleshooting](#troubleshooting).
@@ -148,10 +148,10 @@ The optional `hardware` extra is only for the Instax and Bambu adapters; the M02
 On the Pi, create the private data folder:
 
 ```bash
-mkdir -p ~/fabrary/.data && chmod 700 ~/fabrary/.data
+mkdir -p ~/fabyn/.data && chmod 700 ~/fabyn/.data
 ```
 
-Create `~/fabrary/.data/machines.json` with only the printer in it:
+Create `~/fabyn/.data/machines.json` with only the printer in it:
 
 ```json
 {
@@ -187,53 +187,53 @@ Changing the address, channel or model later invalidates calibration, and you wi
 
 The Pi node must use the same node key and signing secret as the app on your Mac.
 
-On the Mac, from the Fabrary folder, write them to a private file (nothing is printed):
+On the Mac, from the Fabyn folder, write them to a private file (nothing is printed):
 
 ```bash
-node --input-type=module -e "import 'dotenv/config'; import fs from 'node:fs'; const c = JSON.parse(fs.readFileSync('.data/local-credentials.json', 'utf8')); fs.writeFileSync('.data/pi-node-secrets.env', 'FABRARY_NODE_KEY=' + (process.env.FABRARY_NODE_KEY ?? c.nodeKey) + '\nFABRARY_TOKEN_SECRET=' + (process.env.FABRARY_TOKEN_SECRET ?? c.secret) + '\n', { mode: 0o600 });"
+node --input-type=module -e "import 'dotenv/config'; import fs from 'node:fs'; const c = JSON.parse(fs.readFileSync('.data/local-credentials.json', 'utf8')); fs.writeFileSync('.data/pi-node-secrets.env', 'FABYN_NODE_KEY=' + (process.env.FABYN_NODE_KEY ?? c.nodeKey) + '\nFABYN_TOKEN_SECRET=' + (process.env.FABYN_TOKEN_SECRET ?? c.secret) + '\n', { mode: 0o600 });"
 ```
 
 Copy it to the Pi, then delete the Mac copy:
 
 ```bash
-scp .data/pi-node-secrets.env pi@raspberrypi.local:~/fabrary/.data/node-secrets.env && rm .data/pi-node-secrets.env
+scp .data/pi-node-secrets.env pi@raspberrypi.local:~/fabyn/.data/node-secrets.env && rm .data/pi-node-secrets.env
 ```
 
-On the Pi, create `~/fabrary/.data/node.env`. Replace `pi` in the paths with your Pi user name:
+On the Pi, create `~/fabyn/.data/node.env`. Replace `pi` in the paths with your Pi user name:
 
 ```
-FABRARY_NODE_HOST=127.0.0.1
-FABRARY_NODE_PORT=8788
-FABRARY_NODE_URL=http://127.0.0.1:8789
-FABRARY_ASSET_ORIGIN=http://127.0.0.1:4318/assets
-FABRARY_NODE_DATA=/home/pi/fabrary/.data/node
-FABRARY_MACHINES_FILE=/home/pi/fabrary/.data/machines.json
+FABYN_NODE_HOST=127.0.0.1
+FABYN_NODE_PORT=8788
+FABYN_NODE_URL=http://127.0.0.1:8789
+FABYN_ASSET_ORIGIN=http://127.0.0.1:4318/assets
+FABYN_NODE_DATA=/home/pi/fabyn/.data/node
+FABYN_MACHINES_FILE=/home/pi/fabyn/.data/machines.json
 UV_PYTHON=/usr/bin/python3
 ```
 
 | Setting | Why |
 | --- | --- |
-| `FABRARY_NODE_HOST`, `FABRARY_NODE_PORT` | The node listens only on the Pi's localhost, port 8788. |
-| `FABRARY_NODE_URL` | The address the **Mac** uses to reach this node through the tunnel. |
-| `FABRARY_ASSET_ORIGIN` | Where the node downloads approved print files. It must match the app exactly; the tunnel makes the Mac's port 4318 appear on the Pi. |
-| `FABRARY_NODE_DATA` | The node's job journal. Never delete it to clear a stuck print. |
-| `FABRARY_MACHINES_FILE` | The file from step 6. |
+| `FABYN_NODE_HOST`, `FABYN_NODE_PORT` | The node listens only on the Pi's localhost, port 8788. |
+| `FABYN_NODE_URL` | The address the **Mac** uses to reach this node through the tunnel. |
+| `FABYN_ASSET_ORIGIN` | Where the node downloads approved print files. It must match the app exactly; the tunnel makes the Mac's port 4318 appear on the Pi. |
+| `FABYN_NODE_DATA` | The node's job journal. Never delete it to clear a stuck print. |
+| `FABYN_MACHINES_FILE` | The file from step 6. |
 | `UV_PYTHON` | Keeps uv on the system Python with Bluetooth support. |
 
 Lock both files down:
 
 ```bash
-chmod 600 ~/fabrary/.data/node.env ~/fabrary/.data/node-secrets.env ~/fabrary/.data/machines.json
+chmod 600 ~/fabyn/.data/node.env ~/fabyn/.data/node-secrets.env ~/fabyn/.data/machines.json
 ```
 
 ### 7. Point the Mac app at the Pi
 
-In the Fabrary folder on the Mac, edit `.env`:
+In the Fabyn folder on the Mac, edit `.env`:
 
-- Change `FABRARY_MODE=simulation` to `FABRARY_MODE=hardware`.
-- Add `FABRARY_PHOMEMO_NODE_URL=http://127.0.0.1:8789`.
+- Change `FABYN_MODE=simulation` to `FABYN_MODE=hardware`.
+- Add `FABYN_PHOMEMO_NODE_URL=http://127.0.0.1:8789`.
 
-Leave `FABRARY_PAYMENT_MODE=mock`.
+Leave `FABYN_PAYMENT_MODE=mock`.
 
 In hardware mode the simulated photo and 3D machines stop taking orders, and the browser test suite refuses to run. Switch back before running tests ([below](#back-to-simulation)).
 
@@ -250,7 +250,7 @@ In hardware mode the simulated photo and 3D machines stop taking orders, and the
 3. **Node (Pi).** In an SSH session or on the Pi itself:
 
    ```bash
-   cd ~/fabrary && set -a && . .data/node-secrets.env && . .data/node.env && set +a && uv run --project node fabrary-node
+   cd ~/fabyn && set -a && . .data/node-secrets.env && . .data/node.env && set +a && uv run --project node fabyn-node
    ```
 
    Wait for `Uvicorn running on http://127.0.0.1:8788`.
@@ -288,7 +288,7 @@ When the print finishes, the order goes to **Needs a review**, because the print
 
 ## Back to simulation
 
-1. In the Mac's `.env`, set `FABRARY_MODE=simulation`, and remove `FABRARY_PHOMEMO_NODE_URL` if you used the manual setup.
+1. In the Mac's `.env`, set `FABYN_MODE=simulation`, and remove `FABYN_PHOMEMO_NODE_URL` if you used the manual setup.
 2. Restart the app (`npm run demo`). You can stop the connector (or the tunnel and Pi node).
 3. Machines → **Add a machine** → **Phomemo M02Pro**, Device mode **Simulation** → **Register supported device**. Then run the simulation calibration, list and resume it.
 
@@ -296,7 +296,7 @@ When the print finishes, the order goes to **Needs a review**, because the print
 
 | Symptom | Fix |
 | --- | --- |
-| The Python check prints `False False` | uv used a downloaded Python. On the Pi: `rm -rf ~/fabrary/node/.venv`, export `UV_PYTHON=/usr/bin/python3`, and run step 5 again. |
+| The Python check prints `False False` | uv used a downloaded Python. On the Pi: `rm -rf ~/fabyn/node/.venv`, export `UV_PYTHON=/usr/bin/python3`, and run step 5 again. |
 | `Another node owns this journal` | A node is already running on the Pi. Use that one, or stop it first. |
 | The tunnel prints `remote port forwarding failed` or `Address already in use` | Something already uses port 4318 on the Pi or 8789 on the Mac. Stop it, or pick other ports and change them everywhere they appear in this guide. |
 | Registration says the node did not provide capabilities | The tunnel or the Pi node isn't running. Repeat the check in step 9.5. |

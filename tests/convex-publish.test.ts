@@ -92,7 +92,7 @@ test("a failed send is kept and retried in order; nothing throws into the app", 
 });
 
 test("the mirror publishes only what changed after each committed write", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-convex-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-convex-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const published: { type: string; data: any }[] = [];
   let flushed = () => {};

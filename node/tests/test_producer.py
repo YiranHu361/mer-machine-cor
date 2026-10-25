@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 import pytest
 from PIL import Image, ImageDraw
-from fabrary_node import nametag, producer, svg_subset
+from fabyn_node import nametag, producer, svg_subset
 
 NS = "http://www.w3.org/2000/svg"
 CAT = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -169,7 +169,7 @@ def test_name_tag_is_a_reproducible_closed_3mf(tmp_path):
 
 
 def test_name_tag_without_openscad_is_a_typed_rejection(tmp_path, monkeypatch):
-    monkeypatch.setenv("FABRARY_OPENSCAD", str(tmp_path / "missing"))
+    monkeypatch.setenv("FABYN_OPENSCAD", str(tmp_path / "missing"))
     monkeypatch.setattr(nametag.shutil, "which", lambda _name: None)
     monkeypatch.setattr(nametag, "APP_BINARY", str(tmp_path / "missing"))
     result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "Maya"}, FDM))
@@ -367,7 +367,7 @@ def test_hardware_name_tag_is_unsliced_for_the_receiver(tmp_path):
 @needs_openscad
 def test_name_tag_build_volume(tmp_path):
     profile = {**FDM, "build_volume_mm": [60, 60, 60]}
-    result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "FABRARY 10"}, profile))
+    result = producer.prepare(request(tmp_path, "fdm_print", {"kind": "text_tag", "text": "FABYN 10"}, profile))
     assert result["code"] == "exceeds_build_volume"
 
 
@@ -431,7 +431,7 @@ def test_invalid_requests(tmp_path, change):
 # ---------------------------------------------------------------- CLI
 
 def run_cli(payload: bytes, command=None) -> subprocess.CompletedProcess:
-    return subprocess.run(command or [sys.executable, "-m", "fabrary_node.producer"], input=payload, capture_output=True, timeout=60)
+    return subprocess.run(command or [sys.executable, "-m", "fabyn_node.producer"], input=payload, capture_output=True, timeout=60)
 
 
 def test_cli_round_trip(tmp_path):
@@ -439,7 +439,7 @@ def test_cli_round_trip(tmp_path):
     done = run_cli(json.dumps(req).encode())
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == producer.prepare(req)
-    script = Path(sys.executable).parent / "fabrary-producer"
+    script = Path(sys.executable).parent / "fabyn-producer"
     if script.exists():
         installed = run_cli(json.dumps({"operation": "render_design_preview", "svg": CAT, "size_px": 64,
                                         "output_dir": str(tmp_path / "p")}).encode(), [str(script)])

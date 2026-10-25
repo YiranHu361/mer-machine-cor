@@ -18,7 +18,7 @@ function deferred<T>() {
 }
 
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-ordering-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-ordering-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device: NodeBoundary = {
     token: () => ({

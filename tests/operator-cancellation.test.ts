@@ -26,7 +26,7 @@ function deferred<T>() {
   };
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-operator-cancel-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-operator-cancel-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const gate = deferred<void>();
   let pending: Promise<void> | undefined;

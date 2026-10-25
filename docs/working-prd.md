@@ -1,9 +1,9 @@
-# Fabrary: PRD, Design Doc and Feasibility
+# Fabyn: PRD, Design Doc and Feasibility
 Oct 22, 2026 · @Yiran
 
 ## Summary
 
-Fabrary starts with pictures. The requester uploads images, and the agent recommends a suitable physical output and a machine from the registered database, using the pictures and each machine's capabilities, loaded material and current availability. The requester does not need to choose a machine, output type or production settings first. They review the recommendation, approve a production preview and an itemized quote, then get a photo of the result and a pickup code. An owner connects a supported machine to a node, sets prices and hours, and receives jobs through one common interface.
+Fabyn starts with pictures. The requester uploads images, and the agent recommends a suitable physical output and a machine from the registered database, using the pictures and each machine's capabilities, loaded material and current availability. The requester does not need to choose a machine, output type or production settings first. They review the recommendation, approve a production preview and an itemized quote, then get a photo of the result and a pickup code. An owner connects a supported machine to a node, sets prices and hours, and receives jobs through one common interface.
 The Cal Hacks build runs this loop on the team's three machines. Stickers on the Phomemo M02Pro are the main interactive demo, the Instax Mini Link 3 is the second output, and a short prepared print on the Bambu Lab A1 mini shows the same orchestration on a longer job. Known-device onboarding is shown live. Photo-to-3D and adapter generation for unfamiliar models stay visible stretch goals.
 The requester view has no output-type cards, machine selector or prepared-model chooser, including inside optional settings. The first screen centers on uploading pictures; machine identity and capabilities appear only after analysis as a read-only recommendation. Optional size, crop, quantity, rights review and budget refinements cannot silently remove or switch a recommended machine. Replacing pictures or changing their purpose on new-order or machine-bound drafts requires a fresh match before previewing. Existing reviewed prepared-3D records remain supported outside this image intake.
 
@@ -11,7 +11,7 @@ The implemented interface starts with one upload target and no empty preview or 
 
 The minimalism pass uses [Microsoft Copilot’s start screen](https://mobbin.com/screens/dfec08cd-925a-4145-852b-bbbdc30d3f59) for one primary input and quiet navigation, and [Square’s order list](https://mobbin.com/screens/9b7f70e1-3194-4995-b0bd-a74a3861198f) for a provider inbox with secondary filters. The app owns capability matching, preparation, quoting and status updates; people review the preview/payment and confirm physical work. Details open when needed instead of making every user complete setup fields up front.
 
-Design references inspected on Mobbin: [Square image upload](https://mobbin.com/screens/610ae606-5a0f-43d0-9787-9a5dfd893f8d) for a focused upload target and concise action hierarchy; [Recraft image review](https://mobbin.com/screens/df0d6d5b-2ebe-478d-be27-56dd738f7a07) for an image-led canvas with supporting details alongside it. Adapt those hierarchy principles to Fabrary's existing blue/ink/paper workshop identity; no reference assets are copied.
+Design references inspected on Mobbin: [Square image upload](https://mobbin.com/screens/610ae606-5a0f-43d0-9787-9a5dfd893f8d) for a focused upload target and concise action hierarchy; [Recraft image review](https://mobbin.com/screens/df0d6d5b-2ebe-478d-be27-56dd738f7a07) for an image-led canvas with supporting details alongside it. Adapt those hierarchy principles to Fabyn's existing blue/ink/paper workshop identity; no reference assets are copied.
 
 The platform automates intake, preparation, matching, payment tracking, dispatch and visible-output checks. Owners still load media, clear machines, remove finished items and hand them off. The demo uses team-operated machines and test funds. Submission closes Sunday, October 25 at 9 AM PT, as the organizers' October 22 email states; the product name is still open.
 
@@ -23,7 +23,7 @@ The platform automates intake, preparation, matching, payment tracking, dispatch
 Our first customer hypothesis is that Berkeley students and clubs want small quantities of personalized items quickly, without quoting and setup. Our first supply hypothesis is that owners will accept standardized jobs when the price covers consumables, handling and failures.
 The hackathon proves the transaction and the machine interface. Two or three conversations with club officers should establish a recent need, acceptable material and finish, pickup distance, turnaround and willingness to pay, and one prospective owner should describe the work between orders.
 
-| User | Gives Fabrary | Receives | Still does |
+| User | Gives Fabyn | Receives | Still does |
 | --- | --- | --- | --- |
 | Requester | 1 to 4 images, explicit artwork permission, an approved preview; optional note, print refinements and budget | Recommended result and machine, itemized quote, job progress, result photo, pickup code | Reviews the output, confirms payment and production, and collects the item |
 | Owner | A supported connected machine, loaded media, price card, hours, content rules | Standardized jobs, a status dashboard, a payout record | Prepares the machine, reloads media, clears outputs, handles collection and exceptions |
@@ -54,7 +54,7 @@ Out of scope for the hackathon: real customer funds, real postage, a public owne
 
 1. Upload 1 to 4 images into one upload target. The agent recommends an output and a suitable registered machine, explains the choice and fills supported dimensions, material, crop and a default quantity of one. **Add a note** and **Optional print settings** offer secondary refinements after upload; neither is an intake requirement. Ask a short bundled clarification only when the pictures leave an essential choice unresolved. If vision is unavailable, identify limited local analysis honestly; if no suitable machine is available, say so without silently choosing an unsuitable output. Empty preview and order-history panels are absent until there is content to show.
 2. Confirm artwork permission explicitly and select **Preview your item**. If permission is uncertain, explicitly request owner review instead of inferring permission from the pictures. Inspect the production preview with dimensions, crop, material and color limits. A thermal sticker preview shows the actual monochrome conversion.
-3. Select **Approve preview & see price**. Fabrary atomically approves the displayed file/specification, rechecks the recommended machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. A failed quote cannot leave a newly approved intermediate state. A different machine requires a fresh recommendation and approval instead of a silent switch. The demo uses one designated collection point.
+3. Select **Approve preview & see price**. Fabyn atomically approves the displayed file/specification, rechecks the recommended machine, reserves it briefly, and quotes consumables, machine time, owner handling, platform fee, an expiry and the collection point. A failed quote cannot leave a newly approved intermediate state. A different machine requires a fresh recommendation and approval instead of a silent switch. The demo uses one designated collection point.
 4. Confirm the displayed mock or testnet payment separately. With a configured budget mandate, the agent may accept a quote for an already approved specification within that mandate; this never substitutes for checkout consent. Any change to price or output needs new approval.
 5. Select **Start production** after payment is confirmed. The approved artifact is dispatched only by this deliberate action. The requester sees payment, machine progress, verification and any owner action needed; analysis, preview creation and preview approval do not start a machine.
 6. A passing output check releases the held test amount to the owner's payable balance. Ambiguous evidence pauses release for operator review.
@@ -193,7 +193,7 @@ InstaxBLE's supported list does not include the Link 3, and its issue tracker ha
 
 ## Track integrations
 
-Fabrary keeps a broad sponsor strategy, with each sponsor's tool mapped to one step of the loop. An integration counts toward a submission only when its behavior is built and demonstrated. Prize details come from the organizers' emails and Devpost and still need the rules check under Decisions to close early.
+Fabyn keeps a broad sponsor strategy, with each sponsor's tool mapped to one step of the loop. An integration counts toward a submission only when its behavior is built and demonstrated. Prize details come from the organizers' emails and Devpost and still need the rules check under Decisions to close early.
 A request runs across the top and back along the middle; the owner side underneath feeds machines in and pays owners out.
 
 ### What each track needs
@@ -298,7 +298,7 @@ For every completed trial, record consumables, machine minutes, owner handling m
 
 ### Pitch language
 
-"Fabrary lets an agent turn a picture into a physical item on a nearby available machine. Today we demonstrate stickers, instant photos and a prepared 3D print on three devices we own. The platform handles the order and machine workflow; the owner loads materials, removes the output and handles collection. Supported devices onboard through tested adapters. We plan to support unfamiliar models through a supervised adapter workflow. Our demo uses test payments and checks visible output before release."
+"Fabyn lets an agent turn a picture into a physical item on a nearby available machine. Today we demonstrate stickers, instant photos and a prepared 3D print on three devices we own. The platform handles the order and machine workflow; the owner loads materials, removes the output and handles collection. Supported devices onboard through tested adapters. We plan to support unfamiliar models through a supervised adapter workflow. Our demo uses test payments and checks visible output before release."
 Photo-to-3D, generated adapters, mailing and add-on integrations are described by their actual status on submission day.
 
 ## Sources

@@ -703,8 +703,8 @@ function App() {
         Skip to content
       </a>
       <header className="site-header">
-        <a className="brand" href="/" aria-label="Fabrary home">
-          fabrary
+        <a className="brand" href="/" aria-label="Fabyn home">
+          fabyn
         </a>
         <nav aria-label="Main navigation">
           {isOwner || isRelief ? (
@@ -989,7 +989,7 @@ function RequesterApp({
     current?.artifact?.sha256 && loadedPreview === previewContext,
   );
   const selectedId = useRef<string | null>(
-    readStoredValue("local", "fabrary-current-job"),
+    readStoredValue("local", "fabyn-current-job"),
   );
   const jobsGate = useRef(snapshotGate());
   const machinesGate = useRef(snapshotGate());
@@ -1079,7 +1079,7 @@ function RequesterApp({
         return false;
       if (error instanceof ApiError && [401, 403].includes(error.status)) {
         selectedId.current = null;
-        removeStoredValue("local", "fabrary-current-job");
+        removeStoredValue("local", "fabyn-current-job");
         setCurrent(null);
         setJobs([]);
         setSession(null);
@@ -1194,7 +1194,7 @@ function RequesterApp({
     setPreviewVisit((visit) => visit + 1);
     invalidateSnapshots(jobsGate.current);
     selectedId.current = job.id;
-    writeStoredValue("local", "fabrary-current-job", job.id);
+    writeStoredValue("local", "fabyn-current-job", job.id);
     setCurrent((old) =>
       old?.id === job.id && old.version > job.version ? old : job,
     );
@@ -1693,7 +1693,7 @@ function RequesterApp({
     setEditingBaseline(null);
     setEditConflict(false);
     selectedId.current = null;
-    removeStoredValue("local", "fabrary-current-job");
+    removeStoredValue("local", "fabyn-current-job");
     setCurrent(null);
     setAssets([]);
     setIntakeDraft(null);
@@ -1881,7 +1881,7 @@ function RequesterApp({
         ) {
           recoveryContext.current++;
           selectedId.current = null;
-          removeStoredValue("local", "fabrary-current-job");
+          removeStoredValue("local", "fabyn-current-job");
         }
       }}
     >
@@ -4131,7 +4131,7 @@ function OwnerApp({
                       <h3>No orders yet.</h3>
                       <p>
                         {machines.length
-                          ? "Check your machines, then let Fabrary match incoming requests."
+                          ? "Check your machines, then let Fabyn match incoming requests."
                           : "Add your first machine to get your workshop ready."}
                       </p>
                       <button
@@ -4269,8 +4269,8 @@ function OwnerApp({
                   >
                     <summary>Add a machine</summary>
                     <p className="add-machine-intro">
-                      Tell Fabrary what the machine is, then run one command on
-                      the computer next to it. Fabrary checks that computer,
+                      Tell Fabyn what the machine is, then run one command on
+                      the computer next to it. Fabyn checks that computer,
                       asks before each step, and writes the settings for you.
                     </p>
                     <form
@@ -4433,7 +4433,7 @@ function OwnerApp({
                           {/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(
                             liveSetupCode.platformUrl,
                           )
-                            ? " This address works only on this computer. To connect another computer, set FABRARY_HOST=0.0.0.0 and FABRARY_PUBLIC_ORIGIN to this computer's network address, then restart the workshop."
+                            ? " This address works only on this computer. To connect another computer, set FABYN_HOST=0.0.0.0 and FABYN_PUBLIC_ORIGIN to this computer's network address, then restart the workshop."
                             : ""}
                         </p>
                         <p className="setup-waiting">
@@ -4718,7 +4718,7 @@ function OwnerMachine({
     connector && !connector.online
       ? `The machine computer ${connector.hostLabel} is not connected. Start the connector there again.`
       : m.activeJobId
-        ? "A job is using this machine. Fabrary will track its progress."
+        ? "A job is using this machine. Fabyn will track its progress."
         : m.policyReconciliationRequired
           ? "Open Settings to synchronize this machine’s saved policy."
           : !m.paired || !m.configured
@@ -4733,7 +4733,7 @@ function OwnerMachine({
                   ? "Open Settings to list this machine when you are ready."
                   : !m.ready
                     ? "Check the saved status below before accepting more work."
-                    : "Setup is complete. Fabrary checks availability for each request.";
+                    : "Setup is complete. Fabyn checks availability for each request.";
   const setup = [
     ["Connected", m.paired && m.configured],
     ["Calibrated", m.calibrated],
@@ -5203,7 +5203,7 @@ function PhysicalCalibration({
     contextMatch: boolean | null;
   };
   type Checkpoint = { key: string | null; pending: boolean; legacy?: boolean };
-  const slot = `fabrary-calibration-${m.id}`;
+  const slot = `fabyn-calibration-${m.id}`;
   const validKey = (value: unknown): value is string =>
     typeof value === "string" && /^[A-Za-z0-9._:-]{8,200}$/.test(value);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(() => {
@@ -7073,7 +7073,7 @@ function OwnerJob({
                 : ["dispatched", "running", "verifying"].includes(
                       j.productionState,
                     )
-                  ? "On the machine now. Fabrary tracks progress and checks the result."
+                  ? "On the machine now. Fabyn tracks progress and checks the result."
                   : j.productionState === "payment_confirmed"
                     ? "Paid. Waiting for the requester to start production."
                     : ["specified", "approved", "quoted"].includes(

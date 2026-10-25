@@ -6,9 +6,9 @@ import time
 import httpx
 import pytest
 from PIL import Image
-from fabrary_node import service as service_module
-from fabrary_node.service import NodeService
-from fabrary_node.security import NodeError, sign_token
+from fabyn_node import service as service_module
+from fabyn_node.service import NodeService
+from fabyn_node.security import NodeError, sign_token
 
 KEY = "isolated-mode-regression-no-real-credentials"
 MID = "phomemo_01"

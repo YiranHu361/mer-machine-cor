@@ -22,7 +22,7 @@ function deferred<T>() {
 const mid = "phomemo_01",
   at = "2026-10-23T12:00:00.000Z";
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-availability-probe-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-availability-probe-")),
     store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const controls = {
     status: null as null | ((machine: Machine) => Promise<any>),

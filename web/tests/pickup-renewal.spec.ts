@@ -149,7 +149,7 @@ async function mount(
   role: "owner" | "requester" = "owner",
 ) {
   await page.addInitScript((id) => {
-    localStorage.setItem("fabrary-current-job", id);
+    localStorage.setItem("fabyn-current-job", id);
     const handlers: Array<() => void> = [];
     class Events {
       onopen: (() => void) | null = null;

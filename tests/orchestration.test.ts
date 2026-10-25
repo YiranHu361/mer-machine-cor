@@ -188,7 +188,7 @@ function fixture(
     mode?: Machine["mode"];
     allowed?: Machine["mode"][];
     design?: "fixture" | "none" | "nano-banana" | "openai";
-    /** "cli" runs the real fabrary-producer; tests using it skip without uv. */
+    /** "cli" runs the real fabyn-producer; tests using it skip without uv. */
     producer?: "fake" | "cli";
     understand?: (input: RequestInput) => Promise<RequestBrief>;
     imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
@@ -197,7 +197,7 @@ function fixture(
     ) => Promise<{ ok: boolean; detail: string }>;
   } = {},
 ) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-orchestration-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-orchestration-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device = new Device();
   const payment = new MockPayment();
@@ -1426,7 +1426,7 @@ const pngSize = (bytes: Buffer) => ({
   colorType: bytes[25],
 });
 const noProducer = existsSync(
-  join(process.cwd(), "node", ".venv", "bin", "fabrary-producer"),
+  join(process.cwd(), "node", ".venv", "bin", "fabyn-producer"),
 )
   ? false
   : "the node project environment is not installed (uv sync in node/)";
@@ -1655,7 +1655,7 @@ function testnetPayment(
     confirmed = false,
     amount = 0n;
   const boundary = new IntegratedPayment(f.store, {
-    FABRARY_PAYMENT_MODE: "mock",
+    FABYN_PAYMENT_MODE: "mock",
   });
   boundary.mode = "testnet";
   boundary.adapter = new BaseSepoliaPaymentAdapter({

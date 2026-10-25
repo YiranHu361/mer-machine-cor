@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
-const origin = process.env.FABRARY_ACCEPTANCE_ORIGIN ?? "http://127.0.0.1:4318";
+const origin = process.env.FABYN_ACCEPTANCE_ORIGIN ?? "http://127.0.0.1:4318";
 const health = (await (await fetch(origin + "/api/health")).json()) as any;
 assert.equal(
   health.mode,
@@ -28,7 +28,7 @@ async function session(role: string) {
     body: JSON.stringify({
       role,
       ...(role === "owner"
-        ? { accessCode: process.env.FABRARY_OWNER_CODE ?? config.ownerCode }
+        ? { accessCode: process.env.FABYN_OWNER_CODE ?? config.ownerCode }
         : {}),
     }),
   });

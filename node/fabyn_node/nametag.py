@@ -69,11 +69,11 @@ def validate(name: object) -> str:
 
 
 def openscad() -> str:
-    for candidate in (os.environ.get("FABRARY_OPENSCAD"), shutil.which("openscad"), APP_BINARY):
+    for candidate in (os.environ.get("FABYN_OPENSCAD"), shutil.which("openscad"), APP_BINARY):
         if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
     raise GeneratorUnavailable("OpenSCAD is not installed: brew install --cask openscad@snapshot, "
-                               "or set FABRARY_OPENSCAD to its binary")
+                               "or set FABYN_OPENSCAD to its binary")
 
 
 def render(name: str) -> NameTag:

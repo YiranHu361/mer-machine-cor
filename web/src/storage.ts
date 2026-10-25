@@ -103,13 +103,13 @@ const validKey = (value: unknown): value is string =>
 export function getCheckoutKey(job: CheckoutIdentity): string {
   if (!job.quote?.id)
     throw new Error("Get a current quote before starting checkout.");
-  const slot = `fabrary-checkout-${job.id}-${job.quote.id}-${job.quote.version}`;
+  const slot = `fabyn-checkout-${job.id}-${job.quote.id}-${job.quote.version}`;
   const saved = readStoredValue("session", slot);
   const key = validKey(job.checkoutKey)
     ? job.checkoutKey
     : validKey(saved)
       ? saved
-      : `fabrary-checkout-v1:${encodeURIComponent(job.id)}:${encodeURIComponent(job.quote.id)}:${job.quote.version ?? 1}`;
+      : `fabyn-checkout-v1:${encodeURIComponent(job.id)}:${encodeURIComponent(job.quote.id)}:${job.quote.version ?? 1}`;
   if (!validKey(key))
     throw new Error(
       "This order reference cannot be saved safely for checkout. Ask the owner to review the order.",
@@ -126,7 +126,7 @@ type WalletCheckpoint = {
   idempotencyKey: string;
 };
 const walletSlot = (context: WalletCheckpoint) =>
-  `fabrary-wallet-attempt-${encodeURIComponent(context.jobId)}-${encodeURIComponent(context.quote.id)}`;
+  `fabyn-wallet-attempt-${encodeURIComponent(context.jobId)}-${encodeURIComponent(context.quote.id)}`;
 // Storage can be cleared/evicted while a wallet approval is open. An observed
 // attempt stays claimed in this page even if a later storage read returns null.
 const walletClaims = new Set<string>();

@@ -64,7 +64,7 @@ test("requester and owner complete an honest simulated order, independent handli
   await ownerPage.goto("/owner");
   await ownerPage
     .getByLabel("Owner access code", { exact: true })
-    .fill(process.env.FABRARY_OWNER_CODE || credentials.ownerCode);
+    .fill(process.env.FABYN_OWNER_CODE || credentials.ownerCode);
   await ownerPage
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
@@ -440,7 +440,7 @@ test("intake validates specifications, review returns to approval, and expired/o
   await ownerPage.goto("/owner");
   await ownerPage
     .getByLabel("Owner access code", { exact: true })
-    .fill(process.env.FABRARY_OWNER_CODE || credentials.ownerCode);
+    .fill(process.env.FABYN_OWNER_CODE || credentials.ownerCode);
   await ownerPage
     .getByRole("button", { name: "Open owner workshop", exact: true })
     .click();
@@ -534,10 +534,10 @@ test("live subscription updates the open owner dashboard with polling disabled",
   type LiveProbe = { blockedIntervals: number[]; refreshEvents: number };
   await page.addInitScript(() => {
     const target = window as Window & {
-      fabraryLiveProbe?: { blockedIntervals: number[]; refreshEvents: number };
+      fabynLiveProbe?: { blockedIntervals: number[]; refreshEvents: number };
     };
     const probe = { blockedIntervals: [] as number[], refreshEvents: 0 };
-    target.fabraryLiveProbe = probe;
+    target.fabynLiveProbe = probe;
     const originalInterval = window.setInterval.bind(window);
     window.setInterval = ((
       handler: TimerHandler,
@@ -569,7 +569,7 @@ test("live subscription updates the open owner dashboard with polling disabled",
   const credentials = JSON.parse(
     await readFile(resolve("../.data/local-credentials.json"), "utf8"),
   );
-  const ownerCode = process.env.FABRARY_OWNER_CODE || credentials.ownerCode;
+  const ownerCode = process.env.FABYN_OWNER_CODE || credentials.ownerCode;
   expect(
     (
       await operator.request.post("/api/session", {
@@ -593,7 +593,7 @@ test("live subscription updates the open owner dashboard with polling disabled",
   const probe = () =>
     page.evaluate(
       () =>
-        (window as Window & { fabraryLiveProbe: LiveProbe }).fabraryLiveProbe,
+        (window as Window & { fabynLiveProbe: LiveProbe }).fabynLiveProbe,
     );
   try {
     await page.goto("/owner");

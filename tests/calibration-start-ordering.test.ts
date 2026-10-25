@@ -19,7 +19,7 @@ import { createApp } from "../server/app.ts";
 import { calibrationDeviceContext } from "../server/calibration-context.ts";
 
 async function fixture(held = false) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-preparation-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-preparation-")),
     previousPath = process.env.PATH,
     store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   mkdirSync(join(dir, "bin"));
@@ -30,7 +30,7 @@ async function fixture(held = false) {
   if (held) writeFileSync(hold, "hold");
   writeFileSync(
     join(dir, "bin", "uv"),
-    `#!${process.execPath}\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[3]!=='fabrary-prepare')process.exit(90);async function main(){if(fs.existsSync(${JSON.stringify(hold)})){fs.writeFileSync(${JSON.stringify(entered)},'entered');while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(r=>setTimeout(r,5));}fs.copyFileSync(a[4],a[5]);}main().catch(()=>process.exit(91));\n`,
+    `#!${process.execPath}\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[3]!=='fabyn-prepare')process.exit(90);async function main(){if(fs.existsSync(${JSON.stringify(hold)})){fs.writeFileSync(${JSON.stringify(entered)},'entered');while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(r=>setTimeout(r,5));}fs.copyFileSync(a[4],a[5]);}main().catch(()=>process.exit(91));\n`,
     { mode: 0o755 },
   );
   process.env.PATH = `${join(dir, "bin")}:${previousPath ?? ""}`;

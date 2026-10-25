@@ -22,7 +22,7 @@ from .security import NodeError
 
 
 class Simulator:
-    version = "fabrary-simulator/1.0.0"
+    version = "fabyn-simulator/1.0.0"
 
     def __init__(self, config: dict):
         self.config = config
@@ -41,7 +41,7 @@ class Simulator:
 
 
 class Phomemo:
-    version = "fabrary-phomemo/1.0.0;protocol=phomemo-tools@2b76748"
+    version = "fabyn-phomemo/1.0.0;protocol=phomemo-tools@2b76748"
 
     def __init__(self, config: dict):
         self.config = config
@@ -99,7 +99,7 @@ class Phomemo:
 
 
 class InstaxLink3:
-    version = "fabrary-instaxble/1.0.0;upstream=804dca8;link3-unverified"
+    version = "fabyn-instaxble/1.0.0;upstream=804dca8;link3-unverified"
 
     def __init__(self, config: dict):
         self.config = config
@@ -296,7 +296,7 @@ class Bambu:
         state = str(printer.get_state()).split(".")[-1].upper()
         if state not in {"IDLE", "FINISH", "FAILED"}:
             raise NodeError("device_busy", "Bambu actual state is not idle: " + state, 409)
-        filename = "fabrary_" + re.sub(r"[^A-Za-z0-9_-]", "_", attempt_id)[:64] + ".3mf"
+        filename = "fabyn_" + re.sub(r"[^A-Za-z0-9_-]", "_", attempt_id)[:64] + ".3mf"
         with artifact.open("rb") as stream:
             uploaded = await asyncio.to_thread(printer.upload_file, stream, filename)
         # The pinned SDK catches STOR errors and returns None. Only a positive

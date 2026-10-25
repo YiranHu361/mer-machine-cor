@@ -8,10 +8,10 @@ import stat
 import httpx
 from PIL import Image
 
-from fabrary_node.connector import (
+from fabyn_node.connector import (
     Connector, PlatformAssetTransport, SetupAgent, parse_devices, parse_serial_channel,
 )
-from fabrary_node.security import NodeError
+from fabyn_node.security import NodeError
 
 PHOMEMO = {"id": "phomemo_01", "model": "Phomemo M02Pro", "outputType": "sticker", "material": "thermal-paper"}
 SDP = """Service Name: Serial Port

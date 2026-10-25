@@ -15,7 +15,7 @@ try {
 let configuredDevices = 0;
 try {
   const parsed = JSON.parse(
-    await readFile(process.env.FABRARY_MACHINES_FILE ?? "", "utf8"),
+    await readFile(process.env.FABYN_MACHINES_FILE ?? "", "utf8"),
   );
   configuredDevices = (Array.isArray(parsed) ? parsed : parsed.machines).length;
 } catch {}

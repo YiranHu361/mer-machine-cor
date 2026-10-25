@@ -35,7 +35,7 @@ const families = [
     close: /\bm0?2\b/,
     closeQuestion:
       "Is it the M02 Pro? Only the Pro is supported, and its label says M02 Pro.",
-    brandQuestion: "Which Phomemo model is it? Fabrary supports the M02 Pro.",
+    brandQuestion: "Which Phomemo model is it? Fabyn supports the M02 Pro.",
   },
   {
     model: "instax-mini-link-3",
@@ -47,7 +47,7 @@ const families = [
     closeQuestion:
       "Is it the Instax mini Link 3? Only that Link printer is supported.",
     brandQuestion:
-      "Which Instax model is it? Fabrary supports the mini Link 3.",
+      "Which Instax model is it? Fabyn supports the mini Link 3.",
   },
   {
     model: "bambu-a1-mini",
@@ -58,7 +58,7 @@ const families = [
     closeQuestion:
       "Is it the A1 mini? The full-size A1 and other Bambu printers aren't supported.",
     brandQuestion:
-      "Which Bambu Lab printer is it? Fabrary supports the A1 mini.",
+      "Which Bambu Lab printer is it? Fabyn supports the A1 mini.",
   },
 ];
 
@@ -111,13 +111,13 @@ export function matchMachine(
     return modelLike
       ? result(
           "unsupported",
-          `Fabrary supports the ${branded.name}, not “${seen}”.`,
+          `Fabyn supports the ${branded.name}, not “${seen}”.`,
         )
       : result("unclear", branded.brandQuestion);
   return modelLike
     ? result(
         "unsupported",
-        `Fabrary doesn't support “${seen}” yet. Supported machines: ${SUPPORTED}.`,
+        `Fabyn doesn't support “${seen}” yet. Supported machines: ${SUPPORTED}.`,
       )
     : result(
         "unclear",

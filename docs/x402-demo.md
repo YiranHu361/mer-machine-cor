@@ -1,6 +1,6 @@
 # x402 testnet MVP
 
-Fabrary uses x402 v2 with **free test USDC on Base Sepolia (chain 84532)**.
+Fabyn uses x402 v2 with **free test USDC on Base Sepolia (chain 84532)**.
 Mainnet is rejected. No Coinbase account or CDP API key is needed for the default
 public test facilitator, `https://x402.org/facilitator`.
 
@@ -49,17 +49,17 @@ private-key export. The steps below also cover setting up a fresh checkout.
    use a disposable test wallet, never an account holding real assets.
 
    ```dotenv
-   FABRARY_TREASURY_ADDRESS=0x_your_test_recipient_address
-   FABRARY_TEST_PAYER_PRIVATE_KEY=0x_your_disposable_test_payer_private_key
-   FABRARY_BASE_SEPOLIA_RPC=https://sepolia.base.org
-   FABRARY_PUBLIC_ORIGIN=http://127.0.0.1:4318
+   FABYN_TREASURY_ADDRESS=0x_your_test_recipient_address
+   FABYN_TEST_PAYER_PRIVATE_KEY=0x_your_disposable_test_payer_private_key
+   FABYN_BASE_SEPOLIA_RPC=https://sepolia.base.org
+   FABYN_PUBLIC_ORIGIN=http://127.0.0.1:4318
    ```
 
 4. In a terminal, run once:
 
    ```sh
    cd /Users/lucasjiang/Development/calhacks_26/mer-machine-cor
-   FABRARY_RUN_LIVE_PAYMENTS=1 node --env-file=.env --import tsx integrations/test/live.ts --collection-only
+   FABYN_RUN_LIVE_PAYMENTS=1 node --env-file=.env --import tsx integrations/test/live.ts --collection-only
    ```
 
 This standalone SDK demo requests **0.01 test USDC**, signs with the official x402 EVM
@@ -68,8 +68,8 @@ USDC transfer. It prints the transaction hash and BaseScan link. It does not sta
 machine, pay an owner, or issue a refund. No treasury private key is required.
 The facilitator submits the collection transaction; the payer only signs an authorization.
 
-Receipts are recorded in `/tmp/fabrary-live-payment-receipts.jsonl` (or
-`FABRARY_LIVE_RECEIPTS_PATH`). If an outcome is pending or unknown, inspect that record
+Receipts are recorded in `/tmp/fabyn-live-payment-receipts.jsonl` (or
+`FABYN_LIVE_RECEIPTS_PATH`). If an outcome is pending or unknown, inspect that record
 before running again: each explicit invocation creates a new one-cent payment.
 
 ## Use the same payment flow in “Pay & make”
@@ -77,15 +77,15 @@ before running again: each explicit invocation creates a new one-cent payment.
 Keep the public recipient, RPC and origin settings above and add:
 
 ```dotenv
-FABRARY_PAYMENT_MODE=testnet
+FABYN_PAYMENT_MODE=testnet
 # Optional; this is already the default:
-FABRARY_X402_FACILITATOR=https://x402.org/facilitator
+FABYN_X402_FACILITATOR=https://x402.org/facilitator
 ```
 
 Restart the app. In a browser with an injected EVM wallet, fund the browser account
 with faucet USDC. Checkout asks the wallet to select **Base Sepolia**, and offers to
 add the test network if it is missing. The browser flow does not use or require
-`FABRARY_TEST_PAYER_PRIVATE_KEY`. Approve the preview/price and click **Pay & make**.
+`FABYN_TEST_PAYER_PRIVATE_KEY`. Approve the preview/price and click **Pay & make**.
 The quote is denominated in test USDC; simulated assignments are excluded, and entirely
 simulated plans need no wallet or payment.
 
@@ -126,7 +126,7 @@ above with faucet-funded credentials to obtain that evidence.
   was checked on-chain as unused after expiry before another attempt was made.
 
 Private receipt journals are under ignored `.data/` and
-`/tmp/fabrary-live-payment-receipts.jsonl`. No real-value tokens were used.
+`/tmp/fabyn-live-payment-receipts.jsonl`. No real-value tokens were used.
 
 References: [Coinbase x402](https://docs.cdp.coinbase.com/x402/seller/quickstart),
 [x402 SDK](https://github.com/x402-foundation/x402),

@@ -6,7 +6,7 @@ asks: heartbeats never reach it (the gateway only emits status changes), and job
 progress goes at most every 2 s per job. Convex is never on the print path: a
 failed send is retried and logged once, and nothing here raises into the gateway.
 
-    pub = ConvexPublisher.from_env()      # None unless CONVEX_URL and FABRARY_PUBLISH_SECRET are set
+    pub = ConvexPublisher.from_env()      # None unless CONVEX_URL and FABYN_PUBLISH_SECRET are set
     gateway.subscribe(pub.handle)
     task = asyncio.create_task(pub.run())
 """
@@ -43,9 +43,9 @@ def public_view(type_: str, data: dict[str, Any]) -> dict[str, Any]:
     keys = MACHINE_KEYS if type_.startswith("machine.") else JOB_KEYS
     out = {k: data[k] for k in keys if data.get(k) is not None}
     if type_.startswith("job."):
-        ours = (data.get("params") or {}).get("fabrary_job_id")
+        ours = (data.get("params") or {}).get("fabyn_job_id")
         if ours:
-            out["params"] = {"fabrary_job_id": ours}
+            out["params"] = {"fabyn_job_id": ours}
     return out
 
 
@@ -64,7 +64,7 @@ class ConvexPublisher:
 
     @classmethod
     def from_env(cls) -> ConvexPublisher | None:
-        url, secret = convex_url(), os.environ.get("FABRARY_PUBLISH_SECRET")
+        url, secret = convex_url(), os.environ.get("FABYN_PUBLISH_SECRET")
         return cls(url, secret) if url and secret else None
 
     def handle(self, type_: str, data: dict[str, Any]) -> None:

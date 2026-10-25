@@ -1,8 +1,8 @@
-# Fabrary consumer orchestration from request to finished jobs
+# Fabyn consumer orchestration from request to finished jobs
 
 **Design · October 24, 2026 · Implemented and tested in simulation (see [implementation status](#implementation-status-october-24-2026)) · Original baseline: `3a03a90`**
 
-Fabrary should turn pictures, a short request, or both into a concrete, priced production plan. A person can upload a photo or simply say “I want a cat sticker.” The agent generates design drafts when needed, lets the person pick a favorite, and adapts it for suitable registered machines using their validated documentation. It can also suggest useful ways to make the chosen design, including supported 3D items. The requester chooses the design and approves the result and total; the app handles production.
+Fabyn should turn pictures, a short request, or both into a concrete, priced production plan. A person can upload a photo or simply say “I want a cat sticker.” The agent generates design drafts when needed, lets the person pick a favorite, and adapts it for suitable registered machines using their validated documentation. It can also suggest useful ways to make the chosen design, including supported 3D items. The requester chooses the design and approves the result and total; the app handles production.
 
 The normal experience is **add photos or describe an idea → choose a draft when needed → review the prepared result and price → confirm → collect**. Suggested formats and edits remain optional. Machine selection, documentation retrieval, production settings, file conversion, scheduling and recovery belong to the app.
 
@@ -20,7 +20,7 @@ This plan is implemented end to end **in simulation with mock payments**. No har
 | Intent | [intent](../server/orchestration/intent.ts), [Claude parsers](../integrations/src/claude.ts) | Claude when configured, otherwise a labeled local reading that never invents names; gifts use editable **FOR YOU** text |
 | Machine knowledge | [knowledge](../server/orchestration/knowledge.ts), [context.dev wrapper](../server/orchestration/context-dev.ts), `npm run profile:build` | Published profiles for the three team models with a basis per field; hardware refuses critical fields that are only assumptions. The builder reads at most two public pages at onboarding time only, keeps a value only when its quote is on the page and the field applies to the process. One live call read the official M02 Pro page and confirmed 300 DPI with no conflict |
 | Eligibility and pricing | [matching](../server/orchestration/matching.ts), [pricing](../server/orchestration/pricing.ts) | Intended result before price (a colour photo never goes to the thermal printer); `price-card-v1` in integer cents with a 10% fee rounded half up |
-| Producer preparation | [`fabrary-producer`](../node/fabrary_node/producer.py), [contract](node-integration.md#production-preparation-fabrary-producer) | Pure CLI: canonical design in; exact artifact, preview, hashes and estimates out. Sticker 1-bit PNG at 300 dpi, Instax 600×800, simulation-only text-tag 3MF, simulated catalog items |
+| Producer preparation | [`fabyn-producer`](../node/fabyn_node/producer.py), [contract](node-integration.md#production-preparation-fabyn-producer) | Pure CLI: canonical design in; exact artifact, preview, hashes and estimates out. Sticker 1-bit PNG at 300 dpi, Instax 600×800, simulation-only text-tag 3MF, simulated catalog items |
 | Per-assignment modes and children | [service](../server/service.ts) | Each child job carries its own immutable mode; simulated children are estimate-only, never charged and end without a pickup code; evidence must match the mode |
 | Relief | [relief](../server/relief/), [coordinator page](../web/src/ReliefApp.tsx) | Team machines first, then a seeded 150-machine simulated network (min-heap split, time-scaled engine); outage or new-machine replanning moves only never-started simulated work, within 125% of the simulated estimate |
 | Requester and coordinator pages | [`/make`](../web/src/MakeApp.tsx), `/relief` | Request, drafts, exact preview, extras, one confirm, progress; relief plan, confirm, outage, restore, add machine, time scale |
@@ -48,7 +48,7 @@ For photo-only gifts, propose editable neutral keychain text such as “FOR YOU�
 
 ## 2. The requester experience
 
-| State | What the person sees | What Fabrary does |
+| State | What the person sees | What Fabyn does |
 | --- | --- | --- |
 | Request | One short request field with **Add photos** beside it; either input works alone | Validates text and any owned images, starts a versioned draft |
 | Designing | A stable preview area; “Designing your cat sticker…” or “Preparing your photo…” | Understands intent, checks feasible machine formats and resolves profiles; generates drafts when new artwork is needed |
@@ -109,7 +109,7 @@ The shared artifact describes a FastAPI `hub/`; the current repository uses an E
 | Approval | Exact artifact/specification/machine approval and atomic approval-plus-quote | A proposal offer before approval, then one durable make authorization |
 | Execution | Persisted payment/job state, exact-machine dispatch, attempt IDs and node reconciliation; a global execution mode | Parent plans, billable child allocations, immutable per-assignment modes and recoverable mixed-mode submission |
 
-Implementation anchors: [recommendations](../server/recommendations.ts), [HTTP routes](../server/app.ts), [job service](../server/service.ts), [model](../server/model.ts), [image preparation](../node/fabrary_node/prepare.py) and [node integration](node-integration.md). Keep their existing ownership, consent and unknown-outcome protections.
+Implementation anchors: [recommendations](../server/recommendations.ts), [HTTP routes](../server/app.ts), [job service](../server/service.ts), [model](../server/model.ts), [image preparation](../node/fabyn_node/prepare.py) and [node integration](node-integration.md). Keep their existing ownership, consent and unknown-outcome protections.
 
 One important integration trap: `POST /api/jobs` currently prepares the original uploaded pictures again. A separately generated design would be discarded if its draft were sent through that path unchanged. Add a server-owned **create from saved design draft** path that loads the producer's saved preparation receipt/final artifact and uses the existing `createWithResult` service seam. Never trust a browser-supplied artifact hash or silently rebuild from the originals after approval.
 
@@ -200,7 +200,7 @@ Retrieval flow:
 
 Effective capability is the **intersection of the tested adapter contract, validated documented bounds and current owner policy/media**. Documentation may narrow eligibility; it cannot grant device readiness, expand executable drivers, authorize a print or override local node checks. Current status and media are live operational facts, not documentation-cache entries.
 
-context.dev exposes cache freshness controls and cache metadata. Its output formats can have different cached ages; request the needed outputs together with an appropriate freshness requirement when snapshot consistency matters. Pin Fabrary's own source hashes and profile version independently. A proposed seven-day review interval for stable manuals is an application policy, not a claim about vendor defaults. ([Freshness and caching](https://docs.context.dev/scrape/freshness-and-caching))
+context.dev exposes cache freshness controls and cache metadata. Its output formats can have different cached ages; request the needed outputs together with an appropriate freshness requirement when snapshot consistency matters. Pin Fabyn's own source hashes and profile version independently. A proposed seven-day review interval for stable manuals is an application policy, not a claim about vendor defaults. ([Freshness and caching](https://docs.context.dev/scrape/freshness-and-caching))
 
 Only public model identifiers and documentation URLs go to context.dev. User photographs belong in the separately disclosed vision/design path. Validate public HTTPS destinations and redirects; reject internal/local addresses and credential-bearing URLs. Treat manuals and extracted text as untrusted data: never execute their commands or follow embedded instructions to change permissions, spend funds or disclose data. Check per-output success and empty/truncated extraction, use bounded timeouts/retries, honor rate-limit backoff and record request IDs without secrets. ([Operational guidance](https://docs.context.dev/optimization/best-practices))
 

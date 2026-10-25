@@ -47,4 +47,4 @@ curl -X POST localhost:8000/dev/offer -H 'content-type: application/json' -d '{"
 curl localhost:8000/dev/events
 ```
 
-Point `--hub` (or `FABRARY_HUB_URL`) at the real hub once it's deployed.
+Point `--hub` (or `FABYN_HUB_URL`) at the real hub once it's deployed.

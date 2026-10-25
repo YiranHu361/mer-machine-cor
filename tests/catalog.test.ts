@@ -10,7 +10,7 @@ import { initialState, parameters } from "../server/model.ts";
 import { Service, type Config } from "../server/service.ts";
 import { MockPayment } from "../server/payments.ts";
 test("reviewed catalog binds full3D specification and rejects changed artifacts or characteristics", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "fabrary-catalog-"));
+  const dir = await mkdtemp(join(tmpdir(), "fabyn-catalog-"));
   let store: SqliteStore | undefined;
   try {
     // Opaque software-only archive fixture; this never runs an adapter or qualifies
@@ -126,7 +126,7 @@ test("reviewed catalog binds full3D specification and rejects changed artifacts 
 });
 
 test("catalog color metadata round trips through specification normalization and model IDs stay unambiguous", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "fabrary-catalog-schema-"));
+  const dir = await mkdtemp(join(tmpdir(), "fabyn-catalog-schema-"));
   try {
     const file = join(dir, "fixture.3mf"),
       previewFile = join(dir, "preview.png"),

@@ -14,7 +14,7 @@ const login = await fetch(origin + "/api/session", {
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     role: "owner",
-    accessCode: process.env.FABRARY_OWNER_CODE ?? privateConfig.ownerCode,
+    accessCode: process.env.FABYN_OWNER_CODE ?? privateConfig.ownerCode,
   }),
 });
 assert(login.ok);

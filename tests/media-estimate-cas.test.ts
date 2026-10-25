@@ -16,7 +16,7 @@ const mid = "phomemo_01",
   cid = "calibration_media_cas",
   aid = "attempt_media_cas";
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-media-cas-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-media-cas-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   let calls = 0;
   const service = new Service(

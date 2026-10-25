@@ -9,9 +9,9 @@ import httpx
 import pytest
 from PIL import Image
 
-from fabrary_node.adapters import Bambu, InstaxLink3
-from fabrary_node.security import NodeError, sign_token
-from fabrary_node.service import NodeService
+from fabyn_node.adapters import Bambu, InstaxLink3
+from fabyn_node.security import NodeError, sign_token
+from fabyn_node.service import NodeService
 from .test_mode_binding import KEY, artifact
 
 
@@ -97,10 +97,10 @@ async def test_actual_bambu_sdk_failures_leave_node_uncertain_without_consumptio
     data = b"Owner-reviewed prepared catalog fixture"
     entry, parameters = catalog(data)
     config = {"id": "bambu_01", "model": "Bambu Lab A1 mini", "mode": "hardware", "host": "isolated.invalid",
-              "serial": "fixture", "accessCodeEnv": "FABRARY_ISOLATED_SDK_TEST", "lanOnly": True,
+              "serial": "fixture", "accessCodeEnv": "FABYN_ISOLATED_SDK_TEST", "lanOnly": True,
               "developerMode": True, "ownerReady": True, "paired": True, "catalog": [entry],
               "maxJobSeconds": 60}
-    monkeypatch.setenv("FABRARY_ISOLATED_SDK_TEST", "fake-test-value")
+    monkeypatch.setenv("FABYN_ISOLATED_SDK_TEST", "fake-test-value")
     service = NodeService(key=KEY, data_dir=tmp_path, machines=[config],
                           artifact_transport=httpx.MockTransport(lambda _: httpx.Response(200, content=data)))
     printer, events = pinned_printer(upload_failure=failure == "upload", connected=failure != "disconnected", published=failure != "unpublished")

@@ -100,9 +100,9 @@ async function json(route: Route, body: unknown, status = 200) {
 }
 async function seedSelectionOnce(page: Page, id: string) {
   await page.addInitScript((initialId) => {
-    const sentinel = "fabrary-navigation-selection-initialized";
+    const sentinel = "fabyn-navigation-selection-initialized";
     if (sessionStorage.getItem(sentinel)) return;
-    localStorage.setItem("fabrary-current-job", initialId);
+    localStorage.setItem("fabyn-current-job", initialId);
     sessionStorage.setItem(sentinel, "yes");
   }, id);
 }
@@ -222,7 +222,7 @@ test("back, forward and reload preserve a saved requester selection without repl
   const expectSecondSelected = async () => {
     await expect(page.locator(".order-intent")).toHaveText(second.spec.intent);
     expect(
-      await page.evaluate(() => localStorage.getItem("fabrary-current-job")),
+      await page.evaluate(() => localStorage.getItem("fabyn-current-job")),
     ).toBe(second.id);
   };
   await expectSecondSelected();

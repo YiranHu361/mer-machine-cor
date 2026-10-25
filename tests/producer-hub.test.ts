@@ -87,7 +87,7 @@ function fakeHub() {
 }
 
 const ready = existsSync(
-  join(process.cwd(), "node", ".venv", "bin", "fabrary-producer"),
+  join(process.cwd(), "node", ".venv", "bin", "fabyn-producer"),
 )
   ? false
   : "the node project environment is not installed";
@@ -132,7 +132,7 @@ test(
     const hub = fakeHub();
     await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
     const address = hub.server.address() as { port: number };
-    const dir = mkdtempSync(join(tmpdir(), "fabrary-hub-"));
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-hub-"));
     const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
     const config: Config = {
       mode: "simulation",
@@ -241,7 +241,7 @@ test(
         [
           offer.params.width_mm,
           offer.params.sha256,
-          offer.params.fabrary_job_id,
+          offer.params.fabyn_job_id,
         ],
         [48, a.artifactSha256, a.child!.id],
       );
@@ -379,7 +379,7 @@ test(
     const hub = fakeHub();
     await new Promise<void>((done) => hub.server.listen(0, "127.0.0.1", done));
     const address = hub.server.address() as { port: number };
-    const dir = mkdtempSync(join(tmpdir(), "fabrary-nametag-"));
+    const dir = mkdtempSync(join(tmpdir(), "fabyn-nametag-"));
     const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
     const config: Config = {
       mode: "simulation",

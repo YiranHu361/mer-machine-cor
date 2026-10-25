@@ -226,7 +226,7 @@ export class Orchestrator {
   }
   get designProvider(): DesignProvider {
     if (this.deps.designProvider) return this.deps.designProvider;
-    const env = process.env.FABRARY_DESIGN_PROVIDER;
+    const env = process.env.FABYN_DESIGN_PROVIDER;
     if (
       env === "openai" ||
       env === "nano-banana" ||

@@ -1,4 +1,4 @@
-# Fabrary local demo and resumption runbook
+# Fabyn local demo and resumption runbook
 
 ## Current checkpoint
 
@@ -12,7 +12,7 @@ use native disclosures that preserve entered drafts when closed or when changing
 
 The application runs on loopback http://127.0.0.1:4318, Python node on127.0.0.1:8788 and actual SpacetimeDB 2.13.0 on127.0.0.1:3002. Production frontend is served by the backend. Optional Vite development preview uses4317. The default running checkpoint is **simulation / mock / actual SpacetimeDB**. This is a functional software demonstration, not a physical acceptance claim.
 
-All changes are inside the dedicated writable `fabrary/` directory. Original project references and pasted contract remain unchanged. Credentials, uploaded assets, journals and installed local runtime live under ignored private `.data/` or `.env`.
+All changes are inside the dedicated writable `fabyn/` directory. Original project references and pasted contract remain unchanged. Credentials, uploaded assets, journals and installed local runtime live under ignored private `.data/` or `.env`.
 
 ## Setup and start
 
@@ -42,10 +42,10 @@ For a new machine, install **SpacetimeDB 2.13.0** following [official installati
 ```sh
 spacetime start --listen-addr 127.0.0.1:3002 --data-dir .data/spacetime-runtime/data --non-interactive
 # Another terminal, after the local server is listening:
-spacetime publish fabrary-app --server http://127.0.0.1:3002 --module-path integrations/spacetimedb --yes
+spacetime publish fabyn-app --server http://127.0.0.1:3002 --module-path integrations/spacetimedb --yes
 ```
 
-Store the local publishing identity's token in ignored `.env` as `FABRARY_SPACETIME_TOKEN`; set `FABRARY_STORE=spacetimedb`, `FABRARY_SPACETIME_URI=ws://127.0.0.1:3002`, `FABRARY_SPACETIME_DATABASE=fabrary-app`, `FABRARY_MODE=simulation`, `FABRARY_PAYMENT_MODE=mock`. Those are operating choices, not credentials. Backend tokens never go to browsers. See [integration notes](integrations.md) for identity ownership and generated bindings.
+Store the local publishing identity's token in ignored `.env` as `FABYN_SPACETIME_TOKEN`; set `FABYN_STORE=spacetimedb`, `FABYN_SPACETIME_URI=ws://127.0.0.1:3002`, `FABYN_SPACETIME_DATABASE=fabyn-app`, `FABYN_MODE=simulation`, `FABYN_PAYMENT_MODE=mock`. Those are operating choices, not credentials. Backend tokens never go to browsers. See [integration notes](integrations.md) for identity ownership and generated bindings.
 
 Then:
 
@@ -69,9 +69,9 @@ The browser’s combined preview/price action is `POST /api/jobs/:id/approve-and
 
 ## Just ask and Relief rehearsal
 
-**Just ask** (`/make`, linked from the requester header) takes a sentence, photos or both. Set `FABRARY_DESIGN_PROVIDER=fixture` for deterministic drafts without a model call (unset uses Claude when `ANTHROPIC_API_KEY` is set). For "I want a cat sticker" the page shows three drafts and **More like this** (at most three rounds); choosing one never pays or starts a machine. It then shows the exact prepared file, the total and any optional extras; one permission checkbox and **Pay $X & make** (or **Make it (simulated)**) confirm payment and production together. Progress follows each item; a simulated item ends as complete with no physical item and no pickup code. The owner still removes, labels, stores and clears every output and resumes the machine.
+**Just ask** (`/make`, linked from the requester header) takes a sentence, photos or both. Set `FABYN_DESIGN_PROVIDER=fixture` for deterministic drafts without a model call (unset uses Claude when `ANTHROPIC_API_KEY` is set). For "I want a cat sticker" the page shows three drafts and **More like this** (at most three rounds); choosing one never pays or starts a machine. It then shows the exact prepared file, the total and any optional extras; one permission checkbox and **Pay $X & make** (or **Make it (simulated)**) confirm payment and production together. Progress follows each item; a simulated item ends as complete with no physical item and no pickup code. The owner still removes, labels, stores and clears every output and resumes the machine.
 
-**Relief** (`/relief`, owner session, linked from the owner header) plans shelter supplies for a head count across the team's ready machines and a seeded, simulated network of 150 machines. Simulated work is estimate-only and never charged. After **Start**, the demo controls take part of San Francisco offline, restore power, add a 3D printer in Oakland, change simulated time (×1, ×10, ×60) or reset the simulation; only never-started simulated work is moved, within 125% of the simulated estimate, and the team's real work never moves. `FABRARY_ALLOWED_MODES=hardware,simulation` lets one plan mix hardware and simulated assignments; unset allows only `FABRARY_MODE`.
+**Relief** (`/relief`, owner session, linked from the owner header) plans shelter supplies for a head count across the team's ready machines and a seeded, simulated network of 150 machines. Simulated work is estimate-only and never charged. After **Start**, the demo controls take part of San Francisco offline, restore power, add a 3D printer in Oakland, change simulated time (×1, ×10, ×60) or reset the simulation; only never-started simulated work is moved, within 125% of the simulated estimate, and the team's real work never moves. `FABYN_ALLOWED_MODES=hardware,simulation` lets one plan mix hardware and simulated assignments; unset allows only `FABYN_MODE`.
 
 The relief plan gives the team's sticker printer up to ten labels per run, so restock its simulated roll in **Machines → Settings** between rehearsals.
 
@@ -88,11 +88,11 @@ Do not erase a journal to bypass an unresolved attempt.
 
 No hardware configuration was supplied or discovered; no physical job has been executed. Do not use software acceptance scripts as physical evidence.
 
-Copy `node/machines.example.json` to an ignored private config and set `FABRARY_MACHINES_FILE`. Configure only the three team-owned devices, and set owner readiness only after loaded media, clear output area and supervision are confirmed. Use `FABRARY_MODE=hardware`, and optional per-device node URLs for a tested Pi/Linux node. Installing candidate adapters is not a calibration pass. Detailed current adapter/version/firmware requirements are in [node-integration.md](node-integration.md).
+Copy `node/machines.example.json` to an ignored private config and set `FABYN_MACHINES_FILE`. Configure only the three team-owned devices, and set owner readiness only after loaded media, clear output area and supervision are confirmed. Use `FABYN_MODE=hardware`, and optional per-device node URLs for a tested Pi/Linux node. Installing candidate adapters is not a calibration pass. Detailed current adapter/version/firmware requirements are in [node-integration.md](node-integration.md).
 
 - **Phomemo M02Pro:** tested Linux/Pi RFCOMM path, paired exact address/channel, intended roll width and a clear output tray. The current macOS host cannot use that adapter's classic Bluetooth path. Transport acknowledgment does not prove a completed sticker; operator inspection remains visible where completion is unobservable.
 - **Instax Mini Link3:** exact paired handle, known BLE service/write/notify UUIDs, tested orientation/firmware and loaded film. The vendored protocol candidate is pinned; compatibility is not proven. Do not set `compatibilityValidated` until actual testing supports it. Allow at least configured90-second development before result comparison. Three physical jobs remain required.
-- **Bambu A1 mini:** exact LAN address/serial/access code, observed firmware LAN/developer settings, supervised clear bed, one compatible short single-color PLA3MF and a clear build plate. `FABRARY_CATALOG_FILE` loads a reviewed model and matching PNG preview with exact file hash, dimensions and estimate. Mirror its reviewed hash/material/dimensions/model into node catalog. Arbitrary uploads and photo-to-3D do not become executable models.
+- **Bambu A1 mini:** exact LAN address/serial/access code, observed firmware LAN/developer settings, supervised clear bed, one compatible short single-color PLA3MF and a clear build plate. `FABYN_CATALOG_FILE` loads a reviewed model and matching PNG preview with exact file hash, dimensions and estimate. Mirror its reviewed hash/material/dimensions/model into node catalog. Arbitrary uploads and photo-to-3D do not become executable models.
 
 Owner hardware calibration UI uploads an image (or uses a reviewed3D model), explicitly authorizes one finite calibration attempt, and polls its journal. It does not silently repeat an attempt after uncertainty. Use the completed calibration attempt for the current device configuration. Resolve an uncertain attempt explicitly without reprinting. Confirm calibration, then list/resume explicitly. A completed but missing/unusable output uses **Reject calibration output**, which retains the completed execution and records a rejected inspection. Fix the cause, then deliberately prepare a fresh supervised attempt; its previous result cannot later pass calibration.
 
@@ -120,7 +120,7 @@ Put all secrets in ignored `.env` or the environment; do not paste them into cha
 
 ## Software checks and evidence
 
-`npm run check` runs deterministic/application/process-recovery, node, payments/Claude, Fetch and wallet tests plus type checks/build. Browser tests require the running simulator/mock app. Most browser cases use isolated API fixtures; the actual workflow/SSE cases use the retained backend/node, while the supplemental native pickup flow uses temporary SQLite and a seeded prepared simulation item. `FABRARY_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser` runs the full UI and SSE-only cases. `npm run test:acceptance` refuses hardware/testnet/SQLite and runs finite10-sticker/3-Instax **software** loops plus failure fixtures. `npm run diagnose` reveals configuration presence and blockers without values. See [test-report.md](test-report.md) and stable [UI evidence](../web/evidence/README.md).
+`npm run check` runs deterministic/application/process-recovery, node, payments/Claude, Fetch and wallet tests plus type checks/build. Browser tests require the running simulator/mock app. Most browser cases use isolated API fixtures; the actual workflow/SSE cases use the retained backend/node, while the supplemental native pickup flow uses temporary SQLite and a seeded prepared simulation item. `FABYN_BROWSER_URL=http://127.0.0.1:4318 npm run test:browser` runs the full UI and SSE-only cases. `npm run test:acceptance` refuses hardware/testnet/SQLite and runs finite10-sticker/3-Instax **software** loops plus failure fixtures. `npm run diagnose` reveals configuration presence and blockers without values. See [test-report.md](test-report.md) and stable [UI evidence](../web/evidence/README.md).
 
 ## Estimated media and pending device transport
 

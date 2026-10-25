@@ -125,7 +125,7 @@ def test_a1_mini_waits_for_the_plate_then_takes_the_next_job(tmp_path):
             await state_of(third, "done")
             assert (await http.post("/dev/plate-cleared", json={"machine_id": "m_nope"})).status_code == 409
 
-        assert len(list((tmp_path / "sd").glob("fabrary_*.gcode.3mf"))) == 2
+        assert len(list((tmp_path / "sd").glob("fabyn_*.gcode.3mf"))) == 2
         node_task.cancel()
         server.should_exit = True
         await asyncio.gather(node_task, server_task, return_exceptions=True)

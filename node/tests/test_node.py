@@ -9,10 +9,10 @@ import pytest
 from PIL import Image
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fabrary_node.journal import Journal
-from fabrary_node.security import NodeError, sign_token, validate_artifact_url
-from fabrary_node.server import create_app
-from fabrary_node.service import NodeService
+from fabyn_node.journal import Journal
+from fabyn_node.security import NodeError, sign_token, validate_artifact_url
+from fabyn_node.server import create_app
+from fabyn_node.service import NodeService
 from .conftest import KEY, PARAMS, request_for
 
 
@@ -166,7 +166,7 @@ async def test_abort_simulator_confirms_stop_hardware_does_not(service, artifact
     assert response["status"] == "stopped"
     assert service.get_status("phomemo_01")["execution_status"] == "failed"
     assert not service.get_status("phomemo_01")["completion_credible"]
-    from fabrary_node.adapters import Phomemo, Bambu
+    from fabyn_node.adapters import Phomemo, Bambu
     assert (await Phomemo({}).abort())["status"] == "unsupported"
     assert (await Bambu({}).abort())["status"] == "unknown"
     await service.close()
@@ -271,7 +271,7 @@ async def test_policy_integer_hours_and_closed_window(service, artifact):
 
 
 def test_catalog_exact_hash_and_owner_review_required():
-    from fabrary_node.adapters import Bambu
+    from fabyn_node.adapters import Bambu
     from hashlib import sha256
     digest=sha256(b"prepared-file").hexdigest()
     entry={"id":"demo","sha256":digest,"machineModel":"Bambu Lab A1 mini","reviewed":True,"widthMm":30,"heightMm":20,"depthMm":10,"color":"white","material":"pla","plateNumber":1,"estimatedSeconds":300}
@@ -295,7 +295,7 @@ def test_catalog_exact_hash_and_owner_review_required():
 async def test_transport_only_calibration_requires_physical_inspection_context(tmp_path, artifact, monkeypatch):
     # Deterministic policy test, not a hardware result: setup a journaled uncertain
     # attempt and mock only configuration diagnostics/camera at the device boundary.
-    from fabrary_node import service as service_module
+    from fabyn_node import service as service_module
     machine={"id":"phomemo_01","model":"Phomemo M02Pro","mode":"hardware"}
     service=NodeService(key=KEY,data_dir=tmp_path,machines=[machine])
     monkeypatch.setattr(service.adapters["phomemo_01"],"blockers",lambda:[])
@@ -410,7 +410,7 @@ async def test_prepared_3d_characteristics_are_signed_and_durable(service,artifa
 ])
 async def test_latest_owner_policy_rechecked_after_asset_download(tmp_path, artifact, policy, monkeypatch):
     from datetime import datetime, timezone
-    from fabrary_node import service as service_module
+    from fabyn_node import service as service_module
     started, finish = asyncio.Event(), asyncio.Event()
     async def download(request):
         started.set()
@@ -675,7 +675,7 @@ async def test_shutdown_keeps_journal_ownership_until_error_stop_transport_retur
 
 
 def test_bambu_catalog_color_uses_backend_normalization_without_weakening_exact_binding():
-    from fabrary_node.adapters import Bambu
+    from fabyn_node.adapters import Bambu
     digest = "a" * 64
     entry = {"id": "color_fixture", "sha256": digest, "machineModel": "Bambu Lab A1 mini", "reviewed": True,
         "widthMm": 30, "heightMm": 20, "depthMm": 5, "color": "\ufeff  青色 blue\u00a0", "material": "pla", "estimatedSeconds": 180}

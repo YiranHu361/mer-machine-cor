@@ -35,14 +35,14 @@ const spec = {
   crop: "contain",
 };
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-spec-concurrency-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-spec-concurrency-"));
   mkdirSync(join(dir, "assets"));
   mkdirSync(join(dir, "bin"));
   const entered = join(dir, "old-preparation-entered"),
     release = join(dir, "release-old-preparation");
   writeFileSync(
     join(dir, "bin", "uv"),
-    `#!${process.execPath}\nconst fs = require('node:fs'); const args = process.argv.slice(2); if (args[3] !== 'fabrary-prepare') process.exit(90); const output = args[5]; const height = args[args.indexOf('--height-mm') + 1]; async function main() { if (height === '51') { fs.writeFileSync(${JSON.stringify(entered)}, 'entered'); while (!fs.existsSync(${JSON.stringify(release)})) await new Promise(resolve => setTimeout(resolve, 5)); } fs.copyFileSync(args[4], output); } main().catch(() => process.exit(91));\n`,
+    `#!${process.execPath}\nconst fs = require('node:fs'); const args = process.argv.slice(2); if (args[3] !== 'fabyn-prepare') process.exit(90); const output = args[5]; const height = args[args.indexOf('--height-mm') + 1]; async function main() { if (height === '51') { fs.writeFileSync(${JSON.stringify(entered)}, 'entered'); while (!fs.existsSync(${JSON.stringify(release)})) await new Promise(resolve => setTimeout(resolve, 5)); } fs.copyFileSync(args[4], output); } main().catch(() => process.exit(91));\n`,
     { mode: 0o755 },
   );
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());

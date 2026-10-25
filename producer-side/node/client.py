@@ -323,9 +323,9 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Fabrary machine node")
+    ap = argparse.ArgumentParser(description="Fabyn machine node")
     ap.add_argument("--machine", required=True, type=Path, help="node/machines/<id>.json")
-    ap.add_argument("--hub", default=os.environ.get("FABRARY_HUB_URL", "http://localhost:8000"))
+    ap.add_argument("--hub", default=os.environ.get("FABYN_HUB_URL", "http://localhost:8000"))
     ap.add_argument("--work-dir", type=Path, default=Path(".work"))
     ap.add_argument("--max-queue", type=int, default=3)
     ap.add_argument("--transport", choices=["ble", "serial", "lan", "file"],

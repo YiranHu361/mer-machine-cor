@@ -421,7 +421,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fabrary-node"
+name = "fabyn-node"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
