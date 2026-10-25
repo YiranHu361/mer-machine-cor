@@ -89,6 +89,7 @@ import type {
   DesignCandidate,
   ExecutionMode,
   Experience,
+  OrderSource,
   FormatSuggestion,
   IntentBrief,
   IntentItem,
@@ -117,6 +118,19 @@ type PrinterCheck = { ok: boolean; detail: string };
 /** Pause reasons that only mean the printer could not be reached: nothing was printed. */
 const UNREACHED =
   /not found|could not connect|did not answer|is not connected to the producer side's hub|is offline at the producer side's hub/i;
+/** Where a machine with no saved location stands: the Palace of Fine Arts. */
+const SITE = {
+  lat: Number(process.env.FABYN_SITE_LAT ?? 37.8029),
+  lng: Number(process.env.FABYN_SITE_LNG ?? -122.4484),
+  label: process.env.FABYN_SITE_LABEL ?? "Palace of Fine Arts, San Francisco",
+};
+/** A job waiting for its machine: reserved or paid, not yet running. */
+const QUEUED = ["quoted", "approved", "authorized", "payment_confirmed"];
+const OUTPUT_TITLE: Record<string, string> = {
+  sticker: "A sticker",
+  instax: "A photo print",
+  "3d": "A 3D print",
+};
 /** How often paused, unreachable printers are checked again. */
 const RECOVERY_SCAN_MS = 60_000;
 
@@ -302,6 +316,8 @@ export class Orchestrator {
       body?.experience === "gift" || body?.experience === "relief"
         ? body.experience
         : "best_single";
+    // The ASI:One agent says so in the body; everything else is the web app.
+    const source: OrderSource = body?.source === "asi1" ? "asi1" : "web";
     requireThat(
       experience !== "relief" || actor.role === "owner",
       "COORDINATOR_REQUIRED",
@@ -374,6 +390,7 @@ export class Orchestrator {
         requesterId: actor.id,
         creationKey: key as string,
         experience,
+        source,
         createdAt: at,
         updatedAt: at,
         version: 1,
@@ -643,6 +660,110 @@ export class Orchestrator {
                 ? (m.reason ?? "")
                 : "",
           checkedAt: answer ? new Date(answer.at).toISOString() : null,
+        };
+      });
+  }
+  /**
+   * The owner's "check printer": asks one machine now and returns its answer.
+   * A hub printer is checked through the hub (and returned to service if it
+   * was only unreachable); a machine on a local node or connector is asked
+   * for its capabilities.
+   */
+  async checkNow(
+    machineId: string,
+  ): Promise<PrinterCheck & { checkedAt: string }> {
+    const m = ownValue((await this.service.read()).machines, machineId);
+    requireThat(m, "MACHINE_NOT_FOUND", "There is no machine with that id.", 404);
+    let answer: PrinterCheck;
+    if (m.producerHub) {
+      // Ask again even if a recent answer exists: the owner pressed the button.
+      const last = this.printerChecks.get(m.id);
+      this.printerChecks.delete(m.id);
+      this.startCheck(m);
+      const entry = this.printerChecks.get(m.id)!;
+      if (!entry.answer && last?.answer) entry.answer = last.answer;
+      answer = await entry.result;
+    } else
+      answer = await this.service.node
+        .call("get_capabilities", { machine_id: m.id }, m)
+        .then((manifest: unknown) =>
+          manifest
+            ? { ok: true, detail: "It answered." }
+            : { ok: false, detail: "Its program sent no answer." },
+        )
+        .catch((e: unknown) => ({
+          ok: false,
+          detail: (e as Error).message.slice(0, 200),
+        }));
+    return { ...answer, checkedAt: new Date(this.clock()).toISOString() };
+  }
+  /**
+   * The public map and machine detail: where each machine is, who runs it,
+   * what it is making and what waits. Titles only: no requester, pickup code,
+   * link or owner detail leaves the server.
+   */
+  async liveMachines() {
+    const s = await this.service.read();
+    const title = (j: Job) => {
+      const o = j.orderId ? s.orders?.[j.orderId] : undefined;
+      const a = o?.plan?.assignments.find((x) => x.childJobId === j.id);
+      const item = a && o?.plan?.items.find((i) => i.id === a.itemId);
+      return item?.name ?? OUTPUT_TITLE[j.spec.outputType] ?? "A print";
+    };
+    const processOf = (output: string) =>
+      Object.entries(PROCESS_OUTPUT).find(([, o]) => o === output)?.[0] ?? null;
+    const sourceOf = (j: Job) =>
+      (j.orderId && s.orders?.[j.orderId]?.source) || "web";
+    return Object.values(s.machines)
+      .filter((m) => m.listed || m.activeJobId)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((m) => {
+        const active = m.activeJobId ? s.jobs[m.activeJobId] : undefined;
+        const status = m.paused
+          ? "paused"
+          : active
+            ? ["dispatched", "running", "verifying"].includes(
+                active.productionState,
+              )
+              ? "printing"
+              : "needs_attention"
+            : !m.ready
+              ? "offline"
+              : "available";
+        const started = active?.history.find((h) =>
+          /dispatch|execution/.test(h.event),
+        );
+        return {
+          id: m.id,
+          displayName: m.name,
+          model: m.model,
+          process: processOf(m.outputType),
+          mode: m.mode,
+          location: m.location ?? SITE,
+          ownerName: m.ownerName ?? process.env.FABYN_OWNER_NAME ?? "Lucas",
+          status,
+          current: active
+            ? {
+                title: title(active),
+                process: processOf(active.spec.outputType),
+                // Nodes report states, not percentages; screens estimate.
+                progress: null,
+                startedAt: started?.at ?? active.updatedAt,
+              }
+            : null,
+          queue: Object.values(s.jobs)
+            .filter(
+              (j) =>
+                j.machineId === m.id &&
+                j.id !== m.activeJobId &&
+                QUEUED.includes(j.productionState),
+            )
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            .map((j) => ({
+              title: title(j),
+              process: processOf(j.spec.outputType),
+              source: sourceOf(j),
+            })),
         };
       });
   }
@@ -3049,6 +3170,7 @@ function orderView(o: Order, s: State, actor: Actor) {
   return {
     id: o.id,
     experience: o.experience,
+    source: o.source ?? "web",
     status: o.status,
     version: o.version,
     createdAt: o.createdAt,

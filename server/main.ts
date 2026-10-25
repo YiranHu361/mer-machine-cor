@@ -14,6 +14,8 @@ import { IntegratedPayment } from "./external.ts";
 import { loadCatalog } from "./catalog.ts";
 import { mutate } from "./store.ts";
 import { ConvexPublisher, convexUrl, mirrorState } from "./convex-publish.ts";
+import { ConvexStore } from "./convex-store.ts";
+import { createTestWallet } from "../integrations/src/test-wallet.ts";
 const dataDir = resolve(process.env.FABYN_DATA_DIR ?? ".data");
 await mkdir(dataDir, { recursive: true });
 const configPath = join(dataDir, "local-credentials.json");
@@ -51,6 +53,18 @@ if (storeMode === "spacetimedb") {
     subscribe: (fn) => external.subscribe(() => fn()),
     close: () => external.close(),
   };
+} else if (storeMode === "convex") {
+  // Convex holds the authoritative state as well as the live read model.
+  const url = convexUrl();
+  if (!url)
+    throw new Error(
+      "FABYN_STORE=convex needs CONVEX_URL or CONVEX_DEPLOY_KEY in .env.",
+    );
+  store = await ConvexStore.connect(
+    url,
+    process.env.FABYN_PUBLISH_SECRET ?? "",
+    initialState(),
+  );
 } else if (storeMode === "sqlite-development")
   store = new SqliteStore(join(dataDir, "app.sqlite"), initialState());
 else throw new Error("Unsupported store; no silent persistence fallback.");
@@ -109,12 +123,14 @@ const stopMirror =
         ConvexPublisher.connect(liveUrl, process.env.FABYN_PUBLISH_SECRET),
       )
     : undefined;
-const app = createApp(service, undefined, { orchestrator });
+// Signs Base Sepolia test payments for demos without a browser wallet.
+const testWallet = createTestWallet();
+const app = createApp(service, undefined, { orchestrator, testWallet });
 // Loopback by default. Set FABYN_HOST to accept connectors from other computers.
 const host = process.env.FABYN_HOST ?? "127.0.0.1";
 const server = app.listen(port, host, () =>
   console.log(
-    `Fabyn http://${host}:${port} (${mode}, ${storeMode}, ${config.paymentMode}, live view ${stopMirror ? liveUrl : "off"}). Owner access is in ${configPath}; credentials are never printed.`,
+    `Fabyn http://${host}:${port} (${mode}, ${storeMode}, ${config.paymentMode}, live view ${stopMirror ? liveUrl : "off"}, test wallet ${testWallet ? testWallet.address : "off"}). Owner access is in ${configPath}; credentials are never printed.`,
   ),
 );
 const tick = setInterval(

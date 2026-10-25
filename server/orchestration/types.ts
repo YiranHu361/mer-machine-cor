@@ -6,6 +6,8 @@ import type {
 
 /** Product experience, chosen by the entry point, never by the requester. */
 export type Experience = "best_single" | "gift" | "relief";
+/** Where an order came in: the web app, or the ASI:One agent on Agentverse. */
+export type OrderSource = "web" | "asi1";
 export type ExecutionMode = "simulation" | "hardware";
 export type Process = ProcessId;
 
@@ -250,6 +252,8 @@ export interface Order {
   requesterId: string;
   creationKey: string;
   experience: Experience;
+  /** Absent on orders made before sources were recorded: those came from the web. */
+  source?: OrderSource;
   createdAt: string;
   updatedAt: string;
   version: number;

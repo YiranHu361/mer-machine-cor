@@ -150,6 +150,10 @@ export interface Machine {
   producerHub?: { machineId: string; since: string };
   policy: { authorizedArtwork: boolean; maxQuantity: number };
   ownerAddress?: string;
+  /** Shown on the public map; machines without one stand at the site default. */
+  location?: { lat: number; lng: number; label: string };
+  /** The maker's display name on the public map. */
+  ownerName?: string;
   policyReconciliationRequired?: boolean;
   calibrationAt?: string;
   calibrationConfirmationId?: string;

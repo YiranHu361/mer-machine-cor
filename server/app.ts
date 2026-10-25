@@ -45,6 +45,7 @@ import {
 import { Orchestrator } from "./orchestration/orchestrator.ts";
 import { registerProducerHubRoutes } from "./producer-hub.ts";
 import { registerOrchestrationRoutes } from "./orchestration/routes.ts";
+import type { TestWallet } from "../integrations/src/test-wallet.ts";
 import {
   calibrationDeviceContext,
   calibrationOperationContext,
@@ -144,6 +145,7 @@ export function createApp(
     identification?: IdentificationDependencies;
     orchestrator?: Orchestrator;
     relay?: ConnectorRelay;
+    testWallet?: TestWallet;
   } = {},
 ) {
   const app = express();
@@ -328,6 +330,10 @@ export function createApp(
           service.config.storeMode === "spacetimedb"
             ? "connected"
             : "required; isolated development mode",
+        convex:
+          service.config.storeMode === "convex"
+            ? "connected; authoritative store"
+            : "not the store",
         fetch: "unverified",
         hardware:
           service.config.mode === "hardware"
@@ -889,7 +895,11 @@ export function createApp(
     res.json({
       revision,
       machines: Object.values(s.machines).map(ownerMachineView),
-      jobs: Object.values(s.jobs).map(view),
+      // source: how the order came in ("web" or the ASI:One agent, "asi1").
+      jobs: Object.values(s.jobs).map((j) => ({
+        ...view(j),
+        source: (j.orderId && s.orders?.[j.orderId]?.source) || "web",
+      })),
       ledger: Object.values(s.operations),
       connectors: Object.values(s.connectors ?? {})
         .filter((connector) => !connector.revokedAt)
@@ -1009,6 +1019,7 @@ export function createApp(
     orchestrator,
     actor,
     owner,
+    testWallet: options.testWallet,
   });
   registerIdentificationRoutes(app, {
     owner,

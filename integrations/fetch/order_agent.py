@@ -77,7 +77,8 @@ class Fabyn:
         return (await self._json("GET", f"/api/orders/{order_id}", cookie))["order"]
 
     async def create(self, cookie: str, text: str) -> dict:
-        body = {"requestText": text, "photoAssetIds": [], "experience": "best_single"}
+        # source tells the maker this order came in through ASI:One.
+        body = {"requestText": text, "photoAssetIds": [], "experience": "best_single", "source": "asi1"}
         return (await self._json("POST", "/api/orders", cookie, body, {"Idempotency-Key": uuid.uuid4().hex}))["order"]
 
     async def choose(self, cookie: str, o: dict, candidate_id: str) -> dict:

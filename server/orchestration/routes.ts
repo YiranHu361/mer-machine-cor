@@ -1,9 +1,12 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response } from "express";
 import { Problem, requireThat } from "../model.ts";
 import {
+  BASE_SEPOLIA_NETWORK,
+  BASE_SEPOLIA_USDC,
   decodeX402PaymentSignature,
   x402PaymentResponseHeader,
 } from "../../integrations/src/payments.ts";
+import type { TestWallet } from "../../integrations/src/test-wallet.ts";
 import { PROCESS_OUTPUT } from "./matching.ts";
 import { PUBLISHED_PROFILES } from "./knowledge.ts";
 import type { Orchestrator } from "./orchestrator.ts";
@@ -17,17 +20,46 @@ export function registerOrchestrationRoutes(
     orchestrator,
     actor,
     owner,
+    testWallet,
   }: {
     orchestrator: Orchestrator;
     actor: (req: Request) => Promise<Actor>;
     owner: (req: Request) => Promise<unknown>;
+    testWallet?: TestWallet;
   },
 ) {
   const param = (req: Request, name: string) => String(req.params[name]);
+  // The order, with the x402 settlement header once its collection is confirmed.
+  const sendOrder = async (res: Response, order: any) => {
+    const operation = (await orchestrator.service.read()).operations[
+      order.makeIntent?.payment.operationId ?? ""
+    ];
+    const header =
+      operation?.receipt && x402PaymentResponseHeader(operation.receipt);
+    if (header) {
+      res.setHeader("PAYMENT-RESPONSE", header);
+      res.setHeader(
+        "Access-Control-Expose-Headers",
+        "PAYMENT-REQUIRED, PAYMENT-RESPONSE",
+      );
+    }
+    res.json({ order });
+  };
+  const walletOn = () =>
+    !!testWallet && orchestrator.service.payment.mode === "testnet";
   // Whether each real printer answered its latest check: the site's indicator.
   app.get("/api/printers", async (req, res) => {
     await actor(req);
     res.json({ printers: await orchestrator.printerStatus() });
+  });
+  // The public map and machine detail: titles only, nothing private.
+  app.get("/api/machines/live", async (_req, res) => {
+    res.json({ machines: await orchestrator.liveMachines() });
+  });
+  // The owner's "check printer" button: one fresh check of one machine.
+  app.post("/api/owner/machines/:id/check", async (req, res) => {
+    await owner(req);
+    res.json(await orchestrator.checkNow(param(req, "id")));
   });
   app.post("/api/orders", async (req, res) => {
     const a = await actor(req);
@@ -112,27 +144,62 @@ export function registerOrchestrationRoutes(
           );
         }
       }
-      const order = await orchestrator.confirm(
-        a,
-        param(req, "id"),
-        req.body,
-        payload,
+      await sendOrder(
+        res,
+        await orchestrator.confirm(a, param(req, "id"), req.body, payload),
       );
-      const operation = (await orchestrator.service.read()).operations[
-        order.makeIntent?.payment.operationId ?? ""
-      ];
-      const header =
-        operation?.receipt && x402PaymentResponseHeader(operation.receipt);
-      if (header) {
-        res.setHeader("PAYMENT-RESPONSE", header);
-        res.setHeader(
-          "Access-Control-Expose-Headers",
-          "PAYMENT-REQUIRED, PAYMENT-RESPONSE",
-        );
-      }
-      res.json({ order });
     });
   }
+  // Which checkout to show: mock, a browser wallet, or the built-in test wallet.
+  app.get("/api/payments/config", (_req, res) => {
+    res.json({
+      mode: orchestrator.service.payment.mode,
+      network: BASE_SEPOLIA_NETWORK,
+      asset: BASE_SEPOLIA_USDC,
+      builtInWallet: walletOn()
+        ? { available: true, address: testWallet!.address }
+        : { available: false, address: null },
+    });
+  });
+  // Pays with the built-in test wallet: the same challenge and signed retry a
+  // browser wallet makes, signed here. Same body as /confirm.
+  app.post("/api/orders/:id/test-wallet-pay", async (req, res) => {
+    requireThat(
+      walletOn(),
+      "TEST_WALLET_UNAVAILABLE",
+      "The built-in test wallet is off: it needs testnet payment mode, FABYN_TREASURY_ADDRESS and FABYN_TEST_PAYER_PRIVATE_KEY.",
+    );
+    const a = await actor(req),
+      id = param(req, "id");
+    let challenge: any;
+    try {
+      // Already paid, or nothing payable: no signature is needed.
+      return await sendOrder(res, await orchestrator.confirm(a, id, req.body));
+    } catch (e: any) {
+      if (!e?.challenge) throw e;
+      challenge = e.challenge.body;
+    }
+    const offer = (await orchestrator.service.read()).orders?.[id]?.offer;
+    requireThat(offer, "STALE_OFFER", "This proposal changed. Nothing was charged.");
+    let payload;
+    try {
+      payload = await testWallet!.pay(challenge, {
+        totalCents: offer.payableCents,
+        offerId: offer.id,
+        planDigest: offer.planDigest,
+        path: `/api/orders/${encodeURIComponent(id)}/pay`,
+        expiresAt: offer.expiresAt,
+      });
+    } catch (e) {
+      const code = String((e as Error)?.message ?? "");
+      throw new Problem(
+        "TEST_WALLET_REFUSED",
+        `The built-in test wallet did not sign (${/^TEST_WALLET_[A-Z_]+$/.test(code) ? code : "signing failed"}). Nothing was charged.`,
+        409,
+      );
+    }
+    await sendOrder(res, await orchestrator.confirm(a, id, req.body, payload));
+  });
   app.post("/api/orders/:id/cancel", async (req, res) => {
     res.json({
       order: await orchestrator.cancel(await actor(req), param(req, "id")),

@@ -101,6 +101,20 @@ export default defineSchema({
     .index("by_orderId", ["orderId"])
     .index("by_hubJobId", ["hubJobId"]),
 
+  // The app's own authoritative state when FABYN_STORE=convex (convex/state.ts):
+  // one JSON document split into chunks under the 1 MiB document limit, with a
+  // version for compare-and-set. Private: only the hub secret reads or writes it.
+  app_state: defineTable({
+    key: v.string(),
+    version: v.number(),
+    chunks: v.number(),
+  }).index("by_key", ["key"]),
+  app_state_chunks: defineTable({
+    key: v.string(),
+    index: v.number(),
+    data: v.string(),
+  }).index("by_key_index", ["key", "index"]),
+
   // Append-only §5 event log for tickers and order timelines.
   events: defineTable({
     type: v.string(),

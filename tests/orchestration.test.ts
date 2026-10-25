@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +14,10 @@ import {
   BaseSepoliaPaymentAdapter,
   BASE_SEPOLIA_USDC,
 } from "../integrations/src/payments.ts";
+import {
+  BaseSepoliaTestWallet,
+  createTestWallet,
+} from "../integrations/src/test-wallet.ts";
 import { createRequire } from "node:module";
 import type { NodeBoundary } from "../server/node-client.ts";
 import { createApp } from "../server/app.ts";
@@ -1876,6 +1880,108 @@ test("x402 order HTTP challenge, wallet signature, durable settlement and produc
   } finally {
     f.close();
   }
+});
+
+test("the built-in test wallet pays an order's x402 challenge on the server, once, only to the treasury", async () => {
+  const f = fixture({ allowed: ["hardware"] });
+  try {
+    const payment = testnetPayment(f);
+    await f.ready(["instax_01"], "hardware");
+    const treasury = "0x2222222222222222222222222222222222222222";
+    const wallet = new BaseSepoliaTestWallet(payment.payer, treasury, 2000);
+    const app = createApp(f.service, undefined, {
+      orchestrator: f.orchestrator,
+      testWallet: wallet,
+    });
+    const agent = request.agent(app);
+    const login = await agent
+      .post("/api/session")
+      .send({ role: "requester" })
+      .expect(200);
+    const config = (await agent.get("/api/payments/config").expect(200)).body;
+    assert.deepEqual(config, {
+      mode: "testnet",
+      network: "eip155:84532",
+      asset: BASE_SEPOLIA_USDC,
+      builtInWallet: { available: true, address: payment.payer.address },
+    });
+    const ownerId = Object.values((await f.service.read()).sessions).find(
+      (s) => s.role === "requester",
+    )!.id;
+    const created = await agent
+      .post("/api/orders")
+      .set("Idempotency-Key", "test-wallet-create")
+      .send({ photoAssetIds: [await f.photo(ownerId)] })
+      .expect(202);
+    const orderId = created.body.order.id;
+    await f.orchestrator.settle(orderId);
+    const o = (await agent.get(`/api/orders/${orderId}`).expect(200)).body
+      .order;
+    assert.ok(o.plan.payableCents > 0);
+    const body = confirmBody(o, "test-wallet-key-1");
+    const endpoint = `/api/orders/${orderId}/test-wallet-pay`;
+    // Someone else's order is refused before anything is signed.
+    const other = request.agent(app);
+    await other.post("/api/session").send({ role: "requester" }).expect(200);
+    await other.post(endpoint).send(body).expect(403);
+    // A wallet that would pay anyone but the treasury, or above its cap, signs nothing.
+    for (const [w, code] of [
+      [new BaseSepoliaTestWallet(payment.payer, "0x3333333333333333333333333333333333333333", 2000), "TEST_WALLET_PAYEE_MISMATCH"],
+      [new BaseSepoliaTestWallet(payment.payer, treasury, o.plan.payableCents - 1), "TEST_WALLET_AMOUNT_OUT_OF_RANGE"],
+    ] as const) {
+      const refused = await request(
+        createApp(f.service, undefined, { orchestrator: f.orchestrator, testWallet: w }),
+      )
+        .post(endpoint)
+        .set("Cookie", login.headers["set-cookie"])
+        .send(body)
+        .expect(409);
+      assert.match(JSON.stringify(refused.body), /TEST_WALLET_REFUSED/);
+      assert.match(JSON.stringify(refused.body), new RegExp(code));
+    }
+    assert.equal(payment.settlements(), 0);
+    const paid = await agent.post(endpoint).send(body).expect(200);
+    assert.equal(paid.body.order.makeIntent.payment.status, "pending");
+    assert.equal(payment.settlements(), 1);
+    payment.confirm();
+    await f.orchestrator.tick();
+    const done = await agent.post(endpoint).send(body).expect(200);
+    assert.equal(done.body.order.makeIntent.payment.status, "confirmed");
+    assert.equal(done.body.order.makeIntent.payment.transactionHash, payment.tx);
+    assert.equal(
+      JSON.parse(Buffer.from(done.headers["payment-response"], "base64").toString())
+        .transaction,
+      payment.tx,
+    );
+    assert.equal(payment.settlements(), 1, "a repeat never signs or settles again");
+    const charged = Object.values((await f.service.read()).jobs).filter((j) => j.chargeable);
+    assert.equal(charged[0].requesterAddress, payment.payer.address);
+    // Without the wallet the route is closed and the checkout is told so.
+    const plain = request(createApp(f.service, undefined, { orchestrator: f.orchestrator }));
+    assert.deepEqual((await plain.get("/api/payments/config").expect(200)).body.builtInWallet, {
+      available: false,
+      address: null,
+    });
+  } finally {
+    f.close();
+  }
+});
+
+test("the built-in test wallet is only made in testnet mode, and a bad key is never echoed", () => {
+  const key = "0x" + randomBytes(32).toString("hex");
+  const treasury = "0x2222222222222222222222222222222222222222";
+  assert.equal(createTestWallet({ FABYN_PAYMENT_MODE: "mock", FABYN_TREASURY_ADDRESS: treasury, FABYN_TEST_PAYER_PRIVATE_KEY: key }), undefined);
+  assert.equal(createTestWallet({ FABYN_PAYMENT_MODE: "testnet", FABYN_TREASURY_ADDRESS: treasury }), undefined);
+  assert.equal(createTestWallet({ FABYN_PAYMENT_MODE: "testnet", FABYN_TEST_PAYER_PRIVATE_KEY: key }), undefined);
+  assert.match(
+    createTestWallet({ FABYN_PAYMENT_MODE: "testnet", FABYN_TREASURY_ADDRESS: treasury, FABYN_TEST_PAYER_PRIVATE_KEY: key })!.address,
+    /^0x[0-9a-fA-F]{40}$/,
+  );
+  const bad = key.slice(0, -2);
+  assert.throws(
+    () => createTestWallet({ FABYN_PAYMENT_MODE: "testnet", FABYN_TREASURY_ADDRESS: treasury, FABYN_TEST_PAYER_PRIVATE_KEY: bad }),
+    (e: Error) => !e.message.includes(bad.slice(2)),
+  );
 });
 
 test("unknown x402 settlement remains pending across restart without another charge or job run", async () => {

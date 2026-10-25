@@ -10,6 +10,7 @@
 
 import type * as live from "../live.js";
 import type * as publish from "../publish.js";
+import type * as state from "../state.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +21,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   live: typeof live;
   publish: typeof publish;
+  state: typeof state;
 }>;
 
 /**
