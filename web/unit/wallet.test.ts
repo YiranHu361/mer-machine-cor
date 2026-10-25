@@ -504,3 +504,57 @@ test("cleared session storage cannot erase an ambiguous authorization claim in t
   );
   assert.equal(signatures, 1);
 });
+
+test("whole-order checkout binds the offer and plan digest and replays the exact consent with the signed payment", async () => {
+  const c = {
+    ...context(),
+    quote: { ...context().quote, totalCents: 175 },
+    jobId: "order_wallet",
+    order: { planVersion: 3, planDigest: "approved-plan-digest" },
+  };
+  const required = challenge();
+  required.accepts[0].amount = "1750000";
+  required.resource.url = `http://127.0.0.1:4318/api/orders/${c.jobId}/pay?offer=${c.quote.id}&plan=${c.order.planDigest}`;
+  for (const resource of [
+    required.resource.url.replace("approved-plan-digest", "different-plan"),
+    required.resource.url.replace("quote_browser", "other-offer"),
+  ]) {
+    assert.throws(
+      () => validateChallenge({ ...required, resource: { url: resource } }, c),
+      /different order or quote/,
+    );
+  }
+  const calls: { path: string; body: any; signature: string | null }[] = [];
+  const fetcher = (async (path, init) => {
+    const signature = new Headers(init?.headers).get("PAYMENT-SIGNATURE");
+    calls.push({
+      path: String(path),
+      body: JSON.parse(String(init?.body)),
+      signature,
+    });
+    return signature
+      ? response({ order: { makeIntent: { payment: { status: "pending" } } } })
+      : response(required, 402);
+  }) as typeof fetch;
+  const result = await checkoutWithWallet<any>(c, {
+    fetcher,
+    provider: provider(),
+  });
+  assert.equal(result.order.makeIntent.payment.status, "pending");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].path, `/api/orders/${c.jobId}/pay`);
+  assert.deepEqual(calls[0].body, calls[1].body);
+  assert.deepEqual(calls[1].body, {
+    idempotencyKey: c.idempotencyKey,
+    offerId: c.quote.id,
+    planVersion: 3,
+    planDigest: c.order.planDigest,
+    permission: true,
+    consent: { payment: true, production: true },
+  });
+  assert.equal(
+    JSON.parse(Buffer.from(calls[1].signature!, "base64").toString()).resource
+      .url,
+    required.resource.url,
+  );
+});

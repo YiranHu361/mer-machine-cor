@@ -27,7 +27,12 @@ type CheckoutContext = {
   jobId: string;
   quote: CheckoutQuote;
   idempotencyKey: string;
+  order?: { planVersion: number; planDigest: string };
 };
+const paymentPath = (context: CheckoutContext) =>
+  context.order
+    ? `/api/orders/${encodeURIComponent(context.jobId)}/pay`
+    : `/api/jobs/${encodeURIComponent(context.jobId)}/checkout`;
 export function validateChallenge(
   value: unknown,
   context: CheckoutContext,
@@ -69,9 +74,11 @@ export function validateChallenge(
     throw new Error("The payment challenge has no valid order reference.");
   }
   if (
-    resource.pathname !==
-      `/api/jobs/${encodeURIComponent(context.jobId)}/checkout` ||
-    resource.searchParams.get("quote") !== context.quote.id
+    resource.pathname !== paymentPath(context) ||
+    resource.searchParams.get(context.order ? "offer" : "quote") !==
+      context.quote.id ||
+    (context.order &&
+      resource.searchParams.get("plan") !== context.order.planDigest)
   )
     throw new Error(
       "This payment challenge belongs to a different order or quote. No payment was signed.",
@@ -96,7 +103,7 @@ export async function checkoutWithWallet<T>(
   options: { provider?: WalletProvider; fetcher?: typeof fetch } = {},
 ): Promise<T> {
   const fetcher = options.fetcher || fetch;
-  const path = `/api/jobs/${encodeURIComponent(context.jobId)}/checkout`;
+  const path = paymentPath(context);
   const request = (headers?: Record<string, string>) =>
     requestJson(
       path,
@@ -104,7 +111,18 @@ export async function checkoutWithWallet<T>(
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify({ idempotencyKey: context.idempotencyKey }),
+        body: JSON.stringify({
+          idempotencyKey: context.idempotencyKey,
+          ...(context.order
+            ? {
+                offerId: context.quote.id,
+                planVersion: context.order.planVersion,
+                planDigest: context.order.planDigest,
+                permission: true,
+                consent: { payment: true, production: true },
+              }
+            : {}),
+        }),
       },
       { fetcher },
     );
@@ -186,10 +204,15 @@ export async function checkoutWithWallet<T>(
         }
       },
     };
-    const client = new x402Client().register(
-      "eip155:84532",
-      new ExactEvmScheme(signer),
-    );
+    const client = x402Client.fromConfig({
+      schemes: [
+        { network: "eip155:84532", client: new ExactEvmScheme(signer) },
+      ],
+      // The requester explicitly approved this exact quote; the SDK defaults to $1.
+      spendControls: {
+        maxAmountPerPayment: `$${(context.quote.totalCents / 100).toFixed(2)}`,
+      },
+    });
     const payload = await client.createPaymentPayload(challenge);
     // The server verifies and settles this authorization. A signature is not collection.
     const { response: signedResponse, value: signedValue } = await request({

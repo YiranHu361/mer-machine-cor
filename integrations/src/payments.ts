@@ -16,6 +16,8 @@ export interface PaymentReceipt {
 }
 export interface PaymentOperation {
   jobId: string; operationId: string; quote: PaymentQuote; payload?: unknown;
+  /** Server-generated route binding for whole-order payments. Never taken from the payer. */
+  resourcePath?: string;
   requesterAddress?: string; ownerAddress?: string; receipt?: PaymentReceipt;
   onSubmitted?: (receipt: PaymentReceipt) => Promise<void>;
 }
@@ -93,7 +95,7 @@ export class BaseSepoliaPaymentAdapter implements PaymentAdapter {
     return {scheme:'exact',network:BASE_SEPOLIA_NETWORK,asset:BASE_SEPOLIA_USDC,amount:cents(op.quote.totalCents).toString(),payTo:this.treasury,maxTimeoutSeconds,extra:{name:'USDC',version:'2'}};
   }
   private resource(op: PaymentOperation) {
-    return new URL(`/api/jobs/${encodeURIComponent(op.jobId)}/checkout?quote=${encodeURIComponent(op.quote.id)}`,this.options.resourceOrigin).href;
+    return new URL(op.resourcePath ?? `/api/jobs/${encodeURIComponent(op.jobId)}/checkout?quote=${encodeURIComponent(op.quote.id)}`,this.options.resourceOrigin).href;
   }
   async challenge(op: PaymentOperation): Promise<PaymentChallenge> {
     const expiry = Date.parse(op.quote.expiresAt);

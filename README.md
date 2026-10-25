@@ -78,7 +78,7 @@ The interface is deliberately minimal: a heading, the pictures and one next acti
 
 The requester action uses `POST /api/jobs/:id/approve-and-quote` with the displayed `artifactSha256`, `specVersion`, `recommendedMachineId` (or `null` for a legacy unbound order), and optional `autoAccept`. Approval, current machine checks, reservation and quote commit atomically; a failed quote does not leave a newly approved intermediate state. This endpoint does not collect payment or dispatch work. Budget-based quote acceptance still requires the requester’s explicit mandate, and checkout and production consent remain separate.
 
-Testnet mode uses the browser's development wallet through EIP1193 and the official x402 client; there are no browser private keys or production payment rails. It requires a funded Base Sepolia payer/treasury, signer, RPC and owner payout address. A signature alone never counts as collected payment.
+Testnet mode supports **Pay & make** through the browser's EIP1193 wallet and the official x402 client. It collects free Base Sepolia test USDC for the hardware portion of the plan, waits for confirmed settlement, then starts production and shows a transaction link. Collection needs a faucet-funded payer, a recipient address, RPC and public origin; no CDP API key or treasury private key is needed. A signature alone never counts as collected payment. See the [x402 demo guide](docs/x402-demo.md) for a standalone **0.01 test USDC payment** with no printer, payout or refund required.
 
 ## Check
 

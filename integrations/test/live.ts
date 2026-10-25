@@ -4,15 +4,16 @@ import type { Hex } from 'viem';
 import { x402Client } from '@x402/core/client';
 import { ExactEvmScheme } from '@x402/evm/exact/client';
 import { BaseSepoliaPaymentAdapter, type PaymentOperation, type PaymentReceipt } from '../src/payments.js';
-const required=['FABRARY_RUN_LIVE_PAYMENTS','FABRARY_TREASURY_ADDRESS','FABRARY_TREASURY_PRIVATE_KEY','FABRARY_BASE_SEPOLIA_RPC','FABRARY_PUBLIC_ORIGIN','FABRARY_TEST_PAYER_PRIVATE_KEY','FABRARY_OWNER_WALLET'];
+const collectionOnly=process.argv.includes('--collection-only');
+const required=['FABRARY_RUN_LIVE_PAYMENTS','FABRARY_TREASURY_ADDRESS','FABRARY_BASE_SEPOLIA_RPC','FABRARY_PUBLIC_ORIGIN','FABRARY_TEST_PAYER_PRIVATE_KEY',...(!collectionOnly?['FABRARY_TREASURY_PRIVATE_KEY','FABRARY_OWNER_WALLET']:[])];
 const missing=required.filter(k=>!process.env[k]);
 if (missing.length || process.env.FABRARY_RUN_LIVE_PAYMENTS!=='1') {
- console.log(JSON.stringify({status:'BLOCKED',integration:'x402 Base Sepolia actual collection, release and refund',missing,reason:'Explicit opt-in plus testnet-funded payer, treasury signer and owner wallet are required. No transaction submitted.'}));process.exit(2);
+ console.log(JSON.stringify({status:'BLOCKED',integration:collectionOnly?'x402 Base Sepolia one-cent demo payment':'x402 Base Sepolia actual collection, release and refund',missing,reason:collectionOnly?'Configure a disposable payer with free test USDC and a receiving address. No real money or treasury private key is needed. No transaction submitted.':'Explicit opt-in plus testnet-funded payer, treasury signer and owner wallet are required. No transaction submitted.'}));process.exit(2);
 }
 const env=process.env;
 const payer=privateKeyToAccount(env.FABRARY_TEST_PAYER_PRIVATE_KEY as Hex);
 const client=new x402Client().register('eip155:84532',new ExactEvmScheme(payer));
-const adapter=new BaseSepoliaPaymentAdapter({treasuryAddress:env.FABRARY_TREASURY_ADDRESS!,treasuryPrivateKey:env.FABRARY_TREASURY_PRIVATE_KEY as Hex,rpcUrl:env.FABRARY_BASE_SEPOLIA_RPC!,resourceOrigin:env.FABRARY_PUBLIC_ORIGIN!,facilitatorUrl:env.FABRARY_X402_FACILITATOR});
+const adapter=new BaseSepoliaPaymentAdapter({treasuryAddress:env.FABRARY_TREASURY_ADDRESS!,treasuryPrivateKey:collectionOnly?undefined:env.FABRARY_TREASURY_PRIVATE_KEY as Hex,rpcUrl:env.FABRARY_BASE_SEPOLIA_RPC!,resourceOrigin:env.FABRARY_PUBLIC_ORIGIN!,facilitatorUrl:env.FABRARY_X402_FACILITATOR});
 const journal=env.FABRARY_LIVE_RECEIPTS_PATH??'/tmp/fabrary-live-payment-receipts.jsonl';
 async function record(receipt:PaymentReceipt) { appendFileSync(journal,JSON.stringify({...receipt,at:new Date().toISOString()})+'\n',{mode:0o600}); }
 async function confirmed(op:PaymentOperation, receipt:PaymentReceipt):Promise<PaymentReceipt> {
@@ -28,6 +29,11 @@ async function collect(suffix:string) {
  const challenge=await adapter.challenge(operation);
  const payload=await client.createPaymentPayload(challenge.body);
  const receipt=await confirmed(operation,await adapter.collect({...operation,payload}));return {operation,receipt};
+}
+if (collectionOnly) {
+ const demo=await collect('demo');
+ console.log(JSON.stringify({status:'PASS',network:'Base Sepolia (testnet only)',amount:'0.01 test USDC',transactionHash:demo.receipt.transactionHash,explorer:`https://sepolia.basescan.org/tx/${demo.receipt.transactionHash}`,journal}));
+ process.exit(0);
 }
 // Two distinct one-cent testnet collections demonstrate mutually exclusive release
 // and refund outcomes. No real network, real USDC or token purchasing path exists.
