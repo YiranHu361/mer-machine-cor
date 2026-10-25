@@ -64,6 +64,26 @@ Open http://127.0.0.1:4318/make, type **i want a sticker**, add a picture, press
 - The node checks the printer at start; with the plate empty but the printer still showing its last print as finished, start with `npm run mvp -- --plate-cleared`.
 - A 3D job completes when the machine reports success. Before the next print, take the item off the plate and press **Item removed · clear the printer** in **Owner workshop**. That gives the order its pickup code and tells the printer its plate is clear.
 
+## Fetch.ai agent: order from ASI:One
+
+| | |
+| --- | --- |
+| Agent name | **Fabyn** |
+| Agent address | `agent1qtntl30zudzgdsjgke4jyjdknkrerr92n4ncl9askhn6mu788exhswdc4vy` |
+| Protocol | Agent Chat Protocol 0.3.0 (manifest published to Agentverse) |
+| Code | [integrations/fetch/order_agent.py](integrations/fetch/order_agent.py), listing text in [AGENT_README.md](integrations/fetch/AGENT_README.md) |
+
+Chat with it in ASI:One: "a cute cat sticker" gets three drafts (OpenAI image generation), **1**/**2**/**3** picks one and shows the exact offer (Claude reads the request; the best free real printer is chosen), **yes** makes it on the sticker printer or the Instax and returns the pickup code. Payment is a mock; each person is limited to five requests a day.
+
+It runs beside the app and reaches Agentverse through its mailbox, so the agent itself needs no public address:
+
+```sh
+npm run mvp -- --photo                     # the app, hub and printers
+npm run agent                              # the agent; FABYN_AGENT_SEED in .env keeps its address
+```
+
+Connect it once: open the "Agent inspector" link the agent prints, sign in to Agentverse, and choose **Connect → Mailbox**. Draft previews are private links to this app; for people chatting from elsewhere, publish the app (for example `cloudflared tunnel --url http://127.0.0.1:4318`) and start the agent with `FABYN_PUBLIC_ORIGIN` set to that address. Preview links are signed and last ten minutes.
+
 ## Convex live state
 
 Convex is the live read model every screen watches ([design doc](https://claude.ai/artifact/XCDCcTZ2uSeRnRRYSHj4mT), "Convex live state"). Each hub has one `publish(type, data)` that sends §5 events to the `publish:batch` mutation: this app mirrors its saved machines, plans and jobs ([server/convex-publish.ts](server/convex-publish.ts)), and the producer gateway forwards node status and job progress ([producer-side/hub/publish.py](producer-side/hub/publish.py)). The local store and the gateway stay authoritative, so a Convex outage never stops an order or a print. Browsers only read: `/make` shows the printer's live progress after confirmation, and `/live` lists every machine and the event feed.

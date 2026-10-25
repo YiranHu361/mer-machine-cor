@@ -868,6 +868,21 @@ export function createApp(
     }
     res.type(asset.mime).send(await readFile(asset.path));
   });
+  // A 10-minute link to the requester's own artwork, for use outside this
+  // session: the chat agent sends draft previews this way.
+  app.post("/api/assets/:id/link", async (req, res) => {
+    const a = await actor(req);
+    const assetId = String(req.params.id);
+    const asset = ownValue((await service.read()).assets, assetId);
+    requireThat(
+      asset?.ownerId === a.id,
+      "ASSET_ACCESS",
+      "You cannot share this artwork.",
+      403,
+    );
+    const url = new URL(service.assetUrl(assetId, 600));
+    res.json({ url: url.pathname + url.search });
+  });
   app.get("/api/owner/dashboard", async (req, res) => {
     await owner(req);
     const { version: revision, data: s } = await service.store.read();

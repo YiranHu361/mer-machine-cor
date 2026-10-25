@@ -26,7 +26,8 @@
     "print:one": "tsx scripts/print-one.ts",
     "mvp": "node scripts/mvp.mjs",
     "convex:push": "node scripts/convex-push.mjs",
-    "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev"
+    "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev",
+    "agent": "integrations/fetch/.venv/bin/python integrations/fetch/order_agent.py"
   },
   "dependencies": {
     "claude": "^0.1.1",
