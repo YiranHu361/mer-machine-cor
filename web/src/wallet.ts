@@ -33,6 +33,44 @@ const paymentPath = (context: CheckoutContext) =>
   context.order
     ? `/api/orders/${encodeURIComponent(context.jobId)}/pay`
     : `/api/jobs/${encodeURIComponent(context.jobId)}/checkout`;
+
+async function selectTestNetwork(provider: WalletProvider) {
+  const onTestnet = async () => {
+    const chain = await provider.request({ method: "eth_chainId" });
+    return (
+      typeof chain === "string" && Number.parseInt(chain, 16) === baseSepolia.id
+    );
+  };
+  if (await onTestnet()) return;
+  const switchNetwork = () =>
+    provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0x14a34" }],
+    });
+  try {
+    await switchNetwork();
+  } catch (error) {
+    const code = error as { code?: number; cause?: { code?: number } };
+    if (code.code !== 4902 && code.cause?.code !== 4902) throw error;
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: "0x14a34",
+          chainName: "Base Sepolia",
+          nativeCurrency: baseSepolia.nativeCurrency,
+          rpcUrls: ["https://sepolia.base.org"],
+          blockExplorerUrls: ["https://sepolia.basescan.org"],
+        },
+      ],
+    });
+    await switchNetwork();
+  }
+  if (!(await onTestnet()))
+    throw new Error(
+      "The wallet has not switched to Base Sepolia. Approve the test network in your wallet and retry. No payment was signed.",
+    );
+}
 export function validateChallenge(
   value: unknown,
   context: CheckoutContext,
@@ -154,15 +192,11 @@ export async function checkoutWithWallet<T>(
       "Connect a browser wallet with Base Sepolia test USDC, then retry checkout. No payment was signed or collected.",
     );
   try {
-    const chain = await provider.request({ method: "eth_chainId" });
-    if (typeof chain !== "string" || Number.parseInt(chain, 16) !== 84532)
-      throw new Error(
-        "Switch your wallet to Base Sepolia (chain 84532), then retry checkout. Production networks are disabled.",
-      );
     const accounts = await provider.request({ method: "eth_requestAccounts" });
     const account = Array.isArray(accounts) ? accounts[0] : undefined;
     if (typeof account !== "string" || !isAddress(account))
       throw new Error("Choose a Base Sepolia test wallet account to continue.");
+    await selectTestNetwork(provider);
     const wallet = createWalletClient({
       account: account as Hex,
       chain: baseSepolia,

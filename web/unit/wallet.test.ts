@@ -121,7 +121,7 @@ test("missing wallet explains how to continue and never fabricates collection", 
     /browser wallet.*No payment was signed or collected/,
   );
 });
-test("wrong wallet chain is rejected before requesting an account or signature", async () => {
+test("an ignored wallet network switch cannot reach signing", async () => {
   const methods: string[] = [];
   await assert.rejects(
     () =>
@@ -130,13 +130,82 @@ test("wrong wallet chain is rejected before requesting an account or signature",
         provider: {
           request: async ({ method }) => {
             methods.push(method);
-            return "0x1";
+            if (method === "eth_requestAccounts") return [offline.address];
+            if (method === "eth_chainId") return "0x1";
+            if (method === "wallet_switchEthereumChain") return null;
+            throw new Error("No signing is allowed on the wrong network");
           },
         },
       }),
-    /Switch your wallet to Base Sepolia/,
+    /wallet has not switched to Base Sepolia/,
   );
-  assert.deepEqual(methods, ["eth_chainId"]);
+  assert.deepEqual(methods, [
+    "eth_requestAccounts",
+    "eth_chainId",
+    "wallet_switchEthereumChain",
+    "eth_chainId",
+  ]);
+});
+test("checkout asks the wallet to add and select Base Sepolia before signing", async () => {
+  const methods: string[] = [];
+  let chain = "0x1",
+    added = false;
+  const signer = provider();
+  const wallet: WalletProvider = {
+    request: async (args) => {
+      methods.push(args.method);
+      if (args.method === "eth_chainId") return chain;
+      if (args.method === "wallet_switchEthereumChain") {
+        assert.deepEqual(args.params, [{ chainId: "0x14a34" }]);
+        if (!added)
+          throw Object.assign(new Error("unknown network"), { code: 4902 });
+        chain = "0x14a34";
+        return null;
+      }
+      if (args.method === "wallet_addEthereumChain") {
+        const network = args.params![0] as any;
+        assert.equal(network.chainId, "0x14a34");
+        assert.deepEqual(network.rpcUrls, ["https://sepolia.base.org"]);
+        added = true;
+        return null;
+      }
+      return signer.request(args);
+    },
+  };
+  const fetcher = (async (_path, init) =>
+    new Headers(init?.headers).has("PAYMENT-SIGNATURE")
+      ? response({ job: { paymentState: "held" } })
+      : response(challenge(), 402)) as typeof fetch;
+  const result = await checkoutWithWallet<any>(context(), {
+    provider: wallet,
+    fetcher,
+  });
+  assert.equal(result.job.paymentState, "held");
+  assert.ok(
+    methods.indexOf("wallet_addEthereumChain") <
+      methods.indexOf("eth_signTypedData_v4"),
+  );
+});
+test("declining a testnet switch never signs or submits a payment", async () => {
+  let signs = 0;
+  const signer = provider();
+  await assert.rejects(
+    () =>
+      checkoutWithWallet(context(), {
+        fetcher: required,
+        provider: {
+          request: async (args) => {
+            if (args.method === "eth_chainId") return "0x1";
+            if (args.method === "wallet_switchEthereumChain")
+              throw Object.assign(new Error("declined"), { code: 4001 });
+            if (args.method === "eth_signTypedData_v4") signs++;
+            return signer.request(args);
+          },
+        },
+      }),
+    /Wallet approval was declined/,
+  );
+  assert.equal(signs, 0);
 });
 test("wallet rejection is a recoverable state with no success claim", async () => {
   await assert.rejects(

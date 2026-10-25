@@ -203,7 +203,7 @@ console.log(
     (with3d
       ? `  Name tag: type a name under "Or make a name tag" and press "Make a name tag".\n`
       : "") +
-    `Tick the permission box, then "Pay & make" (mock payment).\n` +
+    `Tick the permission box, then "Pay & make" (${env.FABRARY_PAYMENT_MODE === "testnet" ? "x402 · Base Sepolia test USDC" : "mock payment"}).\n` +
     (env.FABRARY_AUTO_ACCEPT_PRINTS === "1"
       ? `Camera check is off: a finished sticker completes the order and frees the printer.`
       : `After each print, approve it in ${app}/owner so the printer takes the next order.`) +

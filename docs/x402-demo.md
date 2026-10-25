@@ -9,10 +9,20 @@ transaction with a receipt you can show on BaseScan. Test tokens have no real mo
 
 ## First demo: one payment, no printer required
 
-The `x402` branch is in the isolated worktree at
-`/Users/lucasjiang/Development/calhacks_26/x402`. Open that folder in your IDE and
-create its own ignored `.env` file. The original `mer-machine-cor` checkout can
-continue its printer work separately.
+The `x402` branch is checked out in the main project folder at
+`/Users/lucasjiang/Development/calhacks_26/mer-machine-cor`, including the latest
+name-tag printer changes. Its payment configuration lives in the ignored `.env`.
+
+This workspace is already configured in testnet mode. Dedicated disposable CLI
+payer/recipient wallets are saved in ignored `.data/x402-test-wallets.json`;
+the CLI payer still needs faucet USDC. To display only its public address:
+
+```sh
+node -e 'console.log(JSON.parse(require("fs").readFileSync(".data/x402-test-wallets.json", "utf8")).payerAddress)'
+```
+
+Browser checkout uses whichever account you connect in MetaMask and needs no
+private-key export. The steps below also cover setting up a fresh checkout.
 
 1. Install an EVM browser wallet such as [MetaMask](https://metamask.io/download).
    Create two disposable accounts: **Demo payer** and **Demo recipient**. Select or add
@@ -33,7 +43,7 @@ continue its printer work separately.
    with **USDC → Base Sepolia** to send free test USDC to its address. No faucet account is required.
 2. Choose a different test wallet's public address as the recipient.
 3. For the standalone command, export the **disposable payer account's** private key
-   from your wallet's account details and put it in this worktree's ignored `.env`.
+   from your wallet's account details and put it in the project's ignored `.env`.
    This is an account private key (a `0x` hex string), not the wallet recovery phrase.
    Keep the payer private key local;
    use a disposable test wallet, never an account holding real assets.
@@ -48,7 +58,7 @@ continue its printer work separately.
 4. In a terminal, run once:
 
    ```sh
-   cd /Users/lucasjiang/Development/calhacks_26/x402
+   cd /Users/lucasjiang/Development/calhacks_26/mer-machine-cor
    FABRARY_RUN_LIVE_PAYMENTS=1 node --env-file=.env --import tsx integrations/test/live.ts --collection-only
    ```
 
@@ -72,8 +82,9 @@ FABRARY_PAYMENT_MODE=testnet
 FABRARY_X402_FACILITATOR=https://x402.org/facilitator
 ```
 
-Restart the app. In a browser with an injected EVM wallet, select **Base Sepolia** and
-fund that browser account with faucet USDC. The browser flow does not use or require
+Restart the app. In a browser with an injected EVM wallet, fund the browser account
+with faucet USDC. Checkout asks the wallet to select **Base Sepolia**, and offers to
+add the test network if it is missing. The browser flow does not use or require
 `FABRARY_TEST_PAYER_PRIVATE_KEY`. Approve the preview/price and click **Pay & make**.
 The quote is denominated in test USDC; simulated assignments are excluded, and entirely
 simulated plans need no wallet or payment.
