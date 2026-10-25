@@ -2729,3 +2729,40 @@ test("a busy machine of the asked kind is never swapped on its own: the order sa
     }
   }
 });
+
+test("each assignment carries the inputs of its price, so the formula can be shown; the amounts are the policy's own", async () => {
+  const f = fixture();
+  try {
+    await f.ready(["phomemo_01", "instax_01"]);
+    const photo = await f.photo(requester.id);
+    const quote = async (requestText: string, key: string) => {
+      const { order } = await f.orchestrator.createOrder(requester, { requestText, photoAssetIds: [photo] }, key);
+      await f.orchestrator.settle(order.id);
+      return f.orchestrator.view(requester, order.id);
+    };
+    // instax: max(140, 30 + 1 × (1 × 100 + 10)) = 140, fee 14, total 154
+    const print = await quote("", "price-basis-instax");
+    const [a] = print.plan!.assignments;
+    assert.equal(a.machineId, "instax_01");
+    assert.deepEqual(a.price.basis, {
+      quantity: 1,
+      materialPerUnit: 1,
+      materialUnit: "sheet",
+      materialRateCents: 100,
+      machineRateCents: 10,
+      handlingCents: 30,
+      minimumCents: 140,
+    });
+    assert.deepEqual([a.price.ownerCents, a.price.feeCents, a.price.totalCents, a.price.policy], [140, 14, 154, "price-card-v1"]);
+    assert.equal(print.plan!.simulatedEstimateCents, 154);
+    // sticker: 60 + 6 = 66
+    const sticker = await quote("a sticker of my photo", "price-basis-sticker");
+    const [b] = sticker.plan!.assignments;
+    assert.deepEqual(
+      [b.price.basis!.materialRateCents, b.price.basis!.machineRateCents, b.price.basis!.handlingCents, b.price.basis!.minimumCents, b.price.totalCents],
+      [20, 10, 30, 60, 66],
+    );
+  } finally {
+    f.close();
+  }
+});

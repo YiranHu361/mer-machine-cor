@@ -129,6 +129,25 @@ export interface PriceTerms {
   totalCents: number;
   terms: { label: string; cents: number }[];
   policy: string;
+  /** The inputs the price was computed from, so a screen can show the formula without computing it. */
+  basis?: PriceBasis;
+}
+/**
+ * owner = max(minimum, handling + quantity × (materialPerUnit × materialRate + machineRate
+ * [+ minutesPerUnit × timeRate])); fee = 10% of owner rounded half up; total = owner + fee.
+ */
+export interface PriceBasis {
+  quantity: number;
+  materialPerUnit: number;
+  /** What the material is counted in, as the producer reported it: "label", "sheet", "g"… */
+  materialUnit: string;
+  materialRateCents: number;
+  machineRateCents: number;
+  handlingCents: number;
+  minimumCents: number;
+  /** Only where machine time is priced (relief network machines). */
+  minutesPerUnit?: number;
+  timeRateCents?: number;
 }
 export interface Assignment {
   id: string;

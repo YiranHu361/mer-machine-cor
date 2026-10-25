@@ -107,6 +107,7 @@ import type {
   PlanStatus,
   PreparationReceipt,
   PreparationStage,
+  PriceBasis,
   Process,
   ReliefState,
 } from "./types.ts";
@@ -1914,6 +1915,22 @@ export class Orchestrator {
       materialPerUnit,
       receipt.estimates.minutesPerUnit,
     );
+    // The same inputs, shown with the price; the amounts above are the policy's own.
+    const basis: PriceBasis = {
+      quantity,
+      materialPerUnit,
+      materialUnit: receipt.estimates.material.unit,
+      materialRateCents: card.materialCentsPerUnit,
+      machineRateCents: card.unitCents,
+      handlingCents: card.setupCents,
+      minimumCents: card.minimumCents,
+      ...(card.timeCentsPerMinute
+        ? {
+            minutesPerUnit: receipt.estimates.minutesPerUnit,
+            timeRateCents: card.timeCentsPerMinute,
+          }
+        : {}),
+    };
     const minutes =
       receipt.estimates.setupMinutes +
       receipt.estimates.minutesPerUnit * quantity;
@@ -1935,7 +1952,7 @@ export class Orchestrator {
         startSeconds,
         finishSeconds: startSeconds + Math.round(minutes * 60),
       },
-      price,
+      price: { ...price, basis },
     };
   }
   /**
