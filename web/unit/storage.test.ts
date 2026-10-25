@@ -90,7 +90,7 @@ test("server and legacy saved checkout keys are retained", async () => {
   browser(fixture(), session);
   const job = { id: "job-one", quote: { id: "quote-one", version: 1 } };
   session.setItem(
-    "fabrary-checkout-job-one-quote-one-1",
+    "fabyn-checkout-job-one-quote-one-1",
     "legacy-checkout-key",
   );
   assert.equal(s.getCheckoutKey(job), "legacy-checkout-key");

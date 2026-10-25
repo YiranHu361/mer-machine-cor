@@ -47,8 +47,9 @@ const HUB_LINE: Record<string, string> = {
   offered: "Sent to the printer",
   accepted: "The printer accepted it",
   running: "Printing",
-  verifying: "Printed · waiting for a check",
-  done: "Printed and checked",
+  verifying: "Waiting for machine status",
+  needs_review: "Needs attention",
+  done: "Printed",
   rejected: "The printer declined it",
   failed: "The printer reported a problem",
 };
@@ -62,8 +63,7 @@ const time = (ts: string) =>
 /** What the machine is doing for this order right now, live from Convex. */
 export function LiveOrder({ orderId }: { orderId: string }) {
   const live = useQuery(anyApi.live.order, { orderId }) as
-    | { jobs: LiveJob[]; events: LiveEvent[] }
-    | undefined;
+    { jobs: LiveJob[]; events: LiveEvent[] } | undefined;
   if (!live || (!live.jobs.length && !live.events.length)) return null;
   return (
     <section className="live-order" aria-label="Live from the workshop">
@@ -103,14 +103,11 @@ export function LiveOrder({ orderId }: { orderId: string }) {
 /** /live: every machine and the network's event feed, for the big screen. */
 export function LivePage() {
   const machines = useQuery(anyApi.live.machines, {}) as
-    | LiveMachine[]
-    | undefined;
+    LiveMachine[] | undefined;
   const events = useQuery(anyApi.live.recentEvents, { limit: 40 }) as
-    | LiveEvent[]
-    | undefined;
+    LiveEvent[] | undefined;
   const summary = useQuery(anyApi.live.summary, {}) as
-    | Record<string, number>
-    | undefined;
+    Record<string, number> | undefined;
   return (
     <section className="make live" aria-labelledby="live-title">
       <h1 id="live-title">Live network</h1>

@@ -32,7 +32,6 @@ const SETUP_CODE_MS = 15 * 60 * 1000;
 const POLL_WAIT_MS = 20_000;
 const ONLINE_WINDOW_MS = 45_000;
 const CALL_TIMEOUT_MS = 12_000;
-const FRAME_LIMIT = 8 * 1024 * 1024;
 export const supportedModels: Record<string, string> = {
   "phomemo-m02pro": "phomemo_01",
   "instax-mini-link-3": "instax_01",
@@ -224,7 +223,7 @@ export class RoutingNode implements NodeBoundary {
       if (!this.hub)
         throw new Problem(
           "PRODUCER_HUB_UNCONFIGURED",
-          "This machine prints through the producer side's hub, but FABRARY_PRODUCER_HUB_URL is not set.",
+          "This machine prints through the producer side's hub, but FABYN_PRODUCER_HUB_URL is not set.",
           503,
         );
       return this.hub.call(tool, input, machine);
@@ -246,26 +245,6 @@ export class RoutingNode implements NodeBoundary {
       );
     }
     return reply.json;
-  }
-  async fetchFrame(url: string, machine: Machine) {
-    if (machine.producerHub)
-      throw new Error("The producer side's hub provides no camera frames yet.");
-    if (!machine.connectorId) return this.direct.fetchFrame(url, machine);
-    const frame = new URL(url, CONNECTOR_NODE_ORIGIN);
-    if (
-      frame.origin !== CONNECTOR_NODE_ORIGIN ||
-      !/^\/frames\/[0-9a-f]{32}\.png$/.test(frame.pathname)
-    )
-      throw new Error("Frame outside configured camera node");
-    const reply = await this.relay.request(machine.connectorId, {
-      method: "GET",
-      path: frame.pathname,
-    });
-    if (reply.status !== 200 || typeof reply.base64 !== "string")
-      throw new Error("Camera frame unavailable");
-    const bytes = Buffer.from(reply.base64, "base64");
-    if (bytes.length > FRAME_LIMIT) throw new Error("Camera frame too large");
-    return bytes;
   }
 }
 
@@ -375,7 +354,7 @@ export function registerConnectorRoutes(
     return recent.length >= 10;
   };
   const platformUrl = () =>
-    process.env.FABRARY_PUBLIC_ORIGIN?.replace(/\/$/, "") ??
+    process.env.FABYN_PUBLIC_ORIGIN?.replace(/\/$/, "") ??
     new URL(service.config.assetOrigin).origin;
   const connectorFor = async (req: Request) => {
     const header = String(req.headers.authorization ?? "");
@@ -671,11 +650,11 @@ export function registerConnectorRoutes(
       400,
     );
     const platform =
-      process.env.FABRARY_PUBLIC_ORIGIN?.replace(/\/$/, "") ?? `http://${host}`;
+      process.env.FABYN_PUBLIC_ORIGIN?.replace(/\/$/, "") ?? `http://${host}`;
     res.type("text/x-shellscript").send(connectScript(platform));
   });
   app.get("/connect/package.tar.gz", async (_req, res) => {
-    const source = resolve(process.env.FABRARY_NODE_SOURCE ?? "node");
+    const source = resolve(process.env.FABYN_NODE_SOURCE ?? "node");
     const tar = spawn(
       "tar",
       [
@@ -703,21 +682,21 @@ export function registerConnectorRoutes(
 
 export function connectScript(platform: string) {
   return `#!/bin/sh
-# Fabrary machine connector setup. It installs the connector in
-# ~/.fabrary-connector and starts it; nothing else on this computer changes.
+# Fabyn machine connector setup. It installs the connector in
+# ~/.fabyn-connector and starts it; nothing else on this computer changes.
 set -eu
 PLATFORM='${platform.replace(/'/g, "")}'
 CODE="\${1:-}"
-DIR="\${FABRARY_CONNECTOR_DIR:-$HOME/.fabrary-connector}"
+DIR="\${FABYN_CONNECTOR_DIR:-$HOME/.fabyn-connector}"
 if ! command -v uv >/dev/null 2>&1; then
-  echo "Fabrary needs uv to run the connector. Install it with:"
+  echo "Fabyn needs uv to run the connector. Install it with:"
   echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
   echo "then open a new terminal and run this setup command again."
   exit 1
 fi
 mkdir -p "$DIR/node"
 chmod 700 "$DIR"
-echo "Downloading the Fabrary connector from $PLATFORM ..."
+echo "Downloading the Fabyn connector from $PLATFORM ..."
 curl -fsSL "$PLATFORM/connect/package.tar.gz" | tar -xzf - -C "$DIR/node"
 # Bluetooth printers need the system Python on Linux; uv's own builds may lack it.
 if [ "$(uname -s)" = "Linux" ] && [ -x /usr/bin/python3 ]; then
@@ -725,8 +704,8 @@ if [ "$(uname -s)" = "Linux" ] && [ -x /usr/bin/python3 ]; then
 fi
 uv sync --project "$DIR/node" --locked --quiet
 if [ -n "$CODE" ]; then
-  exec uv run --project "$DIR/node" fabrary-connect --platform "$PLATFORM" --data-dir "$DIR" --code "$CODE"
+  exec uv run --project "$DIR/node" fabyn-connect --platform "$PLATFORM" --data-dir "$DIR" --code "$CODE"
 fi
-exec uv run --project "$DIR/node" fabrary-connect --platform "$PLATFORM" --data-dir "$DIR"
+exec uv run --project "$DIR/node" fabyn-connect --platform "$PLATFORM" --data-dir "$DIR"
 `;
 }

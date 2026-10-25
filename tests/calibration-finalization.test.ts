@@ -41,7 +41,7 @@ const artifact = {
   sha256: "a".repeat(64),
 };
 async function fixture(mode: "simulation" | "hardware" = "hardware") {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-calibration-finalization-")),
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-calibration-finalization-")),
     store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const calls: {
     tool: string;

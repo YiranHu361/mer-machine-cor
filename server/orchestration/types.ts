@@ -202,6 +202,7 @@ export interface MakeIntent {
   permission: true;
   consent: { payment: true; production: true };
   authorizedCents: number;
+  cancelRequested?: boolean;
   reassignment: "none" | "relief_mandate";
   mandate?: { capCents: number; sameMode: true; sameProcess: true };
   status:
@@ -216,6 +217,7 @@ export interface MakeIntent {
     operationId: string | null;
     status: "not_required" | "submitting" | "pending" | "confirmed" | "failed";
     reference?: string;
+    transactionHash?: string;
     reason?: string;
   };
   createdAt: string;

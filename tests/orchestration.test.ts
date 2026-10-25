@@ -9,6 +9,12 @@ import { SqliteStore, mutate } from "../server/store.ts";
 import { initialState, now, type Machine } from "../server/model.ts";
 import { Service, type Config } from "../server/service.ts";
 import { MockPayment } from "../server/payments.ts";
+import { IntegratedPayment } from "../server/external.ts";
+import {
+  BaseSepoliaPaymentAdapter,
+  BASE_SEPOLIA_USDC,
+} from "../integrations/src/payments.ts";
+import { createRequire } from "node:module";
 import type { NodeBoundary } from "../server/node-client.ts";
 import { createApp } from "../server/app.ts";
 import { Orchestrator } from "../server/orchestration/orchestrator.ts";
@@ -45,7 +51,6 @@ const sha = (b: string | Buffer) =>
 /** A node that answers like the simulator, or like hardware with a camera. */
 class Device implements NodeBoundary {
   runs: { machine: string; mode: string; artifact: string }[] = [];
-  evidenceSource: "auto" | "simulation" = "auto";
   token() {
     return {
       token: "signed-test-boundary",
@@ -53,20 +58,6 @@ class Device implements NodeBoundary {
     };
   }
   async call(tool: string, input: any, machine?: Machine) {
-    if (tool === "camera_snapshot")
-      return {
-        frame_url: "http://127.0.0.1:8788/frames/example.png",
-        captured_at: new Date(Date.now() + 1).toISOString(),
-        completion_credible: input.phase === "result",
-        machine_id: input.machine_id,
-        job_id: input.job_id,
-        attempt_id: input.attempt_id,
-        source:
-          this.evidenceSource === "simulation" || machine?.mode === "simulation"
-            ? "simulation"
-            : "camera",
-        observation: "visible",
-      };
     if (tool === "run_job") {
       this.runs.push({
         machine: input.machine_id,
@@ -89,9 +80,6 @@ class Device implements NodeBoundary {
         completion_credible: true,
       };
     return { calibrated: true };
-  }
-  async fetchFrame() {
-    return Buffer.from("frame");
   }
 }
 /** A stand-in for the producer CLI that honours the same contract, deterministically. */
@@ -200,7 +188,7 @@ function fixture(
     mode?: Machine["mode"];
     allowed?: Machine["mode"][];
     design?: "fixture" | "none" | "nano-banana" | "openai";
-    /** "cli" runs the real fabrary-producer; tests using it skip without uv. */
+    /** "cli" runs the real fabyn-producer; tests using it skip without uv. */
     producer?: "fake" | "cli";
     understand?: (input: RequestInput) => Promise<RequestBrief>;
     imageDraft?: (input: ImageDraftInput) => Promise<ImageDraft[]>;
@@ -209,7 +197,7 @@ function fixture(
     ) => Promise<{ ok: boolean; detail: string }>;
   } = {},
 ) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-orchestration-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-orchestration-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device = new Device();
   const payment = new MockPayment();
@@ -502,7 +490,7 @@ test("one confirmation authorizes simulated work without payment and dispatches 
   }
 });
 
-test("hardware work is payable once, funds each child by allocation and refuses simulated evidence", async () => {
+test("hardware work is payable once, funds each child by allocation and completes from the machine report", async () => {
   const f = fixture({ mode: "hardware", allowed: ["hardware", "simulation"] });
   try {
     await f.ready(["phomemo_01", "instax_01"], "hardware");
@@ -524,7 +512,6 @@ test("hardware work is payable once, funds each child by allocation and refuses 
     assert.equal(a.chargeable, true);
     assert.equal(o.plan!.payableCents, a.price.totalCents);
     assert.equal(a.price.totalCents, a.price.ownerCents + a.price.feeCents);
-    f.device.evidenceSource = "simulation";
     o = await f.orchestrator.confirm(requester, order.id, confirmBody(o));
     const confirmed = o.plan!.assignments[0];
     assert.equal(o.makeIntent!.payment.status, "confirmed");
@@ -536,10 +523,8 @@ test("hardware work is payable once, funds each child by allocation and refuses 
       allocation.receipt.parentReference,
       o.makeIntent!.payment.reference,
     );
-    // A simulated frame cannot verify a hardware job, so nothing is released.
-    assert.equal(job.productionState, "needs_review");
-    assert.match(job.evidence.reason, /execution mode/);
-    assert.equal(job.paymentState, "held");
+    assert.equal(job.productionState, "produced");
+    assert.equal(job.paymentState, "released");
   } finally {
     f.close();
   }
@@ -1238,7 +1223,7 @@ test("the HTTP API creates asynchronously, scopes orders to their owner and keep
       .set("Idempotency-Key", "http-relief-01")
       .send({ experience: "relief" })
       .expect(403);
-    await agent.post(`/api/orders/${id}/pay`).send({}).expect(409);
+    await agent.post(`/api/orders/${id}/pay`).send({}).expect(422);
   } finally {
     f.close();
   }
@@ -1441,7 +1426,7 @@ const pngSize = (bytes: Buffer) => ({
   colorType: bytes[25],
 });
 const noProducer = existsSync(
-  join(process.cwd(), "node", ".venv", "bin", "fabrary-producer"),
+  join(process.cwd(), "node", ".venv", "bin", "fabyn-producer"),
 )
   ? false
   : "the node project environment is not installed (uv sync in node/)";
@@ -1649,6 +1634,314 @@ test(
     }
   },
 );
+
+// Real protocol and signatures, with offline facilitator/RPC boundaries; no funds or devices.
+const paymentRequire = createRequire(
+  new URL("../integrations/package.json", import.meta.url),
+);
+const { x402Client } = paymentRequire("@x402/core/client");
+const { ExactEvmScheme } = paymentRequire("@x402/evm/exact/client");
+const { privateKeyToAccount } = paymentRequire("viem/accounts");
+const { encodeAbiParameters, encodeEventTopics, parseAbi, verifyTypedData } =
+  paymentRequire("viem");
+function testnetPayment(
+  f: ReturnType<typeof fixture>,
+  unknownSettlement = false,
+) {
+  const payer = privateKeyToAccount("0x" + "0".repeat(63) + "1");
+  const treasury = "0x2222222222222222222222222222222222222222";
+  const tx = "0x" + "ab".repeat(32);
+  let settlements = 0,
+    confirmed = false,
+    amount = 0n;
+  const boundary = new IntegratedPayment(f.store, {
+    FABYN_PAYMENT_MODE: "mock",
+  });
+  boundary.mode = "testnet";
+  boundary.adapter = new BaseSepoliaPaymentAdapter({
+    treasuryAddress: treasury,
+    rpcUrl: "http://127.0.0.1:1",
+    resourceOrigin: "http://127.0.0.1:4318",
+    facilitator: {
+      getSupported: async () => ({ kinds: [], extensions: [], signers: {} }),
+      verify: async (payload: any) => {
+        const a = payload.payload.authorization;
+        return {
+          isValid: await verifyTypedData({
+            address: payer.address,
+            domain: {
+              name: "USDC",
+              version: "2",
+              chainId: 84532,
+              verifyingContract: BASE_SEPOLIA_USDC,
+            },
+            types: {
+              TransferWithAuthorization: [
+                { name: "from", type: "address" },
+                { name: "to", type: "address" },
+                { name: "value", type: "uint256" },
+                { name: "validAfter", type: "uint256" },
+                { name: "validBefore", type: "uint256" },
+                { name: "nonce", type: "bytes32" },
+              ],
+            },
+            primaryType: "TransferWithAuthorization",
+            message: {
+              ...a,
+              value: BigInt(a.value),
+              validAfter: BigInt(a.validAfter),
+              validBefore: BigInt(a.validBefore),
+            },
+            signature: payload.payload.signature,
+          }),
+        };
+      },
+      settle: async (payload: any) => {
+        settlements++;
+        amount = BigInt(payload.payload.authorization.value);
+        const state = await f.service.read();
+        assert.ok(
+          Object.values(state.operations).some(
+            (op) => op.receipt?.payer === payer.address,
+          ),
+          "nonce is durable before settlement",
+        );
+        if (unknownSettlement)
+          throw new Error("fixture lost settlement response");
+        return { success: true, transaction: tx, network: "eip155:84532" };
+      },
+    },
+    publicClient: {
+      getChainId: async () => 84532,
+      getBlockNumber: async () => (confirmed ? 11n : 10n),
+      getTransactionReceipt: async () => ({
+        status: "success",
+        blockNumber: 10n,
+        logs: [
+          {
+            address: BASE_SEPOLIA_USDC,
+            topics: encodeEventTopics({
+              abi: parseAbi([
+                "event Transfer(address indexed from, address indexed to, uint256 value)",
+              ]),
+              eventName: "Transfer",
+              args: { from: payer.address, to: treasury },
+            }),
+            data: encodeAbiParameters([{ type: "uint256" }], [amount]),
+          },
+        ],
+      }),
+    },
+  });
+  f.service.payment = boundary;
+  f.service.config.paymentMode = "testnet";
+  // Stop at the started-job boundary; this test exercises collection, not physical verification.
+  const deviceCall = f.device.call.bind(f.device);
+  f.device.call = async (tool, args, machine): Promise<any> => {
+    const result = await deviceCall(tool, args, machine);
+    return tool === "run_job"
+      ? { ...result, execution_status: "running", completion_credible: false }
+      : result;
+  };
+  return {
+    boundary,
+    tx,
+    payer,
+    settlements: () => settlements,
+    confirm: () => {
+      confirmed = true;
+    },
+    sign: (challenge: any) =>
+      x402Client
+        .fromConfig({
+          schemes: [
+            { network: "eip155:84532", client: new ExactEvmScheme(payer) },
+          ],
+          spendControls: {
+            maxAmountPerPayment: false,
+            allowedAssets: [
+              {
+                network: "eip155:84532",
+                asset: BASE_SEPOLIA_USDC,
+                maxAmountPerPayment: challenge.accepts[0].amount,
+              },
+            ],
+          },
+        })
+        .createPaymentPayload(challenge),
+  };
+}
+
+test("x402 order HTTP challenge, wallet signature, durable settlement and production work once for a mixed plan", async () => {
+  const f = fixture({ allowed: ["hardware", "simulation"] });
+  try {
+    const payment = testnetPayment(f);
+    await f.ready(["instax_01"], "hardware");
+    await f.ready(["phomemo_01", "bambu_01"], "simulation");
+    const app = createApp(f.service, undefined, {
+      orchestrator: f.orchestrator,
+    });
+    const agent = request.agent(app);
+    await agent.post("/api/session").send({ role: "requester" }).expect(200);
+    const sessionState = await f.service.read();
+    const ownerId = Object.values(sessionState.sessions).find(
+      (s) => s.role === "requester",
+    )!.id;
+    const photo = await f.photo(ownerId);
+    const created = await agent
+      .post("/api/orders")
+      .set("Idempotency-Key", "x402-mixed-create")
+      .send({
+        experience: "gift",
+        photoAssetIds: [photo],
+        requestText: "Birthday memories",
+      })
+      .expect(202);
+    const orderId = created.body.order.id;
+    await f.orchestrator.settle(orderId);
+    const o = (await agent.get(`/api/orders/${orderId}`).expect(200)).body
+      .order;
+    assert.equal(o.draft.stage, "proposed");
+    assert.ok(o.plan.simulatedEstimateCents > 0);
+    const body = confirmBody(o, "x402-payment-key");
+    const endpoint = `/api/orders/${orderId}/pay`;
+    await agent
+      .post(endpoint)
+      .set("PAYMENT-SIGNATURE", "invalid")
+      .send(body)
+      .expect(422);
+    const challenge = await agent.post(endpoint).send(body).expect(402);
+    assert.deepEqual(
+      JSON.parse(
+        Buffer.from(challenge.headers["payment-required"], "base64").toString(),
+      ),
+      challenge.body,
+    );
+    assert.equal(
+      challenge.body.accepts[0].amount,
+      String(BigInt(o.plan.payableCents) * 10000n),
+    );
+    assert.equal(
+      new URL(challenge.body.resource.url).searchParams.get("plan"),
+      o.plan.digest,
+    );
+    assert.equal(Object.keys((await f.service.read()).jobs).length, 0);
+    const other = request.agent(app);
+    await other.post("/api/session").send({ role: "requester" }).expect(200);
+    await other.post(endpoint).send(body).expect(403);
+    const payload = await payment.sign(challenge.body);
+    const signature = Buffer.from(JSON.stringify(payload)).toString("base64");
+    const replies = await Promise.all(
+      [0, 1].map(() =>
+        agent
+          .post(endpoint)
+          .set("PAYMENT-SIGNATURE", signature)
+          .send(body)
+          .expect(200),
+      ),
+    );
+    assert.equal(replies[0].body.order.makeIntent.payment.status, "pending");
+    assert.equal(replies[0].headers["payment-response"], undefined);
+    assert.equal(f.device.runs.length, 0);
+    assert.equal(payment.settlements(), 1);
+    await agent
+      .post(endpoint)
+      .send({ ...body, idempotencyKey: "conflicting-key" })
+      .expect(409);
+    payment.confirm();
+    // A fresh orchestrator recovers the same saved transaction after restart.
+    const restarted = new Orchestrator(f.service);
+    await restarted.tick();
+    const paid = await agent.post(endpoint).send(body).expect(200);
+    assert.equal(paid.body.order.makeIntent.payment.status, "confirmed");
+    assert.equal(
+      paid.body.order.makeIntent.payment.transactionHash,
+      payment.tx,
+    );
+    assert.equal(
+      JSON.parse(
+        Buffer.from(paid.headers["payment-response"], "base64").toString(),
+      ).transaction,
+      payment.tx,
+    );
+    assert.equal(payment.settlements(), 1);
+    assert.equal(f.device.runs.length, 3);
+    await restarted.tick();
+    await agent.post(endpoint).send(body).expect(200);
+    assert.equal(f.device.runs.length, 3, "retries never repeat fabrication");
+    const state = await f.service.read();
+    const charged = Object.values(state.jobs).filter((j) => j.chargeable);
+    assert.equal(charged.length, 1);
+    assert.equal(charged[0].requesterAddress, payment.payer.address);
+  } finally {
+    f.close();
+  }
+});
+
+test("unknown x402 settlement remains pending across restart without another charge or job run", async () => {
+  const f = fixture({ allowed: ["hardware"] });
+  try {
+    const payment = testnetPayment(f, true);
+    await f.ready(["instax_01"], "hardware");
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { photoAssetIds: [photo] },
+      "unknown-x402-create",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    let challenge: any;
+    try {
+      await f.orchestrator.confirm(requester, order.id, confirmBody(o));
+    } catch (e) {
+      challenge = (e as any).challenge.body;
+    }
+    const result = await f.orchestrator.confirm(
+      requester,
+      order.id,
+      confirmBody(o),
+      await payment.sign(challenge),
+    );
+    assert.equal(result.makeIntent.payment.status, "pending");
+    await new Orchestrator(f.service).tick();
+    const pending = await f.orchestrator.confirm(
+      requester,
+      order.id,
+      confirmBody(o),
+    );
+    assert.equal(pending.makeIntent.payment.status, "pending");
+    assert.equal(payment.settlements(), 1);
+    assert.equal(f.device.runs.length, 0);
+  } finally {
+    f.close();
+  }
+});
+
+test("testnet mode does not ask for a wallet or collect funds for simulated-only plans", async () => {
+  const f = fixture();
+  try {
+    const payment = testnetPayment(f);
+    await f.ready(["instax_01"]);
+    const photo = await f.photo(requester.id);
+    const { order } = await f.orchestrator.createOrder(
+      requester,
+      { photoAssetIds: [photo] },
+      "free-x402-create",
+    );
+    await f.orchestrator.settle(order.id);
+    const o = await f.orchestrator.view(requester, order.id);
+    const result = await f.orchestrator.confirm(
+      requester,
+      order.id,
+      confirmBody(o),
+    );
+    assert.equal(result.makeIntent.payment.status, "not_required");
+    assert.equal(payment.settlements(), 0);
+  } finally {
+    f.close();
+  }
+});
 
 test("printers on the hub are checked while drafts are drawn, and one that does not answer is not offered", async () => {
   const checked: string[] = [];

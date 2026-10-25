@@ -116,7 +116,7 @@ test(
 );
 
 test(
-  "actual failed customer verification consumes the Node estimate and clearing never leaves backend stock overstated",
+  "actual customer machine failure consumes the Node estimate and clearing never leaves backend stock overstated",
   { timeout: 15000 },
   async () => {
     const f = await fixture();
@@ -124,7 +124,6 @@ test(
       const j = await paid(f, "fail");
       const failed = await settle(f, j.id, "failed");
       assert.equal(failed.paymentState, "refunded");
-      assert.equal(failed.evidence.result, "fail");
       assert.equal(
         (await f.service.read()).machines.phomemo_01.mediaRemaining,
         99,
@@ -141,7 +140,7 @@ test(
           job_id: j.id,
           attempt_id: failed.attemptId,
         });
-      assert.equal(device.execution_status, "completed");
+      assert.equal(device.execution_status, "failed");
       assert.equal(device.media_remaining, 99);
       assert.equal(s.machines.phomemo_01.mediaRemaining, 99);
       assert.equal(

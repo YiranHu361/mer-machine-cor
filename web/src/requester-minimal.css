@@ -787,32 +787,6 @@
   letter-spacing: 0.16em;
   overflow-wrap: anywhere;
 }
-.evidence {
-  margin: 0 0 16px;
-}
-.evidence .quote-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.evidence .quote-head h3 {
-  font-size: 14px;
-  font-weight: 600;
-}
-.evidence > p {
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.evidence > small {
-  display: block;
-  margin-bottom: 6px;
-  overflow-wrap: anywhere;
-}
-.evidence .fine-print {
-  margin: 0;
-}
 .cancel-area {
   margin: 0 0 4px;
 }

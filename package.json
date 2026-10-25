@@ -1,5 +1,5 @@
 {
-  "name": "fabrary",
+  "name": "fabyn",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -29,6 +29,7 @@
     "convex:local": "CONVEX_AGENT_MODE=anonymous convex dev"
   },
   "dependencies": {
+    "claude": "^0.1.1",
     "context.dev": "3.15.0",
     "convex": "1.46.0",
     "dotenv": "18.0.9",

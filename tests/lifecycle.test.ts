@@ -31,18 +31,7 @@ class Device implements NodeBoundary {
       expires_at: Math.floor(Date.now() / 1000) + 60,
     };
   }
-  async call(tool: string, input: any) {
-    if (tool === "camera_snapshot")
-      return {
-        frame_url: "http://127.0.0.1:8788/frames/example.png",
-        captured_at: new Date(Date.now() + 1).toISOString(),
-        completion_credible: input.phase === "result",
-        machine_id: input.machine_id,
-        job_id: input.job_id,
-        attempt_id: input.attempt_id,
-        source: "simulation",
-        observation: this.outcome,
-      };
+  async call(tool: string, input: any): Promise<any> {
     if (tool === "run_job") {
       this.calls++;
       if (this.lost) throw new Error("ack lost");
@@ -54,7 +43,12 @@ class Device implements NodeBoundary {
         mode: "simulation",
         ready: true,
         calibrated: true,
-        execution_status: this.status,
+        execution_status:
+          this.outcome === "missing"
+            ? "failed"
+            : this.outcome === "ambiguous"
+              ? "uncertain"
+              : this.status,
         completion_credible: true,
       };
     if (tool === "abort")
@@ -63,7 +57,7 @@ class Device implements NodeBoundary {
   }
 }
 function fixture(payment: PaymentBoundary = new MockPayment()) {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-domain-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-domain-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   const device = new Device();
   const config: Config = {
@@ -354,7 +348,7 @@ test("expired pickup rejected", async () => {
     f.close();
   }
 });
-test("missing output refunds; ambiguity holds; visible operator override releases with reason", async () => {
+test("machine failure refunds; uncertain status holds; operator resolution releases with reason", async () => {
   for (const [outcome, production, payment] of [
     ["missing", "failed", "refunded"],
     ["ambiguous", "needs_review", "held"],
@@ -456,7 +450,7 @@ test("release/refund race is exclusive and stable across replay", async () => {
   try {
     const j = await paid(f);
     await mutate(f.store, (s) => {
-      s.jobs[j.id].evidence = { result: "pass" };
+      s.jobs[j.id].productionState = "produced";
     });
     await Promise.allSettled([
       f.service.transfer(j.id, "release"),
@@ -495,31 +489,6 @@ test("abort response is honest, requester isolation prevents cross-job access", 
   }
 });
 
-test("stale, mismatched or noncredible frames require review and preserve hold", async () => {
-  for (const kind of ["stale", "mismatched", "noncredible"]) {
-    const f = fixture();
-    try {
-      const original = f.device.call.bind(f.device);
-      f.device.call = async (tool, input) => {
-        const response = await original(tool, input);
-        if (tool === "camera_snapshot" && input.phase === "result") {
-          if (kind === "stale")
-            response.captured_at = "2020-01-01T00:00:00.000Z";
-          if (kind === "mismatched") response.job_id = "other-job";
-          if (kind === "noncredible") response.completion_credible = false;
-        }
-        return response;
-      };
-      const j = await paid(f);
-      await f.service.dispatch(j.id);
-      await f.service.reconcile(j.id);
-      assert.equal((await f.service.job(j.id)).productionState, "needs_review");
-      assert.equal((await f.service.job(j.id)).paymentState, "held");
-    } finally {
-      f.close();
-    }
-  }
-});
 test("definite prerequisite failure retries same transfer allocation, ambiguous submission never does", async () => {
   class Payments extends MockPayment {
     missing = true;
@@ -535,7 +504,7 @@ test("definite prerequisite failure retries same transfer allocation, ambiguous 
   try {
     const j = await paid(f);
     await mutate(f.store, (s) => {
-      s.jobs[j.id].evidence = { result: "pass" };
+      s.jobs[j.id].productionState = "produced";
     });
     await f.service.transfer(j.id, "release");
     const op = Object.values((await f.service.read()).operations).find(
@@ -723,7 +692,7 @@ test("uncertain transfer reconciliation never submits a replacement", async () =
   try {
     const j = await paid(f);
     await mutate(f.store, (s) => {
-      s.jobs[j.id].evidence = { result: "pass" };
+      s.jobs[j.id].productionState = "produced";
     });
     await f.service.transfer(j.id, "release");
     assert.equal((await f.service.job(j.id)).paymentState, "release_pending");
@@ -861,70 +830,6 @@ test("failed trial economics never count quoted owner payout or platform fee as 
   }
 });
 
-test("a delayed verification cannot undo completed handling or pause the next execution", async () => {
-  const f = fixture();
-  let unblock!: () => void;
-  try {
-    const j = await paid(f);
-    await f.service.dispatch(j.id);
-    const original = f.device.call.bind(f.device);
-    let enter!: () => void,
-      resultCalls = 0;
-    const entered = new Promise<void>((resolve) => {
-      enter = resolve;
-    });
-    const gate = new Promise<void>((resolve) => {
-      unblock = resolve;
-    });
-    f.device.call = async (tool, input) => {
-      const response = await original(tool, input);
-      if (
-        tool === "camera_snapshot" &&
-        input.phase === "result" &&
-        ++resultCalls === 1
-      ) {
-        response.observation = "missing";
-        enter();
-        await gate;
-      }
-      return response;
-    };
-    const delayed = f.service.reconcile(j.id);
-    await entered;
-    await f.service.verify(j.id);
-    const ready = await f.service.prepare(j.id, {
-      removed: true,
-      labeled: true,
-      stored: true,
-      cleared: true,
-    });
-    const next = await paid(f);
-    await f.service.dispatch(next.id);
-    const machineBefore = (await f.service.read()).machines.phomemo_01;
-    unblock();
-    await delayed;
-    const final = await f.service.job(j.id);
-    assert.equal(final.productionState, "produced");
-    assert.equal(final.evidence.result, "pass");
-    assert.equal(final.paymentState, "released");
-    assert.equal(final.fulfillmentState, "ready_for_pickup");
-    assert.equal(final.pickup!.code, ready.pickup!.code);
-    assert.deepEqual(
-      (await f.service.read()).machines.phomemo_01,
-      machineBefore,
-    );
-    assert.equal(
-      Object.values((await f.service.read()).operations).filter(
-        (op) => op.jobId === j.id && op.kind === "refund",
-      ).length,
-      0,
-    );
-  } finally {
-    unblock?.();
-    f.close();
-  }
-});
-
 test("a delayed node error cannot replace a finalized outcome or pause new work", async () => {
   const f = fixture();
   let unblock!: () => void;
@@ -999,10 +904,6 @@ test("conflicting concurrent owner reviews preserve one outcome and one matching
     );
     assert.equal(transfers.length, 1);
     assert.equal(
-      final.evidence.result,
-      final.productionState === "produced" ? "pass" : "fail",
-    );
-    assert.equal(
       transfers[0].kind,
       final.productionState === "produced" ? "release" : "refund",
     );
@@ -1023,7 +924,6 @@ test("background reconciliation recovers a crash between final outcome and trans
       await mutate(f.store, (s) => {
         const current = s.jobs[j.id];
         current.productionState = outcome;
-        current.evidence = { result: outcome === "produced" ? "pass" : "fail" };
         s.machines.phomemo_01.activeJobId = j.id;
         s.machines.phomemo_01.ready = false;
       });
@@ -1263,8 +1163,7 @@ test("authenticated calibration revocation clears stale inspection provenance an
         mode: "simulation",
         ready: false,
         ...(calibrated === undefined ? {} : { calibrated }),
-        reason:
-          "Device or camera configuration changed; physical calibration required",
+        reason: "Device configuration changed; physical calibration required",
       });
       await f.service.probeAvailability();
       const machine = (await f.service.read()).machines.phomemo_01;
@@ -1314,3 +1213,60 @@ test("calibration idempotency keys must be bounded strings before any device int
     f.close();
   }
 });
+
+for (const completion_credible of [undefined, false, true]) {
+  test(`machine completion finishes without a visual check (credibility=${completion_credible})`, async () => {
+    const f = fixture();
+    try {
+      const j = await paid(f);
+      await f.service.dispatch(j.id);
+      const calls = f.device.calls;
+      f.device.call = async (tool) => {
+        assert.equal(
+          tool,
+          "get_status",
+          "completion never requests an image or another print",
+        );
+        return { execution_status: "completed", completion_credible };
+      };
+      await f.service.reconcile(j.id);
+      const completed = await f.service.job(j.id);
+      assert.equal(completed.productionState, "produced");
+      assert.equal(completed.paymentState, "released");
+      assert.equal(completed.fulfillmentState, "awaiting_owner");
+      assert.ok(completed.deviceCompletedAt);
+      await f.service.applyNodeStatus(j.id, { execution_status: "running" });
+      await f.service.applyNodeStatus(j.id, { execution_status: "failed" });
+      assert.equal((await f.service.job(j.id)).productionState, "produced");
+      assert.equal(f.device.calls, calls);
+    } finally {
+      f.close();
+    }
+  });
+}
+
+for (const productionState of ["verifying", "needs_review"]) {
+  test(`background reconciliation completes a saved legacy ${productionState} job from machine status`, async () => {
+    const f = fixture();
+    try {
+      const j = await paid(f);
+      await f.service.dispatch(j.id);
+      await mutate(f.store, (s) => {
+        const job = s.jobs[j.id];
+        job.productionState = productionState;
+        job.history.push({
+          at: now(),
+          event: "verification_review",
+          reason: "Retired output check was unavailable",
+        });
+      });
+      await f.service.tick();
+      const completed = await f.service.job(j.id);
+      assert.equal(completed.productionState, "produced");
+      assert.equal(completed.paymentState, "released");
+      assert.equal(f.device.calls, 1);
+    } finally {
+      f.close();
+    }
+  });
+}

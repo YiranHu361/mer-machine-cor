@@ -45,7 +45,7 @@ const draft = {
 };
 
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-recommendations-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-recommendations-"));
   const store = new SqliteStore(join(dir, "state.sqlite"), initialState());
   let sideEffects = 0;
   const payment = new MockPayment();

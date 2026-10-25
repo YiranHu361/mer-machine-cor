@@ -12,7 +12,7 @@ import { MockPayment } from "../server/payments.ts";
 import { createApp } from "../server/app.ts";
 
 function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-origin-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-origin-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const service = new Service(
     store,

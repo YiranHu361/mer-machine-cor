@@ -13,7 +13,7 @@ import httpx
 from bridge import BackendClient,AdapterServer,build_mcp
 
 async def main():
-    origin=os.environ.get('FABRARY_API_ORIGIN','http://127.0.0.1:4318')
+    origin=os.environ.get('FABYN_API_ORIGIN','http://127.0.0.1:4318')
     async with httpx.AsyncClient(base_url=origin,timeout=30) as http:
         health=(await http.get('/api/health')).json()
         session=await http.post('/api/session',json={'role':'requester'})
@@ -26,18 +26,18 @@ async def main():
         response=await bridge.call_tool('list_machines',{})
         machines=json.loads(response[0].text)['machines']
         evidence={'status':'PASS','scope':'actual local FastMCP -> requester API','store':health.get('store'),'tools':[t.name for t in tools],'machineCount':len(machines),'discovery':'NOT_TESTED; local invocation is not ASI:One discovery'}
-        if os.environ.get('FABRARY_FETCH_FULL_LOCAL')!='1':
+        if os.environ.get('FABYN_FETCH_FULL_LOCAL')!='1':
             print(json.dumps(evidence));return
         if health.get('paymentMode')!='mock':raise ValueError('Full local fixture requires explicitly labeled mock payments')
         instax=next((m for m in machines if m.get('id')=='instax_01'),None)
         if not instax or instax.get('mode')!='simulation' or instax.get('activeJobId'):raise ValueError('Idle Instax simulation is required; fixture never uses hardware')
-        credentials=Path(os.environ.get('FABRARY_LOCAL_CREDENTIALS_PATH',str(Path(__file__).resolve().parents[2]/'.data/local-credentials.json')))
+        credentials=Path(os.environ.get('FABYN_LOCAL_CREDENTIALS_PATH',str(Path(__file__).resolve().parents[2]/'.data/local-credentials.json')))
         owner=httpx.AsyncClient(base_url=origin,timeout=30)
         login=await owner.post('/api/session',json={'role':'owner','accessCode':json.loads(credentials.read_text())['ownerCode']});login.raise_for_status()
         registered=await owner.post('/api/owner/machines',json={'model':'instax-mini-link-3','mode':'simulation'});registered.raise_for_status()
         calibrated=await owner.post('/api/owner/machines/instax_01/calibrate',json={'inspected':True});calibrated.raise_for_status()
         resumed=await owner.patch('/api/owner/machines/instax_01',json={'listed':True,'paused':False,'inspected':True,'cleared':True,'hours':{'start':0,'end':24}});resumed.raise_for_status()
-        # A small bundled test PNG is just fixture data, not claimed camera evidence.
+        # A small bundled test PNG is just fixture data, not a physical output.
         import base64
         png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jv3kAAAAASUVORK5CYII=')
         upload=await http.post('/api/uploads',files=[('images',('fixture.png',png,'image/png'))]);upload.raise_for_status();asset=upload.json()['assets'][0]

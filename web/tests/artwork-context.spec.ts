@@ -47,7 +47,7 @@ async function fixture(page: Page, initial: ReturnType<typeof job>[]) {
   };
   if (initial[0])
     await page.addInitScript(
-      (id) => localStorage.setItem("fabrary-current-job", id),
+      (id) => localStorage.setItem("fabyn-current-job", id),
       initial[0].id,
     );
   await page.route("**/api/**", async (route) => {

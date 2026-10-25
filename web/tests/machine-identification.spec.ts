@@ -99,7 +99,7 @@ test("a provider identifies the machine by name or label photo before getting a 
     seen: "Phomemo M02S",
     source: "photo",
     provider: "claude",
-    message: "Fabrary supports the Phomemo M02Pro, not “Phomemo M02S”.",
+    message: "Fabyn supports the Phomemo M02Pro, not “Phomemo M02S”.",
   });
   await page.getByLabel("What machine is it?", { exact: true }).fill("");
   await page
@@ -108,7 +108,7 @@ test("a provider identifies the machine by name or label photo before getting a 
   await expect(identify).toBeEnabled();
   await identify.click();
   await expect(page.getByRole("status")).toHaveText(
-    "Fabrary supports the Phomemo M02Pro, not “Phomemo M02S”.",
+    "Fabyn supports the Phomemo M02Pro, not “Phomemo M02S”.",
   );
   await expect(model).toHaveValue("instax-mini-link-3");
   expect(posts[1].body).toContain('name="photo"; filename="label.jpg"');

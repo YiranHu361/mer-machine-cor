@@ -1,6 +1,6 @@
 # Hand-off samples
 
-One file of each kind our end hands to the producer side, made by `fabrary-producer` with the same settings the orchestrator uses. Each file has a `.preview.png` beside it: what the requester approves. For stickers and the 3D tag the preview is the file itself or its picture; a wide photo's preview is turned back upright.
+One file of each kind our end hands to the producer side, made by `fabyn-producer` with the same settings the orchestrator uses. Each file has a `.preview.png` beside it: what the requester approves. For stickers and the 3D tag the preview is the file itself or its picture; a wide photo's preview is turned back upright.
 
 | File | Machine | Size | What to know |
 | --- | --- | --- | --- |

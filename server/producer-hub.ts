@@ -14,7 +14,7 @@ import type { Service } from "./service.ts";
  * Our node boundary for machines that print through the producer side's hub
  * (producer-side/hub). The hub's nodes download the approved file from our
  * signed asset URL and report jobs as offered → accepted → running →
- * verifying/done, or rejected/failed. Each offer carries our job and attempt
+ * done, or rejected/failed. Each offer carries our job and attempt
  * ids and the file hash, so a job is found again after either side restarts.
  * Today this speaks to the hub's development endpoints (/machines, /dev/offer,
  * /dev/events, /dev/cancel); the production interface is still to be agreed.
@@ -26,6 +26,8 @@ export interface HubMachine {
   simulated?: boolean;
   limits?: { max_size_mm?: number[]; max_job_minutes?: number };
   media_loaded?: { remaining_est?: number };
+  /** The node's own words for its state, e.g. "plate_not_cleared: …". */
+  detail?: string | null;
 }
 interface HubJob {
   job_id: string;
@@ -34,7 +36,6 @@ interface HubJob {
   progress?: number;
   reason?: string | null;
   error?: string | null;
-  verification?: { pass: boolean | null; reason?: string } | null;
   params?: Record<string, unknown>;
 }
 const PROCESS: Record<string, string> = {
@@ -94,6 +95,14 @@ export class ProducerHubNode {
   async machines(): Promise<HubMachine[]> {
     return this.hub("/machines");
   }
+  /** Someone took the last print off the machine (a 3D print stays on the plate until then). */
+  private async plateCleared(theirs: string) {
+    try {
+      await this.hub("/dev/plate-cleared", { machine_id: theirs });
+    } catch {
+      // Best effort: an offline node starts fresh, and the owner can resume again.
+    }
+  }
   /** The newest state the hub reported for one of our attempts, if any. */
   private async find(attemptId: string): Promise<HubJob | undefined> {
     const events = (await this.hub("/dev/events?limit=500")) as {
@@ -102,7 +111,7 @@ export class ProducerHubNode {
     }[];
     return events
       .map((e) => e.data)
-      .filter((d) => d?.params?.fabrary_attempt_id === attemptId)
+      .filter((d) => d?.params?.fabyn_attempt_id === attemptId)
       .at(-1);
   }
   async call(tool: string, input: any, machine: Machine): Promise<any> {
@@ -131,7 +140,7 @@ export class ProducerHubNode {
         reason: !found
           ? `${theirs} is not connected to the producer side's hub.`
           : online
-            ? `Producer side: ${found.status}.`
+            ? `Producer side: ${found.status}${found.detail ? ` (${found.detail})` : ""}.`
             : `${theirs} is offline at the producer side's hub.`,
       };
     }
@@ -146,8 +155,8 @@ export class ProducerHubNode {
           width_mm: p.widthMm,
           height_mm: p.heightMm,
           sha256: input.artifact_sha256,
-          fabrary_job_id: input.job_id,
-          fabrary_attempt_id: input.attempt_id,
+          fabyn_job_id: input.job_id,
+          fabyn_attempt_id: input.attempt_id,
         },
       });
       return {
@@ -179,34 +188,19 @@ export class ProducerHubNode {
       };
     }
     if (tool === "/reconcile") {
-      // The owner inspected the print. A pass is recorded at the producer side
-      // as its labeled manual approval, so both sides agree the job is done.
-      // Best effort: the owner's inspection stands even when the hub has
-      // restarted (and forgotten the job) or is unreachable.
-      try {
-        const job = await this.find(input.attempt_id);
-        if (job && input.result === "completed" && job.state !== "done")
-          await this.hub("/dev/approve", {
-            machine_id: theirs,
-            job_id: job.job_id,
-            reason: input.reason,
-          });
-      } catch {}
+      // Explicitly resolve an uncertain execution; plate handling is separate.
       return {
         execution_status: input.result === "completed" ? "completed" : "failed",
-        completion_credible: false,
         reason: `Owner inspection: ${input.reason}`,
       };
     }
-    if (tool === "camera_snapshot")
-      throw new Problem(
-        "CAMERA_UNAVAILABLE",
-        "The producer side has no camera yet; the owner checks the print.",
-        503,
-      );
-    if (tool.startsWith("/machines/") && tool.endsWith("/policy"))
+    if (tool.startsWith("/machines/") && tool.endsWith("/policy")) {
       // The producer side enforces its own owner rules; ours stay in our registry.
+      // Resuming after inspecting and clearing the machine also clears its plate.
+      if (input.paused === false && input.cleared === true)
+        await this.plateCleared(theirs);
       return { accepted: true, ...input };
+    }
     throw new Problem(
       "UNSUPPORTED_ON_PRODUCER_HUB",
       `${tool} is not available for machines on the producer side's hub.`,
@@ -217,7 +211,6 @@ export class ProducerHubNode {
 /** The hub's job state in our node vocabulary. */
 export function hubStatus(job: HubJob): {
   execution_status: string;
-  completion_credible?: boolean;
   reason?: string;
 } {
   const base = { reason: job.reason ?? job.error ?? undefined };
@@ -227,19 +220,12 @@ export function hubStatus(job: HubJob): {
       return { ...base, execution_status: "accepted" };
     case "running":
       return { ...base, execution_status: "running" };
+    // Older hubs used this state after the machine finished.
     case "verifying":
-      // Made, but nobody has looked at it: the owner checks it on our side.
-      return {
-        ...base,
-        execution_status: "completed",
-        completion_credible: false,
-        reason: job.verification?.reason ?? "Printed; not yet checked.",
-      };
     case "done":
       return {
         ...base,
         execution_status: "completed",
-        completion_credible: job.verification?.pass === true,
       };
     case "rejected":
       return {
@@ -278,7 +264,7 @@ export function registerProducerHubRoutes(
     requireThat(
       hub,
       "PRODUCER_HUB_UNCONFIGURED",
-      "Set FABRARY_PRODUCER_HUB_URL to the producer side's hub first.",
+      "Set FABYN_PRODUCER_HUB_URL to the producer side's hub first.",
       409,
     );
     const machineId = String(req.params.id);
@@ -298,7 +284,7 @@ export function registerProducerHubRoutes(
     requireThat(
       service.modeAllowed("hardware"),
       "HARDWARE_NOT_ALLOWED",
-      "Allow hardware work first: FABRARY_ALLOWED_MODES=hardware,simulation.",
+      "Allow hardware work first: FABYN_ALLOWED_MODES=hardware,simulation.",
       409,
     );
     const listed = (await hub.machines()).find((m) => m.machine_id === theirs);
@@ -338,23 +324,18 @@ export function registerProducerHubRoutes(
       m.ready = true;
       m.paused = false;
       m.policyReconciliationRequired = false;
-      m.reason = `Prints through the producer side's hub as ${theirs}. The owner confirmed a test print; the owner checks each print.`;
+      m.reason = `Prints through the producer side's hub as ${theirs}. Completion follows the machine report.`;
       return m;
     });
     res.json({ machine });
   });
-  /**
-   * "Approve manually" for a print from the producer side, which has no
-   * camera yet: the owner checked the item and took it off the printer. One
-   * step records the passing review, the handling and the resume, so the
-   * printer takes the next order. Each step keeps its own checks.
-   */
-  app.post("/api/owner/jobs/:id/approve-print", async (req, res) => {
+  /** Confirm the completed item has been removed and the plate is clear. */
+  app.post("/api/owner/jobs/:id/clear-print", async (req, res) => {
     await owner(req);
     requireThat(
-      req.body?.checked === true,
+      req.body?.cleared === true,
       "INSPECTION_REQUIRED",
-      "Confirm that you checked the print and took it off the printer.",
+      "Confirm that you removed the completed print and cleared the plate.",
       422,
     );
     const jobId = String(req.params.id);
@@ -364,12 +345,7 @@ export function registerProducerHubRoutes(
       "Order not found.",
       404,
     );
-    const machine = await service.approveHubPrint(
-      jobId,
-      typeof req.body.reason === "string" && req.body.reason.trim().length >= 8
-        ? req.body.reason.trim()
-        : "Checked the print by eye and took it off the printer.",
-    );
+    const machine = await service.clearHubPrint(jobId);
     res.json({ machine });
   });
   app.delete("/api/owner/machines/:id/producer-hub", async (req, res) => {

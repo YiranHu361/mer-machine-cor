@@ -7,8 +7,7 @@ Serves the real gateway plus just enough to push jobs by hand:
          -d '{"machine_id": "m_sticker_01"}'     # prints hub/dev_assets/test_sticker.png
     curl localhost:8000/machines
     curl localhost:8000/dev/events
-    curl -X POST localhost:8000/dev/approve -d '{"machine_id":"m_sticker_01","job_id":"job_dev_0001"}' \
-         -H 'content-type: application/json'
+    curl -X POST localhost:8000/dev/plate-cleared -d '{"machine_id":"m_fdm_01"}' -H 'content-type: application/json'
 """
 from __future__ import annotations
 
@@ -42,7 +41,7 @@ def make_test_sticker(path: Path) -> None:
     d = ImageDraw.Draw(img)
     d.rounded_rectangle((6, 6, w - 7, h - 7), radius=40, outline=0, width=8)
     d.text((w // 2, h // 2 - 40), "Happy birthday!", fill=0, anchor="mm", font=ImageFont.load_default(size=64))
-    d.text((w // 2, h // 2 + 50), "Fabrary test sticker", fill=0, anchor="mm", font=ImageFont.load_default(size=36))
+    d.text((w // 2, h // 2 + 50), "Fabyn test sticker", fill=0, anchor="mm", font=ImageFont.load_default(size=36))
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, dpi=(300, 300))
 
@@ -61,16 +60,12 @@ class JobRef(BaseModel):
     job_id: str
 
 
-class ApproveIn(JobRef):
-    reason: str | None = None
-
-
 class MachineRef(BaseModel):
     machine_id: str
 
 
-def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
-    gw = Gateway(frames_dir=frames_dir)
+def create_app() -> FastAPI:
+    gw = Gateway()
     events: deque[dict[str, Any]] = deque(maxlen=500)
     ids = itertools.count(1)
 
@@ -90,20 +85,18 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
             make_test_sticker(ASSETS / "test_sticker.png")
         gw.start()
         publishing = asyncio.create_task(publisher.run()) if publisher else None
-        log.info("live view: %s", publisher.url if publisher else "off (set CONVEX_URL and FABRARY_PUBLISH_SECRET)")
+        log.info("live view: %s", publisher.url if publisher else "off (set CONVEX_URL and FABYN_PUBLISH_SECRET)")
         yield
         await gw.stop()
         if publishing:
             publishing.cancel()
             await publisher.aclose()
 
-    app = FastAPI(title="Fabrary dev hub", lifespan=lifespan)
+    app = FastAPI(title="Fabyn dev hub", lifespan=lifespan)
     app.state.gateway = gw
     app.include_router(gw.router)
     ASSETS.mkdir(parents=True, exist_ok=True)
-    frames_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
-    app.mount("/frames", StaticFiles(directory=frames_dir), name="frames")
 
     @app.get("/machines")
     def machines() -> list[dict[str, Any]]:
@@ -129,7 +122,6 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
             "progress": 0.0,
             "eta_s": None,
             "escrow": "held",
-            "verification": None,
         }
         try:
             await gw.offer_job(job)
@@ -154,12 +146,13 @@ def create_app(frames_dir: Path = Path(".data/frames")) -> FastAPI:
         except asyncio.TimeoutError:
             return {"machine_id": body.machine_id, "ok": False, "detail": "the node did not answer in time"}
 
-    @app.post("/dev/approve")
-    async def approve(body: ApproveIn) -> dict[str, Any]:
+    @app.post("/dev/plate-cleared")
+    async def plate_cleared(body: MachineRef) -> dict[str, str]:
         try:
-            return await gw.approve_manually(body.machine_id, body.job_id, body.reason)
-        except LookupError:
-            raise HTTPException(404, "unknown job")
+            await gw.plate_cleared(body.machine_id)
+        except LookupError as e:
+            raise HTTPException(409, str(e))
+        return {"ok": "sent"}
 
     @app.get("/dev/events")
     def get_events(limit: int = 50) -> list[dict[str, Any]]:

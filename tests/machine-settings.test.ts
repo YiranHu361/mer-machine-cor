@@ -19,7 +19,7 @@ function deferred() {
   };
 }
 async function fixture() {
-  const dir = mkdtempSync(join(tmpdir(), "fabrary-machine-settings-"));
+  const dir = mkdtempSync(join(tmpdir(), "fabyn-machine-settings-"));
   const store = new SqliteStore(join(dir, "app.sqlite"), initialState());
   const calls: { path: string; body: any; machine?: Machine }[] = [];
   const controls = {

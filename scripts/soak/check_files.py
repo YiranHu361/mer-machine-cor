@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from fabrary_node.adapters import InstaxLink3, Phomemo
+from fabyn_node.adapters import InstaxLink3, Phomemo
 
 NS = {"m": "http://schemas.microsoft.com/3dmanufacturing/core/2015/02"}
 BUILD = (180, 180, 180)

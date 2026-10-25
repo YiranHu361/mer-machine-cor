@@ -1,5 +1,5 @@
 // Pushes convex/ (schema, publish:batch, live queries) to the deployment named
-// by CONVEX_DEPLOY_KEY and stores FABRARY_PUBLISH_SECRET there, so both hubs
+// by CONVEX_DEPLOY_KEY and stores FABYN_PUBLISH_SECRET there, so both hubs
 // can publish and nothing else can write.
 //
 // Usage: npm run convex:push
@@ -14,9 +14,9 @@ if (!kind) {
   );
   process.exit(1);
 }
-const secret = process.env.FABRARY_PUBLISH_SECRET;
+const secret = process.env.FABYN_PUBLISH_SECRET;
 if (!secret) {
-  console.error("Set FABRARY_PUBLISH_SECRET in .env (any long random string).");
+  console.error("Set FABYN_PUBLISH_SECRET in .env (any long random string).");
   process.exit(1);
 }
 // The deploy key names the deployment; a local CONVEX_DEPLOYMENT must not compete with it.
@@ -26,7 +26,7 @@ const convex = (...argv) => {
   if (r.status !== 0) process.exit(r.status ?? 1);
 };
 convex(...(kind === "dev" ? ["dev", "--once"] : ["deploy", "-y"]));
-convex("env", "set", "FABRARY_PUBLISH_SECRET", secret);
+convex("env", "set", "FABYN_PUBLISH_SECRET", secret);
 console.log(
   `Convex is ready: https://${/^(?:dev|prod):([a-z0-9-]+)\|/.exec(key)?.[1] ?? "<deployment>"}.convex.cloud`,
 );

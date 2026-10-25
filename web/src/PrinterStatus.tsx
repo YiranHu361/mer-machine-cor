@@ -34,7 +34,9 @@ export function PrinterStatus() {
     let live = true;
     const load = () =>
       api<{ printers: Printer[] }>("/printers")
-        .then((r) => live && setPrinters(r.printers))
+        .then((r) => {
+          if (live && Array.isArray(r?.printers)) setPrinters(r.printers);
+        })
         .catch(() => undefined);
     void load();
     const timer = setInterval(load, 10_000);

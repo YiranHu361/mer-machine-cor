@@ -9,10 +9,10 @@ import pytest
 from PIL import Image
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-from fabrary_node.journal import Journal
-from fabrary_node.security import NodeError, sign_token, validate_artifact_url
-from fabrary_node.server import create_app
-from fabrary_node.service import NodeService
+from fabyn_node.journal import Journal
+from fabyn_node.security import NodeError, sign_token, validate_artifact_url
+from fabyn_node.server import create_app
+from fabyn_node.service import NodeService
 from .conftest import KEY, PARAMS, request_for
 
 
@@ -21,7 +21,7 @@ async def wait_done(service, attempt="attempt_1"):
     return service.get_status("phomemo_01", "job_1", attempt)
 
 
-def camera_args(scope="camera", machine="phomemo_01", job="job_1", attempt="attempt_1", mode="simulation"):
+def attempt_args(scope="camera", machine="phomemo_01", job="job_1", attempt="attempt_1", mode="simulation"):
     payload = {"scope": scope, "expected_mode": mode, "machine_id": machine, "job_id": job, "attempt_id": attempt, "expires_at": int(time.time())+300}
     return {k: payload[k] for k in ("machine_id", "job_id", "attempt_id")} | {"token": sign_token(payload, KEY)}
 
@@ -159,33 +159,14 @@ async def test_lost_ack_durable_and_visible_uncertainty(service, artifact):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome,observation", [("pass","visible"),("fail","missing"),("review","ambiguous")])
-async def test_authorized_fresh_camera_evidence(service, artifact, outcome, observation):
-    service.simulation("phomemo_01", outcome)
-    baseline=await service.camera_snapshot(**camera_args(),phase="baseline")
-    assert baseline["observation"] == "missing" and baseline["source"] == "simulation"
-    await service.run_job(**request_for(artifact)); await wait_done(service)
-    first=await service.camera_snapshot(**camera_args())
-    second=await service.camera_snapshot(**camera_args())
-    assert first["observation"] == observation and first["completion_credible"]
-    assert first["frame_url"] != second["frame_url"]
-    assert first["captured_at"] != second["captured_at"]
-    with pytest.raises(NodeError):
-        await service.camera_snapshot(**camera_args(scope="dispatch"))
-    with pytest.raises(NodeError):
-        await service.camera_snapshot(**camera_args(job="another_job"))
-    await service.close()
-
-
-@pytest.mark.asyncio
 async def test_abort_simulator_confirms_stop_hardware_does_not(service, artifact):
     service.adapters["phomemo_01"].config["simulationSeconds"] = 30
     await service.run_job(**request_for(artifact)); await asyncio.sleep(0)
-    response=await service.abort(**camera_args(scope="abort"))
+    response=await service.abort(**attempt_args(scope="abort"))
     assert response["status"] == "stopped"
     assert service.get_status("phomemo_01")["execution_status"] == "failed"
     assert not service.get_status("phomemo_01")["completion_credible"]
-    from fabrary_node.adapters import Phomemo, Bambu
+    from fabyn_node.adapters import Phomemo, Bambu
     assert (await Phomemo({}).abort())["status"] == "unsupported"
     assert (await Bambu({}).abort())["status"] == "unknown"
     await service.close()
@@ -264,7 +245,7 @@ async def test_actual_http_and_fastmcp_same_tools(service, artifact):
         transport=StreamableHttpTransport(url+"/mcp/",headers={"Authorization":"Bearer "+KEY})
         async with Client(transport) as client:
             listed=await client.list_tools()
-            assert {tool.name for tool in listed} == {"get_capabilities","get_status","run_job","camera_snapshot","abort","cancel_before_acceptance"}
+            assert {tool.name for tool in listed} == {"get_capabilities","get_status","run_job","abort","cancel_before_acceptance"}
             result=await client.call_tool("get_status",{"machine_id":"phomemo_01","job_id":"job_1","attempt_id":"attempt_1"})
             assert not result.is_error
         await wait_done(service)
@@ -290,7 +271,7 @@ async def test_policy_integer_hours_and_closed_window(service, artifact):
 
 
 def test_catalog_exact_hash_and_owner_review_required():
-    from fabrary_node.adapters import Bambu
+    from fabyn_node.adapters import Bambu
     from hashlib import sha256
     digest=sha256(b"prepared-file").hexdigest()
     entry={"id":"demo","sha256":digest,"machineModel":"Bambu Lab A1 mini","reviewed":True,"widthMm":30,"heightMm":20,"depthMm":10,"color":"white","material":"pla","plateNumber":1,"estimatedSeconds":300}
@@ -314,7 +295,7 @@ def test_catalog_exact_hash_and_owner_review_required():
 async def test_transport_only_calibration_requires_physical_inspection_context(tmp_path, artifact, monkeypatch):
     # Deterministic policy test, not a hardware result: setup a journaled uncertain
     # attempt and mock only configuration diagnostics/camera at the device boundary.
-    from fabrary_node import service as service_module
+    from fabyn_node import service as service_module
     machine={"id":"phomemo_01","model":"Phomemo M02Pro","mode":"hardware"}
     service=NodeService(key=KEY,data_dir=tmp_path,machines=[machine])
     monkeypatch.setattr(service.adapters["phomemo_01"],"blockers",lambda:[])
@@ -324,18 +305,8 @@ async def test_transport_only_calibration_requires_physical_inspection_context(t
     with pytest.raises(NodeError,match="Resolve the active"):
         service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected the physical test pattern")
     service.reconcile(machine_id="phomemo_01",job_id="job_1",attempt_id="attempt_1",inspected=True,result="completed",reason="Owner found complete calibration print and checked alignment")
-    assert service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected the physical test pattern")["status"] == "blocked"
-    async def camera(config): return artifact
-    monkeypatch.setattr(service_module,"capture_camera",camera)
-    frame=await service.camera_snapshot(**camera_args(mode="hardware"))
-    assert frame["source"] == "camera"  # mocked boundary, never counted as live.
-    assert service.calibrate("phomemo_01",True,"attempt_1",reason="ok")["status"] == "blocked"
-    with service.journal.transaction():
-        service.journal.db.execute("UPDATE frames SET captured_at='2000-01-01T00:00:00Z'")
-    assert service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected the physical test pattern")["status"] == "blocked"
-    await service.camera_snapshot(**camera_args(mode="hardware"))
     result=service.calibrate("phomemo_01",True,"attempt_1",reason="Inspected print, verified alignment and all four image corners")
-    assert result["status"] == "passed" and result["source"] == "owner-inspection"
+    assert result["status"] == "passed" and result["source"] == "device-completion"
     assert service.journal.machine("phomemo_01")["calibrated"]
     assert not service.journal.get("attempt_1")["completion_credible"]
     await service.close()
@@ -439,7 +410,7 @@ async def test_prepared_3d_characteristics_are_signed_and_durable(service,artifa
 ])
 async def test_latest_owner_policy_rechecked_after_asset_download(tmp_path, artifact, policy, monkeypatch):
     from datetime import datetime, timezone
-    from fabrary_node import service as service_module
+    from fabyn_node import service as service_module
     started, finish = asyncio.Event(), asyncio.Event()
     async def download(request):
         started.set()
@@ -515,7 +486,7 @@ async def test_hardware_abort_before_worker_starts_cannot_start_later(service, a
     request = request_for(artifact)
     await service.run_job(**request)
     service.machines["phomemo_01"]["mode"] = "hardware"
-    result = await service.abort(**camera_args(scope="abort", mode="hardware"))
+    result = await service.abort(**attempt_args(scope="abort", mode="hardware"))
     await asyncio.gather(service.tasks["attempt_1"], return_exceptions=True)
     assert service.adapters["phomemo_01"].executions == 0
     assert service.get_status("phomemo_01")["execution_status"] == "failed"
@@ -539,7 +510,7 @@ async def test_abort_for_old_failed_attempt_cannot_stop_new_worker(service, arti
         aborts.append(True)
         return {"status": "requested", "reason": "test-only stop"}
     monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
-    result = await service.abort(**camera_args(scope="abort", mode="hardware"))
+    result = await service.abort(**attempt_args(scope="abort", mode="hardware"))
     assert aborts == []
     assert result["status"] == "unknown"
     assert service.journal.get("attempt_2")["status"] == "running"
@@ -558,7 +529,7 @@ async def test_old_calibration_attempt_cannot_recalibrate_replaced_device(tmp_pa
     service = NodeService(key=KEY, data_dir=tmp_path, machines=[machine | {"bluetoothAddress": "owner-device-two"}])
     monkeypatch.setattr(service.adapters["phomemo_01"], "blockers", lambda: [])
     result = service.calibrate("phomemo_01", True, "attempt_1", "Owner inspected the newly configured physical device")
-    assert result["status"] == "blocked" and "another device or capture" in result["reason"]
+    assert result["status"] == "blocked" and "another device" in result["reason"]
     assert not service.journal.machine("phomemo_01")["calibrated"]
     await service.close()
 
@@ -571,7 +542,7 @@ async def test_uncertain_worker_cannot_be_manually_released_while_still_active(s
     service.machines["phomemo_01"]["mode"] = "hardware"
     async def stop(): return {"status": "requested", "reason": "Fixture stop request; worker has not returned yet"}
     monkeypatch.setattr(service.adapters["phomemo_01"], "abort", stop)
-    await service.abort(**camera_args(scope="abort", mode="hardware"))
+    await service.abort(**attempt_args(scope="abort", mode="hardware"))
     assert service.journal.get("attempt_1")["status"] == "uncertain"
     resolution = {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": "failed", "reason": "Owner inspected the stopped device and found no complete item"}
     with pytest.raises(NodeError) as error:
@@ -590,7 +561,6 @@ async def test_malformed_enum_and_policy_http_requests_fail_without_internal_err
         requests = [
             ("POST", "/tools/run_job", request_for(artifact, params=PARAMS | {"crop": {}})),
             ("POST", "/tools/run_job", request_for(artifact) | {"token": sign_token([], KEY)}),
-            ("POST", "/tools/camera_snapshot", camera_args() | {"phase": {}}),
             ("PATCH", "/machines/phomemo_01/policy", {"widthsMm": [{}]}),
             ("POST", "/simulation/phomemo_01", {"outcome": {}}),
             ("POST", "/reconcile", {"machine_id": "phomemo_01", "job_id": "job_1", "attempt_id": "attempt_1", "inspected": True, "result": {}, "reason": "Owner inspected the device"}),
@@ -622,7 +592,7 @@ async def test_pending_stop_transport_fences_reconciliation_resume_and_new_execu
     await service.run_job(**request_for(artifact))
     await asyncio.sleep(0)
     service.machines["phomemo_01"]["mode"] = "hardware"
-    abort_call = asyncio.create_task(service.abort(**camera_args(scope="abort", mode="hardware")))
+    abort_call = asyncio.create_task(service.abort(**attempt_args(scope="abort", mode="hardware")))
     try:
         await stop_entered.wait()
         if cancel_caller:
@@ -705,7 +675,7 @@ async def test_shutdown_keeps_journal_ownership_until_error_stop_transport_retur
 
 
 def test_bambu_catalog_color_uses_backend_normalization_without_weakening_exact_binding():
-    from fabrary_node.adapters import Bambu
+    from fabyn_node.adapters import Bambu
     digest = "a" * 64
     entry = {"id": "color_fixture", "sha256": digest, "machineModel": "Bambu Lab A1 mini", "reviewed": True,
         "widthMm": 30, "heightMm": 20, "depthMm": 5, "color": "\ufeff  青色 blue\u00a0", "material": "pla", "estimatedSeconds": 180}

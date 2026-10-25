@@ -3,7 +3,7 @@ This directory contains the MIT-licensed InstaxBLE upstream files at
 Source: https://github.com/javl/InstaxBLE/tree/804dca8cfaba5db48bc5f961aab106006e600303
 License: LICENSE.md in this directory.
 
-The files are unmodified. Fabrary's configured, no-scan transport subclass and
+The files are unmodified. Fabyn's configured, no-scan transport subclass and
 conservative Link 3 transfer limit are in ../adapters.py. These files provide a
 candidate protocol implementation; importing them does not establish Link 3
 compatibility or physical print completion.

@@ -1,4 +1,4 @@
-"""Fabrary machine connector.
+"""Fabyn machine connector.
 
 Runs on the computer next to a machine. It enrolls with a one-time setup code,
 dials out to the workshop (no inbound port or tunnel), runs a fixed list of
@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
-import io
 import json
 import os
 from pathlib import Path
@@ -20,17 +19,14 @@ import secrets
 import shutil
 import socket
 import sys
-from typing import Awaitable, Callable
 
 import httpx
-from PIL import Image, ImageDraw
 
-from .adapters import capture_camera
 from .security import NodeError
 
-VERSION = "fabrary-connector/1.0.0"
+VERSION = "fabyn-connector/1.0.0"
 DEVICE_LINE = re.compile(r"^Device ((?:[0-9A-F]{2}:){5}[0-9A-F]{2}) (.+)$", re.I)
-ALLOWED_PATH = re.compile(r"^/(tools/[a-z_]+|machines/[a-z0-9_]+/policy|calibrate|reconcile|simulation/[a-z0-9_]+|frames/[0-9a-f]{32}\.png|health)$")
+ALLOWED_PATH = re.compile(r"^/(tools/[a-z_]+|machines/[a-z0-9_]+/policy|calibrate|reconcile|simulation/[a-z0-9_]+|health)$")
 
 
 def write_private(path: Path, value: dict) -> None:
@@ -85,31 +81,17 @@ def parse_serial_channel(output: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-CAMERA_CANDIDATES = [
-    ("rpicam-still", ["rpicam-still", "-n", "-t", "1000", "--width", "1280", "--height", "960", "-e", "jpg", "-o", "-"]),
-    ("libcamera-still", ["libcamera-still", "-n", "-t", "1000", "--width", "1280", "--height", "960", "-e", "jpg", "-o", "-"]),
-    ("fswebcam", ["fswebcam", "-q", "--no-banner", "-r", "1280x720", "--jpeg", "90", "-"]),
-]
 NAMES = {"Phomemo M02Pro": "M02 Pro", "Instax Mini Link 3": "Instax Link 3", "Bambu Lab A1 mini": "A1 mini"}
-
-
-def simulated_photo() -> bytes:
-    image = Image.new("RGB", (640, 480), "#f4f4f2")
-    ImageDraw.Draw(image).text((24, 24), "SIMULATED TEST PHOTO / NO CAMERA", fill="#111111")
-    buffer = io.BytesIO()
-    image.save(buffer, "JPEG")
-    return buffer.getvalue()
 
 
 class SetupAgent:
     """A fixed, consent-gated checklist. It proposes; the owner allows; code acts."""
 
     def __init__(self, machine: dict, data_dir: Path, commands: Commands | None = None,
-                 capture: Callable[[dict], Awaitable[bytes]] = capture_camera, platform: str | None = None,
+                 platform: str | None = None,
                  bluetooth: bool | None = None):
         self.machine, self.data_dir = machine, data_dir
         self.commands = commands or Commands()
-        self.capture = capture
         self.platform = platform or sys.platform
         self.bluetooth = (hasattr(socket, "AF_BLUETOOTH") and hasattr(socket, "BTPROTO_RFCOMM")) if bluetooth is None else bluetooth
         self.simulation = machine["mode"] == "simulation"
@@ -130,7 +112,6 @@ class SetupAgent:
             ("system", "Check this computer", None),
             ("search", f"Find your {name}", ("Allow a short Bluetooth search" if phomemo else "Allow a search") + suffix),
             ("pair", "Pair and read its serial channel" if phomemo else "Connect to it", "Allow pairing" + suffix),
-            ("camera", "Take a test photo", "Take a test photo" + suffix),
             ("ready", f"{media} and output area clear", "Confirm it is ready"),
             ("config", "Save the machine settings here", None),
         ]
@@ -194,7 +175,7 @@ class SetupAgent:
 
     async def run_system(self) -> str:
         if self.simulation:
-            return "Simulation: no physical device or camera is used"
+            return "Simulation: no physical device is used"
         if self.machine["model"] != "Phomemo M02Pro":
             raise NodeError("unsupported", f"Automatic setup for {self.machine['model']} is not available yet. Use the manual setup in docs/node-integration.md.")
         problems = []
@@ -247,23 +228,6 @@ class SetupAgent:
         self.state["values"]["rfcommChannel"] = channel
         return f"Paired. Serial channel {channel}"
 
-    async def run_camera(self) -> str:
-        if self.simulation:
-            with Image.open(io.BytesIO(simulated_photo())) as image:
-                return f"Simulated test photo ({image.width}×{image.height})"
-        for tool, command in CAMERA_CANDIDATES:
-            if not self.commands.which(tool):
-                continue
-            try:
-                frame = await self.capture({"cameraCommand": command})
-            except NodeError:
-                continue
-            with Image.open(io.BytesIO(frame)) as image:
-                size = f"{image.width}×{image.height}"
-            self.state["values"]["cameraCommand"] = command
-            return f"Test photo OK with {tool} ({size}). Aim it at the output area."
-        raise NodeError("camera", "No working camera was found. Connect a Raspberry Pi camera or USB webcam, then take a test photo again.")
-
     async def run_ready(self) -> str:
         return "Confirmed by the owner"
 
@@ -279,7 +243,7 @@ class SetupAgent:
             "id": self.machine["id"], "model": self.machine["model"], "mode": "hardware",
             "paired": True, "ownerReady": True,
             "bluetoothAddress": values["bluetoothAddress"], "rfcommChannel": values["rfcommChannel"],
-            "maxJobSeconds": 120, "cameraCommand": values["cameraCommand"],
+            "maxJobSeconds": 120,
         }
 
 
@@ -472,10 +436,10 @@ async def run(args) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="fabrary-connect", description="Connect a machine to a Fabrary workshop.")
+    parser = argparse.ArgumentParser(prog="fabyn-connect", description="Connect a machine to a Fabyn workshop.")
     parser.add_argument("--platform", required=True, help="Workshop address, for example http://192.168.1.20:4318")
     parser.add_argument("--code", help="One-time setup code from Machines → Add a machine")
-    parser.add_argument("--data-dir", default=str(Path.home() / ".fabrary-connector"))
+    parser.add_argument("--data-dir", default=str(Path.home() / ".fabyn-connector"))
     try:
         asyncio.run(run(parser.parse_args(argv)))
     except KeyboardInterrupt:
